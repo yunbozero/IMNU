@@ -8,4 +8,5 @@
  * 普通终端里 `node --test tests/` 依然可用（只会匹配 *.test.mjs）。
  */
 import './prototype.test.mjs';
+import './proposal.test.mjs';
 import './lan.test.mjs';

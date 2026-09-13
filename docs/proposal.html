@@ -1,0 +1,528 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>IMNU 校园义卖 · 预定名额小程序 · 提案</title>
+<style>
+  /* ============================================================
+     自包含 A4 提案页：不引用任何外部资源，双击即可用浏览器打开打印
+     打印：Ctrl+P → 目标打印机选「另存为 PDF」→ 勾选「背景图形」
+     ============================================================ */
+  :root{
+    --brand:#D2694A;
+    --brand-dark:#BF5738;
+    --brand-soft:#F7E2D9;
+    --brand-tint:#FBEDE7;
+    --ink:#2B2119;
+    --ink2:#5F5049;
+    --ink3:#93827A;
+    --line:#E6D9D1;
+    --ok:#2E855A;
+    --ok-soft:#E8F5EE;
+  }
+
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei","Helvetica Neue",sans-serif;
+    color:var(--ink);
+    background:#EDE7E3;
+    font-size:10.5pt;
+    line-height:1.62;
+    -webkit-print-color-adjust:exact;
+    print-color-adjust:exact;
+  }
+
+  /* ---------- 屏幕上的工具条（打印时自动隐藏） ---------- */
+  .toolbar{
+    position:sticky;top:0;z-index:10;background:#2B2119;color:#fff;
+    padding:10px 18px;display:flex;align-items:center;gap:14px;font-size:13px;
+  }
+  .toolbar b{font-weight:600}
+  .toolbar .sp{flex:1}
+  .toolbar button{
+    font-family:inherit;font-size:13px;font-weight:600;border:0;cursor:pointer;
+    background:var(--brand);color:#fff;padding:8px 18px;border-radius:8px;
+  }
+  .toolbar span.tip{color:#C9B8AE;font-size:12px}
+
+  /* ---------- A4 页 ---------- */
+  .sheet{
+    width:210mm;min-height:297mm;background:#fff;margin:0 auto 8mm;
+    padding:13mm 15mm 12mm;box-shadow:0 3px 18px rgba(60,35,25,.14);
+    position:relative;
+  }
+  .sheet:last-of-type{margin-bottom:0}
+
+  /* ---------- 页眉 ---------- */
+  .brandbar{
+    background:var(--brand);color:#fff;border-radius:9px;
+    padding:11px 16px;display:flex;align-items:center;gap:12px;margin-bottom:13px;
+    border:1px solid var(--brand-dark);
+  }
+  .brandbar .mk{font-size:20px;line-height:1}
+  .brandbar h1{margin:0;font-size:15.5pt;font-weight:700;letter-spacing:.5px}
+  .brandbar .sub{font-size:8.5pt;opacity:.9;margin-top:1px}
+  .brandbar .tag{
+    margin-left:auto;font-size:8pt;background:rgba(255,255,255,.22);
+    border:1px solid rgba(255,255,255,.45);border-radius:20px;padding:3px 11px;
+    white-space:nowrap;
+  }
+
+  /* ---------- 定位语 ---------- */
+  .lede{
+    border-left:4px solid var(--brand);background:var(--brand-tint);
+    padding:11px 15px;border-radius:0 8px 8px 0;margin-bottom:14px;
+  }
+  .lede p{margin:0;font-size:11.5pt;font-weight:600;line-height:1.55}
+  .lede p+p{margin-top:4px;font-size:9.5pt;font-weight:400;color:var(--ink2)}
+
+  /* ---------- 通用标题 ---------- */
+  h2{
+    font-size:11pt;margin:16px 0 8px;padding-left:9px;
+    border-left:3px solid var(--brand);line-height:1.2;
+  }
+  h2:first-of-type{margin-top:0}
+  h2 .en{font-size:8pt;font-weight:400;color:var(--ink3);margin-left:6px;letter-spacing:.5px}
+
+  /* ---------- 痛点 ---------- */
+  .pains{display:flex;flex-direction:column;gap:7px}
+  .pain{display:flex;gap:10px;align-items:flex-start}
+  .pain .n{
+    flex:0 0 19px;height:19px;border-radius:50%;background:var(--brand);color:#fff;
+    font-size:8.5pt;font-weight:700;display:flex;align-items:center;justify-content:center;
+    margin-top:1px;
+  }
+  .pain .tx{flex:1}
+  .pain .tx b{font-weight:700}
+  .pain .tx .arrow{color:var(--brand);font-weight:700}
+  .pain .tx em{font-style:normal;color:var(--ink2)}
+
+  /* ---------- 做 / 不做 ---------- */
+  .scope{
+    display:grid;grid-template-columns:1fr 1fr;gap:0;
+    border:1.5px solid var(--brand);border-radius:9px;overflow:hidden;
+  }
+  .scope .col{padding:10px 13px}
+  .scope .col+.col{border-left:1.5px solid var(--brand);background:#FBF7F5}
+  .scope .col h3{
+    margin:0 0 7px;font-size:9.5pt;display:flex;align-items:center;gap:6px;
+  }
+  .scope .col.do h3{color:var(--brand-dark)}
+  .scope .col.dont h3{color:var(--ink3)}
+  .scope ul{margin:0;padding:0;list-style:none}
+  .scope li{font-size:9pt;padding:2.5px 0;display:flex;gap:6px;line-height:1.5}
+  .scope .do li::before{content:"✓";color:var(--brand);font-weight:700;flex:0 0 12px}
+  .scope .dont li{color:var(--ink2)}
+  .scope .dont li::before{content:"✕";color:#B9AAA2;font-weight:700;flex:0 0 12px}
+
+  .statement{
+    margin:11px 0 0;background:var(--brand);color:#fff;border-radius:9px;
+    padding:11px 16px;text-align:center;font-size:11.5pt;font-weight:700;letter-spacing:.4px;
+    border:1px solid var(--brand-dark);
+  }
+  .statement small{display:block;font-size:8.5pt;font-weight:400;opacity:.92;margin-top:3px;letter-spacing:0}
+
+  /* ---------- 流程 ---------- */
+  .flow{display:flex;align-items:stretch;gap:0;margin-top:2px}
+  .flow .st{flex:1;text-align:center;padding:0 2px}
+  .flow .st .dot{
+    width:30px;height:30px;border-radius:50%;background:var(--brand-tint);
+    border:1.5px solid var(--brand);color:var(--brand-dark);
+    display:flex;align-items:center;justify-content:center;font-size:13px;margin:0 auto 5px;
+  }
+  .flow .st b{display:block;font-size:9pt}
+  .flow .st span{display:block;font-size:8pt;color:var(--ink3);line-height:1.4;margin-top:2px}
+  .flow .arw{
+    flex:0 0 18px;display:flex;align-items:center;justify-content:center;
+    color:var(--brand-soft);font-size:12pt;padding-bottom:22px;
+  }
+
+  /* ---------- 迷你手机预览 ---------- */
+  .phones{display:flex;gap:13px;justify-content:space-between;margin-top:2px}
+  .ph{flex:1;border:1.5px solid var(--line);border-radius:11px;overflow:hidden;background:#FBEDE7}
+  .ph .bar{background:var(--brand);color:#fff;font-size:6.5pt;text-align:center;padding:3.5px 0;font-weight:600}
+  .ph .bd{padding:6px;min-height:112px}
+  .ph .cap{text-align:center;font-size:8pt;color:var(--ink2);padding:5px 4px 6px;background:#fff;border-top:1px solid var(--line)}
+  .ph .cap b{color:var(--ink);font-weight:700}
+
+  .p-search{
+    background:#fff;border-radius:20px;font-size:6.5pt;color:var(--ink3);
+    padding:4px 9px;margin-bottom:5px;
+  }
+  .p-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px}
+  .p-card{background:#fff;border-radius:6px;padding:3.5px;display:flex;flex-direction:column;gap:2.5px}
+  .p-thumb{border-radius:4px;height:26px;display:flex;align-items:center;justify-content:center;font-size:13px}
+  .p-nm{font-size:5.8pt;font-weight:600;line-height:1.25;height:15px;overflow:hidden}
+  .p-q{font-size:5.2pt;color:var(--ink3);display:flex;justify-content:space-between}
+  .p-q b{color:var(--brand)}
+  .p-bar{height:2.5px;border-radius:2px;background:#F1E6DF;overflow:hidden;margin-top:1px}
+  .p-bar i{display:block;height:100%;background:var(--brand)}
+
+  .p-cardw{background:#fff;border-radius:7px;padding:7px 5px;text-align:center}
+  .qrmock{
+    width:52px;height:52px;margin:0 auto 5px;position:relative;
+    background:repeating-conic-gradient(#2B2119 0 25%, #fff 0 50%) 0 0/5.2px 5.2px;
+    border-radius:3px;
+  }
+  .qrmock span{position:absolute;width:15px;height:15px;background:#fff;border:2.6px solid #2B2119;border-radius:1px}
+  .qrmock .c1{left:0;top:0} .qrmock .c2{right:0;top:0} .qrmock .c3{left:0;bottom:0}
+  .p-code{font-size:12pt;font-weight:800;letter-spacing:2px;font-variant-numeric:tabular-nums}
+  .p-hint{font-size:5.4pt;color:var(--ink3);margin-top:3px;line-height:1.4}
+
+  .p-ok{background:linear-gradient(170deg,#46A874,#2E855A);border-radius:7px;color:#fff;
+        text-align:center;padding:16px 6px;min-height:96px}
+  .p-ok .mk{font-size:17pt;line-height:1}
+  .p-ok .t{font-size:9pt;font-weight:700;margin-top:4px}
+  .p-ok .s{font-size:5.8pt;opacity:.9;margin-top:2px}
+  .p-ok .d{background:rgba(255,255,255,.18);border-radius:4px;margin-top:6px;padding:4px 5px;font-size:5.6pt;text-align:left}
+  .p-ok .d div{display:flex;justify-content:space-between;padding:.8px 0}
+  .p-ok .d div span:last-child{font-weight:700}
+
+  /* ---------- 保障 / 卡片 ---------- */
+  .cards{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .card{border:1.2px solid var(--line);border-radius:8px;padding:9px 11px}
+  .card h4{margin:0 0 4px;font-size:9pt;display:flex;align-items:center;gap:6px}
+  .card p{margin:0;font-size:8.5pt;color:var(--ink2);line-height:1.55}
+  .card p+p{margin-top:3px}
+
+  /* ---------- 清单 ---------- */
+  .ask{list-style:none;margin:0;padding:0}
+  .ask li{
+    font-size:9pt;padding:4.5px 0 4.5px 20px;position:relative;
+    border-bottom:1px dashed var(--line);
+  }
+  .ask li:last-child{border-bottom:0}
+  .ask li::before{
+    content:"□";position:absolute;left:2px;top:4px;color:var(--brand);font-size:10pt;
+  }
+  .ask li b{font-weight:700}
+  .ask li span{color:var(--ink3);font-size:8.5pt}
+
+  /* ---------- 双栏 ---------- */
+  .split{display:grid;grid-template-columns:1fr 1fr;gap:0 18px;align-items:start}
+  .split-col+.split-col{border-left:1px solid var(--line);padding-left:18px}
+  .split-col h2{margin-top:0}
+
+  /* ---------- 时间表 ---------- */
+  table.tl{width:100%;border-collapse:collapse;font-size:8.8pt}
+  table.tl th{
+    text-align:left;font-size:8pt;font-weight:600;color:var(--ink3);
+    padding:0 0 5px;border-bottom:1.2px solid var(--line);
+  }
+  table.tl td{padding:5px 0;border-bottom:1px dashed var(--line);vertical-align:top}
+  table.tl td:first-child{width:62px;color:var(--brand-dark);font-weight:700;white-space:nowrap;padding-right:6px}
+  table.tl tr:last-child td{border-bottom:0}
+
+  /* ---------- 边界说明 ---------- */
+  .limits{
+    background:#FBF7F5;border:1.2px solid var(--line);border-left:3px solid var(--ink3);
+    border-radius:0 8px 8px 0;padding:9px 13px;
+  }
+  .limits ul{margin:0;padding-left:15px}
+  .limits li{font-size:8.5pt;color:var(--ink2);padding:2px 0;line-height:1.55}
+  .limits li b{color:var(--ink)}
+
+  /* ---------- 页脚 ---------- */
+  .foot{
+    margin-top:14px;padding-top:9px;border-top:1.2px solid var(--line);
+    display:flex;align-items:flex-end;gap:12px;font-size:8.5pt;color:var(--ink3);
+  }
+  .foot .who{flex:1}
+  .foot .who b{color:var(--ink);font-size:9.5pt;font-weight:700}
+  .foot .who div{margin-top:2px}
+  .foot .pn{font-size:8pt}
+
+  .fill{border-bottom:1px solid var(--ink3);display:inline-block;min-width:110px}
+
+  /* ============================================================
+     打印
+     ============================================================ */
+  @page{ size:A4; margin:12mm 14mm; }
+
+  @media print{
+    body{background:#fff;font-size:10.5pt}
+    .toolbar{display:none !important}
+    .sheet{
+      width:auto;min-height:0;margin:0;padding:0;box-shadow:none;
+      page-break-after:always;break-after:page;
+    }
+    .sheet:last-of-type{page-break-after:auto;break-after:auto}
+    h2{break-after:avoid;page-break-after:avoid}
+    .scope,.cards,.phones,.card,.pain,.split,.limits{break-inside:avoid;page-break-inside:avoid}
+  }
+</style>
+</head>
+<body>
+
+<div class="toolbar">
+  <b>IMNU 校园义卖 · 提案</b>
+  <span class="tip">Ctrl+P → 目标打印机选「另存为 PDF」→ 记得勾选「背景图形」</span>
+  <span class="sp"></span>
+  <button onclick="window.print()">打印 / 存为 PDF</button>
+</div>
+
+<!-- ══════════════════ 第 1 页 ══════════════════ -->
+<div class="sheet">
+
+  <div class="brandbar">
+    <div class="mk">🎪</div>
+    <div>
+      <h1>IMNU 校园义卖 · 预定名额小程序</h1>
+      <div class="sub">内蒙古师范大学 · 校园公益活动工具 · 提案</div>
+    </div>
+    <div class="tag">需求沟通稿</div>
+  </div>
+
+  <div class="lede">
+    <p>把"限量物品开场被抢空、现场名单靠纸笔"变成"线上提前锁名额、当天凭码到摊位取货"。</p>
+    <p>这是一个<strong>只做名额登记与核销</strong>的小程序。它不卖东西、不收钱，钱和货全部在线下摊位完成。</p>
+  </div>
+
+  <h2>一、义卖现场的三个老问题<span class="en">WHY</span></h2>
+  <div class="pains">
+    <div class="pain">
+      <div class="n">1</div>
+      <div class="tx">
+        <b>限量物品开场就被抢空。</b><em>手作饼干、限量饮品这类东西，往往前十分钟就没了，排后面的同学白跑一趟，容易起争执。</em><br>
+        <span class="arrow">→</span> 改成线上提前锁名额，约满即止，剩余数量实时可见。
+      </div>
+    </div>
+    <div class="pain">
+      <div class="n">2</div>
+      <div class="tx">
+        <b>现场登记靠纸笔。</b><em>字迹潦草、重复登记、剩多少份算不清，志愿者一边收钱一边记账容易乱。</em><br>
+        <span class="arrow">→</span> 一人一码，系统记账，志愿者只需扫码核销。
+      </div>
+    </div>
+    <div class="pain">
+      <div class="n">3</div>
+      <div class="tx">
+        <b>活动结束没有数据。</b><em>谁定了没来、哪类物品最抢手，全靠回忆，下次办活动没法改进。</em><br>
+        <span class="arrow">→</span> 全程留痕，可导出名单，沉淀未取货率。
+      </div>
+    </div>
+  </div>
+
+  <h2>二、这个系统做什么、不做什么<span class="en">SCOPE</span></h2>
+  <div class="scope">
+    <div class="col do">
+      <h3>✅ 做这些</h3>
+      <ul>
+        <li>学生登记身份（学号 + 姓名）</li>
+        <li>浏览义卖物品与剩余名额</li>
+        <li>锁定名额、发放取货码</li>
+        <li>志愿者扫码或输码核销</li>
+        <li>导出预定名单，支持纸质兜底</li>
+        <li>记录未取货情况，便于下次改进</li>
+      </ul>
+    </div>
+    <div class="col dont">
+      <h3>✕ 坚决不做</h3>
+      <ul>
+        <li>不收钱，不涉及任何线上支付</li>
+        <li>界面里不出现任何价格与金额</li>
+        <li>不做物流、不发货</li>
+        <li>不做退款、优惠券、会员积分</li>
+        <li>不做卖家和买家之间的沟通</li>
+        <li>不介入任何资金往来与对账</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="statement">
+    系统只负责"锁名额"，钱和货都在线下摊位完成
+    <small>这也是本方案能落地的前提——小程序主体为个人主体，依规不能涉及任何线上交易</small>
+  </div>
+
+  <h2>三、学生怎么用<span class="en">FLOW</span></h2>
+  <div class="flow">
+    <div class="st">
+      <div class="dot">👀</div>
+      <b>浏览物品</b>
+      <span>看剩余名额<br>按摊位筛选</span>
+    </div>
+    <div class="arw">→</div>
+    <div class="st">
+      <div class="dot">🎫</div>
+      <b>预定名额</b>
+      <span>免费登记<br>约满即止</span>
+    </div>
+    <div class="arw">→</div>
+    <div class="st">
+      <div class="dot">🔢</div>
+      <b>拿到取货码</b>
+      <span>二维码 + 6 位数字<br>弱网也能用</span>
+    </div>
+    <div class="arw">→</div>
+    <div class="st">
+      <div class="dot">🏪</div>
+      <b>现场取货</b>
+      <span>到摊位付款<br>出示取货码</span>
+    </div>
+  </div>
+
+  <div class="foot">
+    <div class="who">
+      <b>IMNU 校园义卖 · 预定名额小程序</b>
+      <div>提案人：<span class="fill">&nbsp;</span> &nbsp; 联系方式：<span class="fill">&nbsp;</span></div>
+    </div>
+    <div class="pn">第 1 / 2 页</div>
+  </div>
+</div>
+
+<!-- ══════════════════ 第 2 页 ══════════════════ -->
+<div class="sheet">
+
+  <h2 style="margin-top:0">四、界面长什么样<span class="en">PREVIEW</span></h2>
+  <div class="phones">
+
+    <div class="ph">
+      <div class="bar">IMNU 校园义卖</div>
+      <div class="bd">
+        <div class="p-search">🔍 搜索义卖物品</div>
+        <div class="p-grid">
+          <div class="p-card">
+            <div class="p-thumb" style="background:#FBF3D8">🍪</div>
+            <div class="p-nm">手作黄油曲奇</div>
+            <div class="p-q"><span>名额</span><span><b>12</b>/40</span></div>
+            <div class="p-bar"><i style="width:30%"></i></div>
+          </div>
+          <div class="p-card">
+            <div class="p-thumb" style="background:#E5EAF6">📚</div>
+            <div class="p-nm">考研数学教材</div>
+            <div class="p-q"><span>名额</span><span>已约满</span></div>
+            <div class="p-bar"><i style="width:0%"></i></div>
+          </div>
+          <div class="p-card">
+            <div class="p-thumb" style="background:#E6F0E6">🪴</div>
+            <div class="p-nm">多肉小盆栽</div>
+            <div class="p-q"><span>名额</span><span><b>23</b>/30</span></div>
+            <div class="p-bar"><i style="width:77%"></i></div>
+          </div>
+          <div class="p-card">
+            <div class="p-thumb" style="background:#FBE4E4">👜</div>
+            <div class="p-nm">文创帆布包</div>
+            <div class="p-q"><span>名额</span><span><b>6</b>/25</span></div>
+            <div class="p-bar"><i style="width:24%"></i></div>
+          </div>
+        </div>
+      </div>
+      <div class="cap"><b>物品列表</b><br>剩余名额实时可见</div>
+    </div>
+
+    <div class="ph">
+      <div class="bar">取货码</div>
+      <div class="bd">
+        <div class="p-cardw">
+          <div class="qrmock">
+            <span class="c1"></span><span class="c2"></span><span class="c3"></span>
+          </div>
+          <div class="p-code">482 913</div>
+          <div class="p-hint">网络不好时<br>直接报这 6 位数字</div>
+        </div>
+      </div>
+      <div class="cap"><b>取货码</b><br>二维码 + 数字双通道</div>
+    </div>
+
+    <div class="ph">
+      <div class="bar">核销台</div>
+      <div class="bd">
+        <div class="p-ok">
+          <div class="mk">✓</div>
+          <div class="t">核销成功</div>
+          <div class="s">请确认已收款后交付</div>
+          <div class="d">
+            <div><span>物品</span><span>手作曲奇</span></div>
+            <div><span>取货人</span><span>王雨桐</span></div>
+            <div><span>学号</span><span>…37</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="cap"><b>核销结果</b><br>一眼可辨，3 秒返回</div>
+    </div>
+
+  </div>
+
+  <h2>五、活动当天怎么保障<span class="en">SAFETY</span></h2>
+  <div class="cards">
+    <div class="card">
+      <h4>📶 场地信号差</h4>
+      <p>取货码页把屏幕亮度调到最高，二维码扫不动时，学生直接报 6 位数字，志愿者手动输码核销。两条路都通。</p>
+    </div>
+    <div class="card">
+      <h4>📄 万一系统出问题</h4>
+      <p>活动前一天导出完整预定名单打印成纸质表。小程序不可用时，按纸质表人工核销，活动照常进行。</p>
+    </div>
+    <div class="card">
+      <h4>🧯 现场需要救火</h4>
+      <p>管理员可撤销误核销、取消预定并把名额释放给其他同学。所有操作都记录操作人和时间，不会说不清。</p>
+    </div>
+    <div class="card">
+      <h4>🔒 一人一码防重复</h4>
+      <p>核销是单向的，同一张取货码只能成功一次。截图转发给别人也用不了，避免一物两领。</p>
+    </div>
+  </div>
+
+  <h2>六、成本、维护与换届<span class="en">COST</span></h2>
+  <div class="cards">
+    <div class="card">
+      <h4>💰 费用</h4>
+      <p>使用微信云开发，免费额度足够一场校园活动的量级。<b>不需要购买服务器，不需要额外运维费用。</b></p>
+    </div>
+    <div class="card">
+      <h4>🔧 谁维护</h4>
+      <p>活动期间管理员在手机上即可处理上下架、取消预定、导出名单。<b>不需要专人值守电脑。</b></p>
+    </div>
+    <div class="card" style="grid-column:1 / -1">
+      <h4>🎓 明年谁接手</h4>
+      <p>管理员分两级：一级管理员可以任命二级管理员，二级管理员无撤销权限，避免换届时互相清洗。
+        同时提供<b>"转交超级管理员"</b>功能——毕业前把最高权限正式交给学弟学妹，并留下完整操作记录。
+        不会出现"负责的人走了，系统就废了"的情况。</p>
+    </div>
+  </div>
+
+  <h2>七、需要贵方提供的信息<span class="en">INPUT</span> &nbsp;/&nbsp; 八、时间安排<span class="en">TIMELINE</span></h2>
+  <div class="split">
+    <div class="split-col">
+      <ul class="ask">
+        <li><b>义卖物品清单</b> <span>名称、数量、负责摊位（Excel 即可，可批量导入）</span></li>
+        <li><b>摊位设置</b> <span>设几个摊位、分别在哪、负责人是谁</span></li>
+        <li><b>活动时间与地点</b> <span>用于取货码上显示取货时间</span></li>
+        <li><b>取货核对方式</b> <span>是否需要核对学号，还是报码即可</span></li>
+        <li><b>报名上限规则</b> <span>能否预定多件不同物品</span></li>
+      </ul>
+    </div>
+    <div class="split-col">
+      <table class="tl">
+        <tr><td>现在</td><td>前端原型已完成，可现场演示或发录屏</td></tr>
+        <tr><td>本周内</td><td>确认左侧清单，敲定方案细节</td></tr>
+        <tr><td>活动前 2 周</td><td>完成开发，内部测试</td></tr>
+        <tr><td>活动前 1 周</td><td>组织志愿者试跑核销流程</td></tr>
+        <tr><td>活动前 1 天</td><td>导出纸质预定名单备份</td></tr>
+        <tr><td>活动当天</td><td>现场支持，处理异常</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <h2>九、如实说明的前提与边界<span class="en">LIMITS</span></h2>
+  <div class="limits">
+    <ul>
+      <li><b>系统不碰钱，这是设计前提而非功能缺失。</b>小程序主体为个人主体，依规不能涉及线上交易。所有付款都在线下摊位完成，系统只保证"名额不超卖、核销不重复"。</li>
+      <li><b>小程序正式发布前需要完成备案</b>，通常需要 1–3 周，建议尽早启动，以免影响活动时间。</li>
+      <li><b>系统不介入资金核对。</b>摊位实收金额由各摊位自行登记汇总，小程序不记录任何金额。</li>
+    </ul>
+  </div>
+
+  <div class="foot">
+    <div class="who">
+      <b>期待与贵方一起把这次义卖办得更顺</b>
+      <div>提案人：<span class="fill">&nbsp;</span> &nbsp; 联系方式：<span class="fill">&nbsp;</span></div>
+    </div>
+    <div class="pn">第 2 / 2 页</div>
+  </div>
+</div>
+
+</body>
+</html>

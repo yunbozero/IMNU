@@ -15,7 +15,12 @@
 | --- | --- | --- |
 | 前端方案 | ✅ 已评审 | [docs/ui-prototype-plan.md](docs/ui-prototype-plan.md) |
 | HTML 可点击原型 | ✅ 已完成 | [prototype/](prototype/README.md) |
+| 给组织方的提案（A4 / PDF） | ✅ 已完成 | [docs/proposal.html](docs/proposal.html) |
 | 后端与云开发设计 | ⏸ 待启动（等与义卖组织方谈定方案） | — |
+
+### 把提案导出成 PDF
+
+用浏览器打开 `docs/proposal.html`，`Ctrl+P` → 目标打印机选「另存为 PDF」→ **记得勾选「背景图形」**，否则彩色块会丢。
 
 ---
 
