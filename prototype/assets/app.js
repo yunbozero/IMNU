@@ -12,13 +12,20 @@ const BZ = (() => {
     return {
       user: null,
       items: ITEMS.map((i) => ({ ...i })),
-      reservations: SEED_RESERVATIONS.map((r) => ({
-        qty: 1,
-        createdAt: Date.now(),
-        redeemedAt: null,
-        operator: null,
-        ...r,
-      })),
+      reservations: SEED_RESERVATIONS.map((r, idx) => {
+        const seeded = {
+          qty: 1,
+          createdAt: Date.now(),
+          redeemedAt: null,
+          operator: null,
+          ...r,
+        };
+        // 预置的已核销记录必须补一个核销时间，否则界面上会显示成「—」
+        if (seeded.status === 'redeemed' && !seeded.redeemedAt) {
+          seeded.redeemedAt = Date.now() - (idx + 1) * 15 * 60 * 1000;
+        }
+        return seeded;
+      }),
     };
   }
 

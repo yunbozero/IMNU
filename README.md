@@ -16,19 +16,29 @@
 | 前端方案 | ✅ 已评审 | [docs/ui-prototype-plan.md](docs/ui-prototype-plan.md) |
 | HTML 可点击原型 | ✅ 已完成 | [prototype/](prototype/README.md) |
 | 给组织方的提案（A4 / PDF） | ✅ 已完成 | [docs/proposal.html](docs/proposal.html) |
+| 微信长图（学生端 / 管理端） | ✅ 已完成 | `docs/longimage-student.png` · `docs/longimage-admin.png` |
 | 后端与云开发设计 | ⏸ 待启动（等与义卖组织方谈定方案） | — |
 
 ### 把提案导出成 PDF
 
 用浏览器打开 `docs/proposal.html`，`Ctrl+P` → 目标打印机选「另存为 PDF」→ **记得勾选「背景图形」**，否则彩色块会丢。
 
+### 重新生成长图
+
+```powershell
+npm run longimage
+```
+
+用无头 Edge/Chrome 把 `docs/longimage-*.html` 渲染成 750px 宽的 PNG。改完原型界面后重跑一次即可。
+
 ---
 
 ## 快速开始
 
 ```powershell
-npm run serve     # 打开 http://localhost:8080/ 看原型演示台
-npm test          # 跑合规 / 结构 / 状态机测试
+npm run serve      # 打开 http://localhost:8080/ 看原型演示台
+npm test           # 跑合规 / 结构 / 状态机测试（38 项）
+npm run longimage  # 重新生成微信长图
 ```
 
 需要 Node 18+。原型是纯静态的，没有任何第三方依赖。

@@ -207,6 +207,27 @@ function loadBZ() {
 
 const SIGNED_IN = (bz) => bz.signup('2021123456', '测试同学');
 
+test('逻辑：预置的已核销记录必须带核销时间（否则界面显示成「—」）', () => {
+  const bz = loadBZ();
+  const done = bz.allReservations().filter((r) => r.status === 'redeemed');
+  assert.ok(done.length >= 1, '应当有预置的已核销记录');
+
+  for (const r of done) {
+    assert.ok(r.redeemedAt, `${r.id} 缺少 redeemedAt`);
+    assert.equal(bz.timeText(r.redeemedAt).includes('—'), false);
+    assert.equal(bz.clockText(r.redeemedAt), bz.clockText(r.redeemedAt));
+    assert.notEqual(bz.clockText(r.redeemedAt), '—');
+  }
+});
+
+test('逻辑：未登记的页面不会读到别人的预定', () => {
+  const bz = loadBZ();
+  // 注意：bz 在 vm 的另一个 realm 里，数组原型不同，不能用 deepEqual 比较空数组
+  assert.equal(bz.mine().length, 0, '没登记时应看不到任何预定');
+  assert.equal(bz.myReservationFor('i1'), null);
+  assert.ok(bz.allReservations().length > 0, '但种子里的其他人预定仍然存在');
+});
+
 test('逻辑：未登记时不能预定', () => {
   const bz = loadBZ();
   const res = bz.reserve('i3', 1);

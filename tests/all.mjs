@@ -9,4 +9,5 @@
  */
 import './prototype.test.mjs';
 import './proposal.test.mjs';
+import './longimage.test.mjs';
 import './lan.test.mjs';

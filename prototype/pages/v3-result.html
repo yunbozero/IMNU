@@ -97,7 +97,8 @@
   document.getElementById('back').onclick = () => location.href = 'v1-scan.html';
 
   // 成功后 3 秒自动返回核销台，方便志愿者连续作业
-  if (!err) {
+  // shot=1 供生成宣传长图使用：停在结果页不跳走
+  if (!err && BZ.param('shot') !== '1') {
     setTimeout(() => { location.href = 'v1-scan.html'; }, 3000);
   }
 </script>

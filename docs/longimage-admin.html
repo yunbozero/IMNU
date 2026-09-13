@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>IMNU 校园义卖 · 志愿者 / 管理端长图</title>
+<link rel="stylesheet" href="longimage.css">
+</head>
+<body>
+
+<header class="cover green">
+  <div class="mark">✅</div>
+  <h1>志愿者 · 管理端</h1>
+  <p class="sub">IMNU 校园义卖 · 现场核销</p>
+  <div class="pill">摊位工作人员使用</div>
+  <div class="hint">↓ 往下滑，看现场怎么核销</div>
+</header>
+
+<div class="flow">
+  <div class="s"><i>①</i><b>扫码</b></div>
+  <div class="a">→</div>
+  <div class="s"><i>②</i><b>核对取货人</b></div>
+  <div class="a">→</div>
+  <div class="s"><i>③</i><b>收款交付</b></div>
+  <div class="a">→</div>
+  <div class="s"><i>④</i><b>自动记账</b></div>
+</div>
+
+<section class="sec">
+  <div class="sec-head">
+    <div class="no">1</div>
+    <div class="tt"><b>核销台</b><span>一个按钮，扫码就能干</span></div>
+  </div>
+  <div class="phone-wrap">
+    <div class="phone"><div class="vp">
+      <iframe data-src="../prototype/pages/v1-scan.html"></iframe>
+    </div></div>
+  </div>
+  <ul class="notes">
+    <li>整屏只有<b>一个大按钮</b>，忙的时候不会点错</li>
+    <li>顶部实时显示本摊位今日已核销数量</li>
+    <li>下方是核销流水，谁什么时候取的都留痕</li>
+  </ul>
+</section>
+
+<section class="sec">
+  <div class="sec-head">
+    <div class="no">2</div>
+    <div class="tt"><b>手动输码</b><span>信号差时的降级通道</span></div>
+  </div>
+  <div class="phone-wrap">
+    <div class="phone"><div class="vp">
+      <iframe data-src="../prototype/pages/v1-scan.html?pad=1"></iframe>
+    </div></div>
+  </div>
+  <ul class="notes">
+    <li>同学扫不动码时，<b>直接报 6 位数字</b>就能核销</li>
+    <li>大号数字键盘，户外戴手套也好按</li>
+    <li>输满 6 位自动提交，不用再点确认</li>
+  </ul>
+</section>
+
+<section class="sec">
+  <div class="sec-head">
+    <div class="no">3</div>
+    <div class="tt"><b>核销成功</b><span>满屏绿色，3 秒返回</span></div>
+  </div>
+  <div class="phone-wrap">
+    <div class="phone"><div class="vp">
+      <iframe data-src="../prototype/pages/v3-result.html?rid=r-seed-3&amp;shot=1"></iframe>
+    </div></div>
+  </div>
+  <ul class="notes">
+    <li>一眼可辨，同时显示<b>物品、取货人、学号</b>供核对</li>
+    <li>提醒志愿者「确认已收款后再交付物品」</li>
+    <li>3 秒自动返回，方便连续作业</li>
+  </ul>
+</section>
+
+<section class="sec">
+  <div class="sec-head">
+    <div class="no">4</div>
+    <div class="tt"><b>重复核销拦截</b><span>同一张码只能用一次</span></div>
+  </div>
+  <div class="phone-wrap">
+    <div class="phone"><div class="vp">
+      <iframe data-src="../prototype/pages/v3-result.html?err=redeemed&amp;rid=r-seed-3"></iframe>
+    </div></div>
+  </div>
+  <ul class="notes">
+    <li>已经核销过的码再扫，<b>会显示首次核销时间与经手人</b></li>
+    <li>截图转发给别人也用不了，杜绝一物两领</li>
+    <li>失败原因分「已核销过 / 已取消 / 无效码」，不让志愿者猜</li>
+  </ul>
+</section>
+
+<div class="foot">
+  <div class="band green">
+    <b>核销前先确认已收款<br>再交付物品</b>
+    <span>同一张码只能核销一次 · 全程留痕可追溯</span>
+  </div>
+  <div class="meta">
+    <b>IMNU 校园义卖 · 预定名额小程序</b><br>
+    志愿者 · 管理端 · 共 4 屏
+  </div>
+</div>
+
+<script src="../prototype/assets/data.js"></script>
+<script src="../prototype/assets/app.js"></script>
+<script src="longimage.js"></script>
+</body>
+</html>

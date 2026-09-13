@@ -99,7 +99,8 @@
         document.getElementById('foot-note').textContent = '名额已释放给其他同学';
       } else {
         // 原型示意：真实小程序这里会调用 setScreenBrightness
-        BZ.toast('已自动调亮屏幕', 1200);
+        // shot=1 供生成宣传长图使用：跳过提示，避免挡住取货码
+        if (BZ.param('shot') !== '1') BZ.toast('已自动调亮屏幕', 1200);
         document.getElementById('foot-note').textContent =
           '活动当天 ' + BZ.EVENT.place + ' 见';
       }
