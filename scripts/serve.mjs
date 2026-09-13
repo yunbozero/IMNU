@@ -8,8 +8,10 @@
  */
 import http from 'node:http';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { lanUrls } from './lan.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const port = Number(process.env.PORT || 8080);
@@ -51,6 +53,27 @@ http
     });
   })
   .listen(port, () => {
-    console.log('原型已启动 →  http://localhost:' + port + '/');
-    console.log('（Ctrl+C 停止）');
+    const lan = lanUrls(os.networkInterfaces(), port);
+
+    console.log('');
+    console.log('  IMNU 校园义卖 · 原型已启动');
+    console.log('');
+    console.log('  本机演示台：  http://localhost:' + port + '/');
+
+    if (lan.length) {
+      console.log('');
+      console.log('  同一个 WiFi 下的手机可以打开下面这个地址：');
+      for (const l of lan) {
+        console.log('      ' + l.url + '   (' + l.iface + ')');
+      }
+      console.log('');
+      console.log('  把它输入手机浏览器，或用微信扫一扫 / 相机扫码。');
+    } else {
+      console.log('');
+      console.log('  未检测到局域网地址，请确认电脑已连上 WiFi。');
+    }
+
+    console.log('');
+    console.log('  Ctrl+C 停止');
+    console.log('');
   });
