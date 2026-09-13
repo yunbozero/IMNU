@@ -1,0 +1,76 @@
+# ---- OS / editor noise ----
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*~
+.idea/
+.vscode/
+*.code-workspace
+
+# ---- Secrets / local config ----
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets*.json
+appsettings.Development.json
+
+# ---- Logs & temp ----
+*.log
+logs/
+tmp/
+temp/
+*.tmp
+*.bak
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+build/
+dist/
+*.egg-info/
+
+# ---- Node / JS ----
+node_modules/
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.next/
+out/
+coverage/
+
+# ---- Java / JVM ----
+target/
+*.class
+.gradle/
+build/
+
+# ---- C / C++ / CMake ----
+cmake-build-*/
+*.o
+*.obj
+*.exe
+*.out
+*.dll
+*.so
+*.dylib
+
+# ---- Build artifacts ----
+bin/
+obj/
+*.zip
+*.7z
+*.tar.gz
+
+# ---- Local databases ----
+*.sqlite
+*.sqlite3
+*.db
