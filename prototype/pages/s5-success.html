@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>预定成功 · IMNU 校园义卖</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<div class="screen">
+  <div class="topbar">
+    <div class="statusbar"><span>9:41</span><span>5G ▮▮▮ 100%</span></div>
+    <div class="navbar">
+      <a class="back" href="s2-items.html">‹</a>
+      <div class="title">预定成功</div>
+      <div class="capsule"><i>•••</i><i>⊙</i></div>
+    </div>
+  </div>
+
+  <div class="body">
+    <div style="text-align:center;padding:26px 0 6px">
+      <div style="width:88px;height:88px;border-radius:50%;background:var(--ok-bg);color:var(--ok);
+                  display:flex;align-items:center;justify-content:center;font-size:44px;
+                  margin:0 auto 16px;font-weight:700">✓</div>
+      <h2 style="margin:0 0 8px;font-size:21px;font-weight:800">预定成功，名额已锁定</h2>
+      <p style="margin:0;font-size:13px;color:var(--text-2)" id="sub"></p>
+    </div>
+
+    <div class="notice" style="background:#FBE9E4;border-color:#F3D2C8;color:#A83E22;font-size:13.5px">
+      <b style="color:#A83E22">⚠️ 你还没有付款。</b><br>
+      本小程序只锁定名额，不收任何费用。请于活动当天到摊位现场付款取货。
+    </div>
+
+    <div class="codebox" style="padding:18px">
+      <div style="font-size:11.5px;color:var(--text-2);margin-bottom:8px">你的取货码</div>
+      <div class="digits" id="code" style="font-size:32px">— — —</div>
+      <div class="hint">取货时向志愿者出示此码，或直接报出这 6 位数字</div>
+    </div>
+
+    <div class="kv">
+      <div class="r"><span class="k">物品</span><span class="v" id="it-name">—</span></div>
+      <div class="r"><span class="k">数量</span><span class="v" id="it-qty">—</span></div>
+      <div class="r"><span class="k">取货摊位</span><span class="v" id="it-stall">—</span></div>
+      <div class="r"><span class="k">取货时间</span><span class="v" id="it-time">—</span></div>
+      <div class="r"><span class="k">取货人</span><span class="v" id="it-user">—</span></div>
+    </div>
+
+    <button class="btn" id="to-code">查看取货码</button>
+    <button class="btn grey" id="to-list" style="margin-top:10px">继续逛义卖</button>
+
+    <div class="footer-note">名额已为你保留，无需其他操作</div>
+  </div>
+</div>
+
+<script src="../assets/data.js"></script>
+<script src="../assets/app.js"></script>
+<script>
+  if (BZ.requireUser()) {
+    const mine = BZ.mine().filter((r) => r.status === 'reserved');
+    const rid = BZ.param('id');
+    const r = BZ.reservation(rid) || mine[mine.length - 1];
+
+    if (!r) {
+      location.replace('s6-my-reservations.html');
+    } else {
+      const it = BZ.item(r.itemId) || {};
+      const st = BZ.stall(it.stall) || {};
+
+      document.getElementById('sub').textContent =
+        BZ.EVENT.date + ' · ' + BZ.EVENT.place;
+      document.getElementById('code').textContent = BZ.groupCode(r.code);
+      document.getElementById('it-name').textContent = it.name || '—';
+      document.getElementById('it-qty').textContent = r.qty + ' 份';
+      document.getElementById('it-stall').textContent =
+        (st.name || '') + ' · ' + (st.loc || '');
+      document.getElementById('it-time').textContent = BZ.EVENT.date;
+      document.getElementById('it-user').textContent =
+        r.userName + '（' + r.userSid + '）';
+
+      document.getElementById('to-code').onclick = () =>
+        location.href = 's7-pickup-code.html?id=' + r.id;
+      document.getElementById('to-list').onclick = () =>
+        location.href = 's2-items.html';
+    }
+  }
+</script>
+</body>
+</html>

@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>IMNU 校园义卖 · 原型演示台</title>
+<style>
+  :root{
+    --brand:#D2694A; --bg:#F7F3F0; --ink:#2B2119; --ink2:#8C7A70;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;
+    background:var(--bg);color:var(--ink);display:flex;min-height:100vh;
+  }
+  /* 左侧导航 */
+  aside{
+    width:290px;flex:0 0 290px;background:#fff;border-right:1px solid #EAE0DA;
+    padding:22px 18px;overflow-y:auto;height:100vh;position:sticky;top:0;
+  }
+  aside h1{font-size:17px;margin:0 0 4px;letter-spacing:.3px}
+  aside .sub{font-size:11.5px;color:var(--ink2);line-height:1.6;margin-bottom:18px}
+  .grp{font-size:11px;font-weight:700;color:#B5A69C;letter-spacing:1.2px;margin:16px 0 8px}
+  .nav-btn{
+    width:100%;display:flex;align-items:center;gap:9px;background:transparent;border:0;
+    text-align:left;padding:9px 11px;border-radius:10px;font-size:13px;color:var(--ink);
+    cursor:pointer;font-family:inherit;transition:.14s;margin-bottom:2px;
+  }
+  .nav-btn:hover{background:#F7F0EC}
+  .nav-btn.on{background:var(--brand);color:#fff}
+  .nav-btn .no{
+    font-size:10px;font-weight:700;opacity:.7;min-width:20px;
+    font-family:ui-monospace,Consolas,monospace;
+  }
+  .nav-btn .fx{margin-left:auto;font-size:10px;opacity:.6}
+  .side-foot{margin-top:22px;padding-top:16px;border-top:1px solid #EFE6E1;display:flex;flex-direction:column;gap:8px}
+  .side-foot button{
+    border:1px solid #E6D9D2;background:#fff;border-radius:10px;padding:9px;font-size:12.5px;
+    cursor:pointer;font-family:inherit;color:var(--ink2);transition:.14s;
+  }
+  .side-foot button:hover{border-color:var(--brand);color:var(--brand)}
+  .side-foot .key{font-size:11px;color:#B5A69C;line-height:1.7}
+
+  /* 右侧舞台 */
+  main{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:34px 20px;gap:16px}
+  .stage-top{display:flex;align-items:center;gap:12px}
+  .stage-top .name{font-size:13px;color:var(--ink2)}
+  .stage-top a{font-size:12px;color:var(--brand);text-decoration:none;border-bottom:1px solid currentColor}
+  .phone{
+    width:390px;height:844px;background:#161210;border-radius:46px;padding:11px;
+    box-shadow:0 22px 60px rgba(80,45,30,.28);position:relative;flex:0 0 auto;
+  }
+  .phone::after{
+    content:"";position:absolute;left:50%;transform:translateX(-50%);top:11px;
+    width:120px;height:26px;background:#161210;border-radius:0 0 16px 16px;z-index:2;
+  }
+  .phone iframe{width:100%;height:100%;border:0;border-radius:36px;background:#FBEBE3;display:block}
+  @media (max-width:820px){
+    body{flex-direction:column}
+    aside{width:100%;flex:none;height:auto;position:static;border-right:0;border-bottom:1px solid #EAE0DA}
+    main{padding:16px}
+    .phone{transform:scale(.82);transform-origin:top center}
+  }
+</style>
+</head>
+<body>
+
+<aside>
+  <h1>IMNU 校园义卖</h1>
+  <div class="sub">
+    可点击 HTML 原型 · 内蒙古师范大学<br>
+    数据为假数据，交互为纯前端模拟
+  </div>
+
+  <div class="grp">学生端</div>
+  <button class="nav-btn" data-src="pages/s2-items.html"><span class="no">S2</span>逛义卖（首页）</button>
+  <button class="nav-btn" data-src="pages/s3-item-detail.html?id=i1"><span class="no">S3</span>物品详情</button>
+  <button class="nav-btn" data-src="pages/s3-item-detail.html?id=i1&sheet=1"><span class="no">S4</span>确认预定弹层<span class="fx">弹层</span></button>
+  <button class="nav-btn" data-src="pages/s5-success.html"><span class="no">S5</span>预定成功</button>
+  <button class="nav-btn" data-src="pages/s7-pickup-code.html"><span class="no">S7</span>取货码</button>
+  <button class="nav-btn" data-src="pages/s6-my-reservations.html"><span class="no">S6</span>我的预定</button>
+  <button class="nav-btn" data-src="pages/s8-profile.html"><span class="no">S8</span>我的</button>
+  <button class="nav-btn" data-src="pages/s1-signup.html"><span class="no">S1</span>身份登记<span class="fx">首次</span></button>
+
+  <div class="grp">志愿者端</div>
+  <button class="nav-btn" data-src="pages/v1-scan.html"><span class="no">V1</span>核销台</button>
+  <button class="nav-btn" data-src="pages/v1-scan.html?pad=1"><span class="no">V2</span>手动输入码<span class="fx">弹层</span></button>
+  <button class="nav-btn" data-src="pages/v3-result.html?err=invalid"><span class="no">V3</span>核销结果<span class="fx">演示</span></button>
+
+  <div class="side-foot">
+    <button id="reset">重置演示数据</button>
+    <div class="key">
+      演示顺序建议：<br>
+      S2 列表 → S3 详情 → S4 预定 → S5 成功 → S7 取货码 → S6 我的预定 → V1 核销台 → V3 结果
+    </div>
+  </div>
+</aside>
+
+<main>
+  <div class="stage-top">
+    <span class="name" id="stage-name">逛义卖（首页）</span>
+    <a id="open-tab" href="pages/s2-items.html" target="_blank" rel="noopener">在新标签打开 ↗</a>
+  </div>
+  <div class="phone">
+    <iframe id="stage" src="pages/s2-items.html" title="原型预览"></iframe>
+  </div>
+</main>
+
+<script>
+  const stage = document.getElementById('stage');
+  const stageName = document.getElementById('stage-name');
+  const openTab = document.getElementById('open-tab');
+
+  document.querySelectorAll('.nav-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.nav-btn').forEach((b) => b.classList.remove('on'));
+      btn.classList.add('on');
+      const src = btn.dataset.src;
+      stage.src = src;
+      openTab.href = src;
+      const clone = btn.cloneNode(true);          // 去掉序号与角标，只留标题
+      clone.querySelectorAll('.no,.fx').forEach((n) => n.remove());
+      stageName.textContent = clone.textContent.trim();
+    });
+  });
+
+  document.getElementById('reset').addEventListener('click', () => {
+    // 用 postMessage，避免 file:// 下的跨源限制
+    stage.contentWindow.postMessage('bz:reset', '*');
+  });
+
+  document.querySelector('.nav-btn').classList.add('on');
+</script>
+</body>
+</html>

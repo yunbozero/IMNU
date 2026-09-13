@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>身份登记 · IMNU 校园义卖</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<div class="screen">
+  <div class="topbar">
+    <div class="statusbar"><span>9:41</span><span>5G ▮▮▮ 100%</span></div>
+    <div class="navbar">
+      <div class="title">身份登记</div>
+      <div class="capsule"><i>•••</i><i>⊙</i></div>
+    </div>
+  </div>
+
+  <div class="body">
+    <div class="hero">
+      <div class="avatar">🎪</div>
+      <h1 id="ev-name">IMNU 校园义卖</h1>
+      <div class="sub" id="ev-sub">关爱校园里的每一个角落</div>
+    </div>
+
+    <div class="divider">🎈</div>
+
+    <div class="notice">
+      <b>本小程序仅登记预定名额</b>，不出售商品、不收取任何费用。<br>
+      预定成功后，请于义卖当天凭取货码到摊位现场付款取货。
+    </div>
+
+    <div class="field">
+      <label>学号</label>
+      <input id="sid" type="tel" inputmode="numeric" maxlength="16" placeholder="请输入学号">
+      <div class="tip">用于现场核对身份，请填写本人真实学号</div>
+    </div>
+
+    <div class="field">
+      <label>姓名</label>
+      <input id="name" type="text" maxlength="12" placeholder="请输入真实姓名">
+    </div>
+
+    <div class="field">
+      <label>学院 / 班级（选填）</label>
+      <input id="clazz" type="text" maxlength="20" placeholder="如：计算机科学技术学院">
+    </div>
+
+    <div class="checkrow" id="agree">
+      <span class="box"></span>
+      <span>我已阅读并同意《活动规则》，承诺预定后按时到摊位取货；无故未取货将影响后续活动参与。</span>
+    </div>
+
+    <button class="btn" id="submit">开始逛义卖</button>
+
+    <div class="footer-note">信息仅用于本次活动身份核对，活动结束后统一删除</div>
+  </div>
+</div>
+
+<script src="../assets/data.js"></script>
+<script src="../assets/app.js"></script>
+<script>
+  document.getElementById('ev-sub').textContent =
+    BZ.EVENT.date + ' · ' + BZ.EVENT.place;
+
+  const agree = document.getElementById('agree');
+  agree.addEventListener('click', () => agree.classList.toggle('on'));
+
+  document.getElementById('submit').addEventListener('click', () => {
+    if (!agree.classList.contains('on')) {
+      BZ.toast('请先勾选同意《活动规则》');
+      return;
+    }
+    const res = BZ.signup(
+      document.getElementById('sid').value,
+      document.getElementById('name').value
+    );
+    if (!res.ok) { BZ.toast(res.msg); return; }
+
+    BZ.toast('登记成功');
+    const next = BZ.param('next');
+    setTimeout(() => {
+      location.href = next ? decodeURIComponent(next) : 's2-items.html';
+    }, 600);
+  });
+</script>
+</body>
+</html>

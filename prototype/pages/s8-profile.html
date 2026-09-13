@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>我的 · IMNU 校园义卖</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<div class="screen has-tabbar">
+  <div class="topbar">
+    <div class="statusbar"><span>9:41</span><span>5G ▮▮▮ 100%</span></div>
+    <div class="navbar">
+      <div class="title">我的</div>
+      <div class="capsule"><i>•••</i><i>⊙</i></div>
+    </div>
+  </div>
+
+  <div class="body">
+    <div class="hero">
+      <div class="avatar">🎪</div>
+      <h1 id="u-name">未登记</h1>
+      <div class="sub" id="u-sub">IMNU 校园义卖 · 志愿者</div>
+    </div>
+
+    <div class="divider">🎈</div>
+    <div class="section-title">功能服务</div>
+
+    <div class="grid2 tight" id="features">
+      <button class="feature" data-go="s6-my-reservations.html">
+        <div class="ic t-pink">🎫</div>
+        <div class="ft">我的预定</div>
+        <div class="fd">查看取货码与预定记录</div>
+      </button>
+
+      <button class="feature" data-go="v1-scan.html">
+        <div class="ic t-green">✅</div>
+        <div class="ft">志愿者核销台</div>
+        <div class="fd">扫码或输码核销取货</div>
+      </button>
+
+      <button class="feature" data-scroll="rules">
+        <div class="ic t-blue">📋</div>
+        <div class="ft">活动规则</div>
+        <div class="fd">预定、取货与取消说明</div>
+      </button>
+
+      <button class="feature" data-scroll="about">
+        <div class="ic t-yellow">🎪</div>
+        <div class="ft">关于活动</div>
+        <div class="fd">时间地点与主办方信息</div>
+      </button>
+    </div>
+
+    <div class="panel" id="rules">
+      <h3>活动规则</h3>
+      <p><b>预定免费：</b>小程序只登记名额，不出售商品、不收取任何费用。</p>
+      <p><b>现场取货：</b>活动当天到对应摊位，出示取货码并付款后取走物品。</p>
+      <p><b>一人一份：</b>同一件物品每人限预定一次，数量上限以物品页为准。</p>
+      <p><b class="g">及时取消：</b>无法到场请提前取消，把名额让给其他同学。</p>
+    </div>
+
+    <div class="panel" id="about">
+      <h3>关于活动</h3>
+      <p>活动时间：<b id="a-date"></b></p>
+      <p>活动地点：<b id="a-place"></b></p>
+      <p>主办方：<b id="a-host"></b></p>
+      <p>本活动为校内公益活动，所有物品由师生自愿捐赠。</p>
+    </div>
+
+    <div class="footer-note">© 2026 IMNU 校园义卖 · 原型演示版</div>
+  </div>
+
+  <nav class="tabbar">
+    <a href="s2-items.html">逛义卖</a>
+    <a href="s6-my-reservations.html">我的预定</a>
+    <a class="on" href="s8-profile.html">我的</a>
+  </nav>
+</div>
+
+<script src="../assets/data.js"></script>
+<script src="../assets/app.js"></script>
+<script>
+  document.getElementById('a-date').textContent = BZ.EVENT.date;
+  document.getElementById('a-place').textContent = BZ.EVENT.place;
+  document.getElementById('a-host').textContent = BZ.EVENT.host;
+
+  const u = BZ.user();
+  if (u) {
+    document.getElementById('u-name').textContent = u.name;
+    document.getElementById('u-sub').textContent = u.sid + ' · 内蒙古师范大学';
+  } else {
+    document.getElementById('u-sub').innerHTML =
+      '<a href="s1-signup.html" style="color:var(--brand)">去完成身份登记 ›</a>';
+  }
+
+  document.getElementById('features').addEventListener('click', (e) => {
+    const b = e.target.closest('.feature');
+    if (!b) return;
+    if (b.dataset.go) { location.href = b.dataset.go; return; }
+    document.getElementById(b.dataset.scroll)
+      .scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>核销结果 · IMNU 校园义卖</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<div class="result ok" id="screen">
+  <div class="mark" id="mark">✓</div>
+  <h2 id="title">核销成功</h2>
+  <div class="sub" id="sub"></div>
+  <div class="detail" id="detail" style="display:none"></div>
+  <div class="acts">
+    <button class="btn" id="again">继续核销</button>
+    <button class="btn plain" id="back">返回核销台</button>
+  </div>
+</div>
+
+<script src="../assets/data.js"></script>
+<script src="../assets/app.js"></script>
+<script>
+  const err = BZ.param('err');
+  const rid = BZ.param('rid');
+  const code = BZ.param('code');
+
+  const screen = document.getElementById('screen');
+  const mark = document.getElementById('mark');
+  const title = document.getElementById('title');
+  const sub = document.getElementById('sub');
+  const detail = document.getElementById('detail');
+
+  function rows(list) {
+    detail.innerHTML = list
+      .map(([k, v]) => `<div class="r"><span>${k}</span><span>${v}</span></div>`)
+      .join('');
+    detail.style.display = 'block';
+  }
+
+  if (!err) {
+    /* ---------- 成功 ---------- */
+    const r = BZ.reservation(rid);
+    if (!r) {
+      screen.className = 'result bad';
+      mark.textContent = '!';
+      title.textContent = '找不到这条预定';
+      sub.textContent = '请返回核销台重试';
+    } else {
+      const it = BZ.item(r.itemId) || {};
+      title.textContent = '核销成功';
+      sub.textContent = '请确认已收款后，把物品交给同学';
+      rows([
+        ['物品', it.name || '—'],
+        ['数量', '×' + r.qty],
+        ['取货人', r.userName],
+        ['学号', r.userSid],
+        ['所属摊位', BZ.stallName(it.stall)],
+        ['核销时间', BZ.clockText(r.redeemedAt)],
+      ]);
+    }
+  } else {
+    /* ---------- 失败 ---------- */
+    screen.className = 'result bad';
+    mark.textContent = err === 'redeemed' ? '↺' : '✕';
+
+    const r = rid ? BZ.reservation(rid) : null;
+
+    if (err === 'invalid') {
+      title.textContent = '取货码不存在';
+      sub.textContent = '请核对同学报出的 6 位数字后重新输入';
+      if (code) rows([['输入的取货码', BZ.groupCode(code)]]);
+    } else if (err === 'redeemed') {
+      title.textContent = '这个码已经核销过了';
+      sub.textContent = '如同学坚称未取货，请联系管理员处理';
+      rows([
+        ['物品', (BZ.item(r && r.itemId) || {}).name || '—'],
+        ['取货人', r ? r.userName : '—'],
+        ['首次核销时间', r ? BZ.timeText(r.redeemedAt) : '—'],
+        ['核销人', r ? (r.operator || '—') : '—'],
+      ]);
+    } else if (err === 'cancelled') {
+      title.textContent = '该预定已被取消';
+      sub.textContent = '同学已自行取消，名额释放给了其他同学';
+      rows([
+        ['物品', (BZ.item(r && r.itemId) || {}).name || '—'],
+        ['取货人', r ? r.userName : '—'],
+        ['取消时间', r ? BZ.timeText(r.cancelledAt) : '—'],
+      ]);
+    } else {
+      title.textContent = '核销失败';
+      sub.textContent = '请返回核销台重试';
+    }
+  }
+
+  document.getElementById('again').onclick = () => location.href = 'v1-scan.html';
+  document.getElementById('back').onclick = () => location.href = 'v1-scan.html';
+
+  // 成功后 3 秒自动返回核销台，方便志愿者连续作业
+  if (!err) {
+    setTimeout(() => { location.href = 'v1-scan.html'; }, 3000);
+  }
+</script>
+</body>
+</html>

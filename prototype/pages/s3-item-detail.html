@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>物品详情 · IMNU 校园义卖</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<div class="screen has-actionbar">
+  <div class="topbar">
+    <div class="statusbar"><span>9:41</span><span>5G ▮▮▮ 100%</span></div>
+    <div class="navbar">
+      <a class="back" href="s2-items.html">‹</a>
+      <div class="title">物品详情</div>
+      <div class="capsule"><i>•••</i><i>⊙</i></div>
+    </div>
+  </div>
+
+  <div class="body">
+    <div id="hero-thumb" class="thumb" style="aspect-ratio:4/3;border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:96px;margin-top:14px"></div>
+
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin:16px 2px 6px">
+      <h2 id="name" style="margin:0;font-size:20px;font-weight:800;line-height:1.35"></h2>
+    </div>
+    <div id="tags" style="margin:0 2px 4px;display:flex;gap:6px;flex-wrap:wrap"></div>
+
+    <div class="panel" id="quota-panel"></div>
+
+    <div class="kv">
+      <div class="r"><span class="k">所属摊位</span><span class="v" id="stall"></span></div>
+      <div class="r"><span class="k">摊位位置</span><span class="v" id="loc"></span></div>
+      <div class="r"><span class="k">取货时间</span><span class="v" id="pick-time"></span></div>
+      <div class="r"><span class="k">取货方式</span><span class="v">凭取货码现场付款取货</span></div>
+    </div>
+
+    <div class="panel">
+      <h3>物品说明</h3>
+      <p id="desc"></p>
+    </div>
+
+    <div class="notice">
+      <b>预定免费，仅锁定名额。</b>本小程序仅登记名额，现场交易由摊位完成。请于义卖当天凭取货码到摊位现场付款取货。
+    </div>
+  </div>
+
+  <div class="actionbar">
+    <div class="ab-info">
+      <div class="t1" id="ab-t1">剩余名额</div>
+      <div class="t2" id="ab-t2">—</div>
+    </div>
+    <button class="btn" id="ab-btn">预定名额</button>
+  </div>
+</div>
+
+<!-- S4 确认预定 -->
+<div class="mask" id="sheet-reserve-mask"></div>
+<div class="sheet" id="sheet-reserve">
+  <div class="grab"></div>
+  <h3>确认预定</h3>
+
+  <div class="summary">
+    <div class="thumb" id="s-thumb"></div>
+    <div style="flex:1;min-width:0">
+      <div style="font-size:14.5px;font-weight:700;line-height:1.35" id="s-name"></div>
+      <div style="font-size:11.5px;color:var(--text-2);margin-top:5px" id="s-stall"></div>
+    </div>
+  </div>
+
+  <div class="stepper" id="stepper" style="display:none">
+    <span class="lb">预定数量</span>
+    <div class="ctrl">
+      <button id="minus">−</button>
+      <span id="qty">1</span>
+      <button id="plus">＋</button>
+    </div>
+  </div>
+
+  <div class="kv" style="margin:0 0 14px">
+    <div class="r"><span class="k">取货人</span><span class="v" id="s-user">未登记</span></div>
+    <div class="r"><span class="k">取货地点</span><span class="v" id="s-loc"></span></div>
+  </div>
+
+  <p style="font-size:12px;color:var(--text-2);line-height:1.6;margin:0 0 16px">
+    预定成功后名额即为您保留。如无法到场，请提前在「我的预定」中取消。
+  </p>
+
+  <button class="btn" id="s-submit">确认预定</button>
+  <button class="btn grey" id="s-cancel" style="margin-top:10px">再想想</button>
+</div>
+
+<script src="../assets/data.js"></script>
+<script src="../assets/app.js"></script>
+<script>
+  const itemId = BZ.param('id') || 'i1';
+  const it = BZ.item(itemId) || BZ.items()[0];
+  let qty = 1;
+  const maxQty = () => Math.min(it.remaining, 5);
+
+  function render() {
+    document.getElementById('hero-thumb').className = 'thumb ' + it.tint;
+    document.getElementById('hero-thumb').textContent = it.emoji;
+    document.getElementById('hero-thumb').style.cssText =
+      'aspect-ratio:4/3;border-radius:16px;display:flex;align-items:center;' +
+      'justify-content:center;font-size:96px;margin-top:14px';
+
+    document.getElementById('name').textContent = it.name;
+    document.getElementById('tags').innerHTML =
+      it.tags.map((t) => `<span class="tag">${t}</span>`).join('');
+    document.getElementById('desc').textContent = it.desc;
+
+    const st = BZ.stall(it.stall) || {};
+    document.getElementById('stall').textContent = st.name || '—';
+    document.getElementById('loc').textContent = st.loc || '—';
+    document.getElementById('pick-time').textContent = BZ.EVENT.date;
+    document.getElementById('s-loc').textContent = (st.name || '') + ' · ' + (st.loc || '');
+
+    // 名额面板
+    const left = it.remaining;
+    const cls = left === 0 ? 'none' : (left / it.total <= 0.3 ? 'low' : '');
+    const pct = Math.round((left / it.total) * 100);
+    document.getElementById('quota-panel').innerHTML = `
+      <h3>剩余名额</h3>
+      <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:10px">
+        <span style="font-size:30px;font-weight:800;color:${left === 0 ? '#B5A69C' : 'var(--brand)'}">${left}</span>
+        <span style="font-size:13px;color:var(--text-2)">/ ${it.total} 份</span>
+        ${left > 0 && left / it.total <= 0.3 ? '<span class="tag" style="margin-left:auto">名额紧张</span>' : ''}
+      </div>
+      <div class="qbar ${cls}"><i style="width:${pct}%"></i></div>
+      <p style="font-size:11.5px;color:var(--text-3);margin:10px 0 0">
+        名额实时更新，以提交预定时的结果为准
+      </p>`;
+
+    // 底部操作栏
+    const btn = document.getElementById('ab-btn');
+    const mine = BZ.myReservationFor(it.id);
+    const t1 = document.getElementById('ab-t1');
+    const t2 = document.getElementById('ab-t2');
+
+    if (mine) {
+      t1.textContent = '你已预定';
+      t2.textContent = '取货码 ' + BZ.groupCode(mine.code);
+      btn.textContent = '查看我的取货码';
+      btn.className = 'btn ghost';
+      btn.disabled = false;
+      btn.dataset.act = 'view';
+      btn.dataset.rid = mine.id;
+    } else if (left === 0) {
+      t1.textContent = '剩余名额';
+      t2.textContent = '已约满';
+      btn.textContent = '已约满';
+      btn.className = 'btn';
+      btn.disabled = true;
+      btn.dataset.act = 'none';
+    } else {
+      t1.textContent = '剩余名额';
+      t2.textContent = left + ' 份可预定';
+      btn.textContent = '预定名额';
+      btn.className = 'btn';
+      btn.disabled = false;
+      btn.dataset.act = 'reserve';
+    }
+
+    document.getElementById('s-thumb').className = 'thumb ' + it.tint;
+    document.getElementById('s-thumb').textContent = it.emoji;
+    document.getElementById('s-name').textContent = it.name;
+    document.getElementById('s-stall').textContent = (st.name || '') + ' · ' + (st.loc || '');
+
+    const u = BZ.user();
+    document.getElementById('s-user').textContent =
+      u ? u.name + '（' + u.sid + '）' : '未登记';
+
+    const step = document.getElementById('stepper');
+    if (maxQty() > 1) {
+      step.style.display = 'flex';
+      document.getElementById('qty').textContent = qty;
+      document.getElementById('minus').disabled = qty <= 1;
+      document.getElementById('plus').disabled = qty >= maxQty();
+    } else {
+      step.style.display = 'none';
+    }
+  }
+
+  document.getElementById('minus').onclick = () => { if (qty > 1) { qty--; render(); } };
+  document.getElementById('plus').onclick = () => { if (qty < maxQty()) { qty++; render(); } };
+
+  document.getElementById('ab-btn').addEventListener('click', (e) => {
+    const act = e.currentTarget.dataset.act;
+    if (act === 'none') return;
+    if (act === 'view') {
+      location.href = 's7-pickup-code.html?id=' + e.currentTarget.dataset.rid;
+      return;
+    }
+    if (!BZ.user()) {
+      location.href = 's1-signup.html?next=' +
+        encodeURIComponent('s3-item-detail.html?id=' + it.id);
+      return;
+    }
+    BZ.openSheet('sheet-reserve');
+  });
+
+  document.getElementById('s-cancel').onclick = () => BZ.closeSheet('sheet-reserve');
+  document.getElementById('sheet-reserve-mask').onclick = () => BZ.closeSheet('sheet-reserve');
+
+  let submitting = false;
+  document.getElementById('s-submit').addEventListener('click', (e) => {
+    if (submitting) return;
+    const btn = e.currentTarget;
+    submitting = true;
+    btn.disabled = true;
+    btn.textContent = '提交中…';
+
+    setTimeout(() => {                       // 模拟网络往返
+      const res = BZ.reserve(it.id, qty);
+      submitting = false;
+      btn.disabled = false;
+      btn.textContent = '确认预定';
+
+      if (res.ok) {
+        BZ.closeSheet('sheet-reserve');
+        location.href = 's5-success.html?id=' + res.reservation.id;
+      } else {
+        BZ.toast(res.msg);                   // 售罄 / 重复预定 都会走到这里
+        if (res.reason === 'soldout') { qty = 1; render(); }
+        if (res.reason === 'dup') { BZ.closeSheet('sheet-reserve'); render(); }
+      }
+    }, 550);
+  });
+
+  render();
+  if (BZ.param('sheet') === '1' && BZ.user()) {
+    setTimeout(() => BZ.openSheet('sheet-reserve'), 200);
+  }
+</script>
+</body>
+</html>

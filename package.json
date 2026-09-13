@@ -1,0 +1,11 @@
+{
+  "name": "imnu-bazaar",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "IMNU 校园义卖预定小程序 · 前端原型与后续实现",
+  "scripts": {
+    "test": "node tests/prototype.test.mjs",
+    "serve": "node scripts/serve.mjs"
+  }
+}

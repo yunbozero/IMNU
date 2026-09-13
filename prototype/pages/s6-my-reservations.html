@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>我的预定 · IMNU 校园义卖</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<div class="screen has-tabbar">
+  <div class="topbar">
+    <div class="statusbar"><span>9:41</span><span>5G ▮▮▮ 100%</span></div>
+    <div class="navbar">
+      <div class="title">我的预定</div>
+      <div class="capsule"><i>•••</i><i>⊙</i></div>
+    </div>
+  </div>
+
+  <div class="body">
+    <div style="height:14px"></div>
+    <div class="segmented" id="tabs">
+      <button class="on" data-st="reserved">待取货 <span id="c-reserved"></span></button>
+      <button data-st="redeemed">已取货</button>
+      <button data-st="cancelled">已取消</button>
+    </div>
+    <div id="list"></div>
+    <div class="empty" id="empty" style="display:none">
+      <div class="ic">🎫</div>
+      <div class="t">这里还没有记录</div>
+      <button class="btn sm" onclick="location.href='s2-items.html'">去看看有什么</button>
+    </div>
+  </div>
+
+  <nav class="tabbar">
+    <a href="s2-items.html">逛义卖</a>
+    <a class="on" href="s6-my-reservations.html">我的预定</a>
+    <a href="s8-profile.html">我的</a>
+  </nav>
+</div>
+
+<script src="../assets/data.js"></script>
+<script src="../assets/app.js"></script>
+<script>
+  let cur = 'reserved';
+
+  function badge(r) {
+    if (r.status === 'reserved') return '<span class="tag">待取货</span>';
+    if (r.status === 'redeemed') return '<span class="tag green">已取货</span>';
+    return '<span class="tag grey">已取消</span>';
+  }
+
+  function subline(r) {
+    if (r.status === 'reserved') return '取货码 ' + BZ.groupCode(r.code) + ' · 点击出示';
+    if (r.status === 'redeemed') return '已于 ' + BZ.timeText(r.redeemedAt) + ' 取货';
+    return '已取消 · ' + BZ.timeText(r.cancelledAt) + '（名额已释放）';
+  }
+
+  function rowHtml(r) {
+    const it = BZ.item(r.itemId) || {};
+    return `<button class="list-card" data-rid="${r.id}">
+        <div class="thumb ${it.tint || 't-orange'}">${it.emoji || '🎁'}</div>
+        <div class="info">
+          <div class="nm">${it.name || '—'}</div>
+          <div class="sm">${BZ.stallName(it.stall)} · ×${r.qty}</div>
+          <div class="row">
+            <span class="sm">${subline(r)}</span>
+            ${badge(r)}
+          </div>
+        </div>
+      </button>`;
+  }
+
+  function render() {
+    const list = BZ.mine().filter((r) => r.status === cur).reverse();
+    document.getElementById('list').innerHTML = list.map(rowHtml).join('');
+    document.getElementById('empty').style.display = list.length ? 'none' : 'block';
+
+    const pending = BZ.mine().filter((r) => r.status === 'reserved').length;
+    document.getElementById('c-reserved').textContent = pending ? '(' + pending + ')' : '';
+  }
+
+  document.getElementById('tabs').addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    document.querySelectorAll('#tabs button').forEach((x) => x.classList.remove('on'));
+    b.classList.add('on');
+    cur = b.dataset.st;
+    render();
+  });
+
+  document.getElementById('list').addEventListener('click', (e) => {
+    const card = e.target.closest('.list-card');
+    if (!card) return;
+    location.href = 's7-pickup-code.html?id=' + card.dataset.rid;
+  });
+
+  if (BZ.requireUser()) render();
+</script>
+</body>
+</html>

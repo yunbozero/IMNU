@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>取货码 · IMNU 校园义卖</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<div class="screen">
+  <div class="topbar">
+    <div class="statusbar"><span>9:41</span><span>5G ▮▮▮ 100%</span></div>
+    <div class="navbar">
+      <a class="back" href="s6-my-reservations.html">‹</a>
+      <div class="title">取货码</div>
+      <div class="capsule"><i>•••</i><i>⊙</i></div>
+    </div>
+  </div>
+
+  <div class="body">
+    <div class="statusbar-card wait" id="status-card" style="margin-top:14px">
+      <span>🎫</span><span id="status-text">待取货</span>
+    </div>
+
+    <div class="codebox">
+      <div class="qr" id="qr"></div>
+      <div style="font-size:11.5px;color:var(--text-2);margin-bottom:10px">请让志愿者扫描此二维码</div>
+      <div class="digits" id="code">— — —</div>
+      <div class="hint">网络不好时，直接向志愿者报出这 6 位数字即可</div>
+    </div>
+
+    <div class="kv">
+      <div class="r"><span class="k">物品</span><span class="v" id="it-name">—</span></div>
+      <div class="r"><span class="k">数量</span><span class="v" id="it-qty">—</span></div>
+      <div class="r"><span class="k">取货摊位</span><span class="v" id="it-stall">—</span></div>
+      <div class="r"><span class="k">摊位位置</span><span class="v" id="it-loc">—</span></div>
+      <div class="r"><span class="k">取货时间</span><span class="v" id="it-time">—</span></div>
+      <div class="r"><span class="k">取货人</span><span class="v" id="it-user">—</span></div>
+    </div>
+
+    <div class="notice">
+      进入本页时屏幕亮度会<b>自动调至最高</b>，方便志愿者扫码。<br>
+      请当面出示，<b>不要截图转发</b>给他人——取货码被别人使用后，你将无法取货。
+    </div>
+
+    <div id="cancel-wrap" style="margin:18px 0 8px">
+      <button class="btn danger-ghost" id="cancel">取消预定并释放名额</button>
+    </div>
+
+    <div class="footer-note" id="foot-note"></div>
+  </div>
+</div>
+
+<script src="../assets/data.js"></script>
+<script src="../assets/app.js"></script>
+<script>
+  if (BZ.requireUser()) {
+    const rid = BZ.param('id');
+    const mine = BZ.mine();
+    const r = BZ.reservation(rid) || mine.filter((x) => x.status === 'reserved')[0];
+
+    if (!r) {
+      location.replace('s6-my-reservations.html');
+    } else {
+      const it = BZ.item(r.itemId) || {};
+      const st = BZ.stall(it.stall) || {};
+
+      document.getElementById('qr').id = 'qr';
+      BZ.fakeQR(document.getElementById('qr'), r.code);
+
+      document.getElementById('code').textContent = BZ.groupCode(r.code);
+      document.getElementById('it-name').textContent = it.name || '—';
+      document.getElementById('it-qty').textContent = r.qty + ' 份';
+      document.getElementById('it-stall').textContent = st.name || '—';
+      document.getElementById('it-loc').textContent = st.loc || '—';
+      document.getElementById('it-time').textContent = BZ.EVENT.date;
+      document.getElementById('it-user').textContent = r.userName + '（' + r.userSid + '）';
+
+      const card = document.getElementById('status-card');
+      const text = document.getElementById('status-text');
+      const cancelWrap = document.getElementById('cancel-wrap');
+
+      if (r.status === 'redeemed') {
+        card.className = 'statusbar-card ok';
+        card.firstElementChild.textContent = '✅';
+        text.textContent = '已于 ' + BZ.timeText(r.redeemedAt) + ' 取货';
+        cancelWrap.style.display = 'none';
+        document.getElementById('qr').style.filter = 'grayscale(1) opacity(.35)';
+        document.getElementById('code').style.color = '#B5A69C';
+        document.getElementById('foot-note').textContent =
+          '核销人：' + (r.operator || '—');
+      } else if (r.status === 'cancelled') {
+        card.className = 'statusbar-card off';
+        card.firstElementChild.textContent = '🚫';
+        text.textContent = '该预定已取消（' + BZ.timeText(r.cancelledAt) + '）';
+        cancelWrap.style.display = 'none';
+        document.getElementById('qr').style.filter = 'grayscale(1) opacity(.35)';
+        document.getElementById('code').style.color = '#B5A69C';
+        document.getElementById('foot-note').textContent = '名额已释放给其他同学';
+      } else {
+        // 原型示意：真实小程序这里会调用 setScreenBrightness
+        BZ.toast('已自动调亮屏幕', 1200);
+        document.getElementById('foot-note').textContent =
+          '活动当天 ' + BZ.EVENT.place + ' 见';
+      }
+
+      document.getElementById('cancel').onclick = () => {
+        if (!window.confirm('取消后名额会立即释放给其他同学，确定取消吗？')) return;
+        const res = BZ.cancel(r.id);
+        BZ.toast(res.ok ? '已取消，名额已释放' : res.msg);
+        if (res.ok) setTimeout(() => location.href = 's6-my-reservations.html', 700);
+      };
+    }
+  }
+</script>
+</body>
+</html>

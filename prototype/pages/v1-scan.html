@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>核销台 · IMNU 校园义卖</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<div class="screen">
+  <div class="topbar">
+    <div class="statusbar"><span>9:41</span><span>5G ▮▮▮ 100%</span></div>
+    <div class="navbar">
+      <a class="back" href="s8-profile.html">‹</a>
+      <div class="title">核销台</div>
+      <div class="capsule"><i>•••</i><i>⊙</i></div>
+    </div>
+  </div>
+
+  <div class="body">
+    <div class="panel" style="margin-top:14px;display:flex;align-items:center;gap:12px">
+      <div class="logo-sq" style="width:42px;height:42px;flex:0 0 42px;border-radius:13px;font-size:20px">🏪</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:14.5px;font-weight:700">一号摊位</div>
+        <div style="font-size:11.5px;color:var(--text-2)">图书馆前广场东侧</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:22px;font-weight:800;color:var(--brand)" id="done-count">0</div>
+        <div style="font-size:11px;color:var(--text-2)">今日已核销</div>
+      </div>
+    </div>
+
+    <div style="height:6px"></div>
+    <button class="bigbtn" id="scan">📷 &nbsp;扫码核销</button>
+    <div style="height:12px"></div>
+    <button class="bigbtn sec" id="pad">⌨️ &nbsp;手动输入取货码</button>
+
+    <div class="demo-hint">
+      <b>演示提示（正式版不会出现）</b><br>
+      · 点「扫码核销」= 模拟扫到一位同学的取货码<br>
+      · 手动输入 <code id="hint-pending">——</code> → 核销成功<br>
+      · 手动输入 <code id="hint-done">——</code> → 已核销过<br>
+      · 输入任意其他数字 → 取货码不存在
+    </div>
+
+    <div class="section-title">今日核销记录</div>
+    <div id="records"></div>
+    <div class="empty" id="rec-empty" style="display:none;padding:34px 20px">
+      <div class="ic">📋</div>
+      <div class="t">今天还没有核销记录</div>
+    </div>
+
+    <div class="footer-note">
+      核销前请先确认已收款，再交付物品
+    </div>
+  </div>
+</div>
+
+<!-- V2 手动输码 -->
+<div class="mask" id="sheet-pad-mask"></div>
+<div class="sheet" id="sheet-pad">
+  <div class="grab"></div>
+  <h3 style="text-align:center;margin-bottom:6px">输入取货码</h3>
+  <p style="text-align:center;font-size:12.5px;color:var(--text-2);margin:0 0 16px">
+    请同学报出取货码
+  </p>
+  <div class="slots" id="slots"></div>
+  <div class="keys" id="keys">
+    <button data-k="1">1</button><button data-k="2">2</button><button data-k="3">3</button>
+    <button data-k="4">4</button><button data-k="5">5</button><button data-k="6">6</button>
+    <button data-k="7">7</button><button data-k="8">8</button><button data-k="9">9</button>
+    <button class="fn" data-k="clear">清空</button>
+    <button data-k="0">0</button>
+    <button class="fn" data-k="del">⌫</button>
+  </div>
+</div>
+
+<script src="../assets/data.js"></script>
+<script src="../assets/app.js"></script>
+<script>
+  const OPERATOR = '志愿者 陈亦航';
+
+  function renderRecords() {
+    const list = BZ.allReservations()
+      .filter((r) => r.status === 'redeemed')
+      .slice()
+      .reverse();
+
+    document.getElementById('done-count').textContent = list.length;
+    document.getElementById('records').innerHTML = list.map((r) => {
+      const it = BZ.item(r.itemId) || {};
+      return `<div class="list-card" style="cursor:default">
+          <div class="thumb ${it.tint || 't-orange'}">${it.emoji || '🎁'}</div>
+          <div class="info">
+            <div class="nm">${it.name || '—'}</div>
+            <div class="sm">${r.userName} · ${r.userSid} · ×${r.qty}</div>
+            <div class="row">
+              <span class="sm">取货码 ${BZ.groupCode(r.code)}</span>
+              <span class="sm">${BZ.clockText(r.redeemedAt)}</span>
+            </div>
+          </div>
+        </div>`;
+    }).join('');
+    document.getElementById('rec-empty').style.display = list.length ? 'none' : 'block';
+  }
+
+  function toResult(res, code) {
+    if (res.ok) {
+      location.href = 'v3-result.html?rid=' + res.reservation.id;
+    } else {
+      const rid = res.reservation ? '&rid=' + res.reservation.id : '&code=' + code;
+      location.href = 'v3-result.html?err=' + res.reason + rid;
+    }
+  }
+
+  document.getElementById('scan').onclick = () => {
+    const r = BZ.firstPending();
+    if (!r) {
+      BZ.toast('暂无可核销的预定，请先到学生端预定一件物品');
+      return;
+    }
+    const btn = document.getElementById('scan');
+    btn.disabled = true;
+    btn.textContent = '识别中…';
+    setTimeout(() => {
+      btn.disabled = false;
+      btn.innerHTML = '📷 &nbsp;扫码核销';
+      toResult(BZ.redeem(r.code, OPERATOR), r.code);
+    }, 600);
+  };
+
+  /* ---- V2 数字键盘 ---- */
+  let buf = '';
+
+  function renderSlots() {
+    const el = document.getElementById('slots');
+    let html = '';
+    for (let i = 0; i < 6; i++) {
+      const ch = buf[i] || '';
+      const cls = ch ? 'filled' : (i === buf.length ? 'cursor' : '');
+      html += `<i class="${cls}">${ch}</i>`;
+    }
+    el.innerHTML = html;
+  }
+
+  document.getElementById('keys').addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    const k = b.dataset.k;
+
+    if (k === 'clear') buf = '';
+    else if (k === 'del') buf = buf.slice(0, -1);
+    else if (buf.length < 6) buf += k;
+
+    renderSlots();
+
+    if (buf.length === 6) {
+      const code = buf;
+      setTimeout(() => {
+        const res = BZ.redeem(code, OPERATOR);
+        BZ.closeSheet('sheet-pad');
+        buf = '';
+        renderSlots();
+        toResult(res, code);
+      }, 220);
+    }
+  });
+
+  document.getElementById('pad').onclick = () => {
+    buf = '';
+    renderSlots();
+    BZ.openSheet('sheet-pad');
+  };
+  document.getElementById('sheet-pad-mask').onclick = () => BZ.closeSheet('sheet-pad');
+
+  renderRecords();
+  const seeds = BZ.seedCodes();
+  document.getElementById('hint-pending').textContent = seeds.pending || '（先预定一件）';
+  document.getElementById('hint-done').textContent = seeds.done || '——';
+
+  if (BZ.param('pad') === '1') setTimeout(() => document.getElementById('pad').click(), 200);
+</script>
+</body>
+</html>
