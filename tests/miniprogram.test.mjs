@@ -263,6 +263,29 @@ test('小程序：代码里不含任何硬编码的密钥', () => {
   assert.deepEqual(problems, [], '小程序里不能出现任何密钥：\n' + problems.join('\n'));
 });
 
+test('小程序：所有 JS 文件语法正确（本地跑不了真机，至少保证能编译）', async () => {
+  // 取巧的办法：动态 import 每个文件。
+  //   抛 SyntaxError   → 真的有语法错
+  //   抛 ReferenceError → 语法没问题，只是 Page/App/wx 这些全局在 Node 里不存在
+  // 两者必须分开看，否则「跑不起来」什么都说明不了。
+  const problems = [];
+
+  for (const file of jsFiles()) {
+    try {
+      await import(new URL('file://' + file.replace(/\\/g, '/')).href);
+    } catch (e) {
+      const isSyntax = (e && e.constructor && e.constructor.name === 'SyntaxError')
+        || /SyntaxError/.test(String(e));
+      if (isSyntax) {
+        problems.push(`${path.relative(MP, file)}: ${e.message}`);
+      }
+      // 其余一律当作「缺小程序全局」，不算失败
+    }
+  }
+
+  assert.deepEqual(problems, [], '存在语法错误：\n' + problems.join('\n'));
+});
+
 test('小程序：生产环境地址必须是 HTTPS 且不是占位符以外的假地址', () => {
   const cfg = read(path.join(MP, 'config.js'));
   const m = /PROD_BASE\s*=\s*'([^']+)'/.exec(cfg);
