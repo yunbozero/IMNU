@@ -28,3 +28,4 @@ import './prototype.test.mjs';
 import './quota-concurrency.test.mjs';
 import './repository.test.mjs';
 import './roles.test.mjs';
+import './shell.test.mjs';
