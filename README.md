@@ -16,7 +16,7 @@
 | 前端方案 | ✅ 已评审 | [docs/ui-prototype-plan.md](docs/ui-prototype-plan.md) |
 | HTML 可点击原型 | ✅ 已完成 | [prototype/](prototype/README.md) |
 | 给组织方的提案（A4 / PDF） | ✅ 已完成 | [docs/proposal.html](docs/proposal.html) |
-| 微信长图（学生端 / 管理端） | ✅ 已完成 | `docs/longimage-student.png` · `docs/longimage-admin.png` |
+| 微信长图（学生端 / 管理端） | ✅ 已展示（产物可再生，不入库） | [docs/longimage-student.html](docs/longimage-student.html) · [docs/longimage-admin.html](docs/longimage-admin.html) |
 | 后端与云开发设计 | ⏸ 待启动（等与义卖组织方谈定方案） | — |
 
 ### 把提案导出成 PDF
@@ -29,7 +29,8 @@
 npm run longimage
 ```
 
-用无头 Edge/Chrome 把 `docs/longimage-*.html` 渲染成 750px 宽的 PNG。改完原型界面后重跑一次即可。
+用无头 Edge/Chrome 把 `docs/longimage-*.html` 渲染成 750px 宽的 PNG。
+生成的 PNG 属于**可再生的构建产物，不写进 git**（已在 `.gitignore` 中排除），需要转发时现场生成即可。
 
 ---
 
@@ -37,8 +38,8 @@ npm run longimage
 
 ```powershell
 npm run serve      # 打开 http://localhost:8080/ 看原型演示台
-npm test           # 跑合规 / 结构 / 状态机测试（38 项）
-npm run longimage  # 重新生成微信长图
+npm test           # 跑合规 / 结构 / 状态机测试（39 项）
+npm run longimage  # 重新生成微信长图（产物不入库）
 ```
 
 需要 Node 18+。原型是纯静态的，没有任何第三方依赖。

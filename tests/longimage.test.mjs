@@ -88,13 +88,20 @@ test('长图：引用原型页面时隐藏了演示用的脚手架提示', () =>
   assert.match(js, /demo-hint/, '长图里不应出现"演示提示"这类只有开发才需要的内容');
 });
 
-test('长图：PNG 已生成，且是 2 倍图（宽 750）', () => {
+test('长图：已生成的话必须是 750 宽的 2 倍图（没生成则跳过）', () => {
+  // 长图是可再生的构建产物，不入库；这里只校验"万一存在"时的规格
   for (const [name, file] of [['学生端', 'longimage-student.png'], ['管理端', 'longimage-admin.png']]) {
     const p = path.join(DOCS, file);
-    assert.ok(fs.existsSync(p), `${name}长图 ${file} 还没生成，请运行 npm run longimage`);
+    if (!fs.existsSync(p)) continue;
 
     const { w, h } = pngSize(p);
     assert.equal(w, 750, `${name}长图宽度应为 750（2 倍图）`);
     assert.ok(h > 3000 && h < 12000, `${name}长图高度 ${h} 不在合理范围`);
   }
+});
+
+test('长图：生成物已被 git 忽略，不会被误提交', () => {
+  const ignore = read(path.join(ROOT, '.gitignore'));
+  assert.match(ignore, /docs\/longimage-\*\.png/,
+    '生成的长图应写进 .gitignore，否则每次渲染都会产生二进制 diff');
 });

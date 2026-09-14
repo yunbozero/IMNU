@@ -63,20 +63,20 @@ npm run serve
 
 ### 远程发送
 
-**直接发图最省事。** 仓库里已经生成好两张微信长图，转发即可：
-
-| 文件 | 内容 |
-| --- | --- |
-| `../docs/longimage-student.png` | 学生端 4 屏：逛义卖 → 确认预定 → 预定成功 → 取货码 |
-| `../docs/longimage-admin.png` | 管理端 4 屏：核销台 → 手动输码 → 核销成功 → 重复核销拦截 |
-
-改完界面后重新生成：
+**直接发图最省事。** 先生成长图，再把 PNG 转发到微信：
 
 ```powershell
 npm run longimage
 ```
 
+| 产物 | 内容 |
+| --- | --- |
+| `docs/longimage-student.png` | 学生端 4 屏：逛义卖 → 确认预定 → 预定成功 → 取货码 |
+| `docs/longimage-admin.png` | 管理端 4 屏：核销台 → 手动输码 → 核销成功 → 重复核销拦截 |
+
 它用无头 Edge/Chrome 把 `docs/longimage-*.html` 渲染成 750px 宽的 PNG。长图里的手机截图是**真实原型页面**（iframe 嵌入），不是画出来的示意图。
+
+> 长图的 PNG 是可再生的构建产物，已被 `.gitignore` 排除，不会进仓库；源文件 `docs/longimage-*.html` 保留。
 
 如果对方想看动效，再用系统自带录屏（`Win + G`）或 OBS 录一段 60–90 秒的演示。
 

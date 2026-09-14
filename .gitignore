@@ -25,6 +25,9 @@ temp/
 *.tmp
 *.bak
 
+# ---- Generated artifacts（可随时用 npm run longimage 重新生成）----
+docs/longimage-*.png
+
 # ---- Python ----
 __pycache__/
 *.py[cod]
