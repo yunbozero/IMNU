@@ -10,4 +10,7 @@
 import './prototype.test.mjs';
 import './proposal.test.mjs';
 import './longimage.test.mjs';
+import './repository.test.mjs';
+import './quota-concurrency.test.mjs';
+import './invariants.test.mjs';
 import './lan.test.mjs';

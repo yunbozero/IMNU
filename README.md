@@ -17,7 +17,21 @@
 | HTML 可点击原型 | ✅ 已完成 | [prototype/](prototype/README.md) |
 | 给组织方的提案（A4 / PDF） | ✅ 已完成 | [docs/proposal.html](docs/proposal.html) |
 | 微信长图（学生端 / 管理端） | ✅ 已展示（产物可再生，不入库） | [docs/longimage-student.html](docs/longimage-student.html) · [docs/longimage-admin.html](docs/longimage-admin.html) |
-| 后端与云开发设计 | ⏸ 待启动（等与义卖组织方谈定方案） | — |
+| **阶段 1 · 后端核心**（数据模型 + 防超卖 + 核销） | ✅ 已完成 | [docs/data-model.md](docs/data-model.md) · `server/` |
+| 阶段 2 · 小程序分包骨架 | ⏸ 待启动 | — |
+| 阶段 3 · HTTP 接入层（鉴权 + 接口） | ⏸ 待启动 | — |
+| 阶段 4 · 阿里云部署（域名 / 备案 / HTTPS） | ⏸ 备案越早启动越好 | — |
+| 阶段 5 · 联调与演练 | ⏸ 待启动 | — |
+| 阶段 6 · 接入猫猫图鉴分包 | ⏸ 以后 | — |
+
+### 后端核心已经证明了什么
+
+`npm test` 里有几项不是"跑一下不报错"，而是真的在验证核心命题：
+
+- **8 线程 × 15 次并发抢 20 份名额 → 恰好卖出 20 份**，失败原因全是「约满」（真多线程，不是假装并发）
+- **8 线程抢着核销同一个取货码 → 只有 1 次成功**
+- **绕过应用层直接写 SQL 扣名额 → 数据库拒绝，名额不会变负**（第二道防线）
+- **随机 400 步操作，每一步后账目都必须平衡**（预定扣、取消还、核销不动）
 
 ### 把提案导出成 PDF
 
@@ -38,11 +52,11 @@ npm run longimage
 
 ```powershell
 npm run serve      # 打开 http://localhost:8080/ 看原型演示台
-npm test           # 跑合规 / 结构 / 状态机测试（39 项）
+npm test           # 跑全部测试（68 项）
 npm run longimage  # 重新生成微信长图（产物不入库）
 ```
 
-需要 Node 18+。原型是纯静态的，没有任何第三方依赖。
+需要 **Node 22+**（后端用了内置的 `node:sqlite`）。全仓库零第三方依赖。
 
 ---
 
@@ -51,9 +65,10 @@ npm run longimage  # 重新生成微信长图（产物不入库）
 | 路径 | 用途 |
 | --- | --- |
 | `prototype/` | 可点击 HTML 原型（学生端 + 志愿者核销端） |
-| `docs/` | 设计方案与决策记录 |
-| `tests/` | 原型验证：合规红线、结构完整性、状态机逻辑 |
-| `scripts/serve.mjs` | 零依赖本地静态服务器 |
+| `server/` | 后端：数据模型与 repository（SQLite 实现） |
+| `docs/` | 设计方案、数据模型、提案、长图源文件 |
+| `tests/` | 全部测试：合规红线、结构、状态机、**并发与不变量** |
+| `scripts/` | 本地静态服务器、长图渲染 |
 
 ---
 
