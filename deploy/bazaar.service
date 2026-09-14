@@ -14,6 +14,11 @@ Environment=NODE_ENV=production
 Environment=PORT=3000
 Environment=DB_PATH=/srv/bazaar/data/bazaar.db
 
+# SESSION_SECRET / WX_APPID / WX_SECRET 放在这里，不写进单元文件。
+# 单元文件是进 git 的，密钥进去就等于公开了。
+# 开头的 - 表示文件不存在也不报错，方便先起服务再补配置。
+EnvironmentFile=-/etc/bazaar/env
+
 ExecStart=/usr/bin/node server/http.mjs
 
 Restart=always

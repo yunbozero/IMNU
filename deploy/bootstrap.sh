@@ -79,6 +79,39 @@ ufw status | head -8
 warn "别忘了阿里云控制台的【安全组】也要只放 22 / 80 / 443；"
 warn "安全组和 ufw 是两道独立的门，只配一道等于没配。"
 
+# ---------- 6.5 环境变量文件（密钥都放这里，不进 git） ----------
+ENV_DIR=/etc/bazaar
+ENV_FILE=/etc/bazaar/env
+
+if [ -f "$ENV_FILE" ]; then
+  log "$ENV_FILE 已存在，不覆盖（避免把已配好的密钥冲掉）"
+else
+  log "生成 $ENV_FILE，内含随机 SESSION_SECRET"
+  install -d -m 750 -o root -g "$APP_USER" "$ENV_DIR"
+
+  # 随机密钥用 openssl 生成，64 位十六进制
+  SECRET="$(openssl rand -hex 32)"
+
+  cat > "$ENV_FILE" <<EOF
+# IMNU 校园义卖 · 服务端环境变量
+# 这个文件不提交到 git。改了之后要重启服务才生效：
+#   sudo systemctl restart ${SERVICE}
+
+# 签发登录 token 用。已经随机生成好，不要外传，也不要在换机器时随手改。
+SESSION_SECRET=${SECRET}
+
+# 小程序后台 → 开发管理 → 开发设置 里的 AppID / AppSecret
+# 不填的话 /api/login 会失败，其它接口不受影响。
+WX_APPID=
+WX_SECRET=
+EOF
+
+  # 只有 root 和运行账号能读。AppSecret 在这个文件里。
+  chmod 640 "$ENV_FILE"
+  chown root:"$APP_USER" "$ENV_FILE"
+  warn "记得填 $ENV_FILE 里的 WX_APPID / WX_SECRET，然后 systemctl restart ${SERVICE}"
+fi
+
 # ---------- 7. systemd 单元 ----------
 log "安装 systemd 单元 /etc/systemd/system/${SERVICE}.service"
 install -m 644 "$SCRIPT_DIR/bazaar.service" "/etc/systemd/system/${SERVICE}.service"

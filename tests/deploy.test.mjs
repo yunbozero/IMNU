@@ -199,13 +199,31 @@ test('部署：ExecStart 指向仓库里的入口文件', () => {
   assert.match(m[1], /\/node$/, 'ExecStart 应当用绝对路径调 node');
 
   const entry = m[2];
-  // 阶段 3 才会写出这个文件；存在时路径必须对得上
-  if (fs.existsSync(path.join(ROOT, entry))) {
-    assert.ok(true);
-  } else {
-    assert.equal(entry, 'server/http.mjs',
-      `入口 ${entry} 还不存在。阶段 3 会把 HTTP 服务写在这里，路径要保持一致。`);
-  }
+  assert.ok(fs.existsSync(path.join(ROOT, entry)),
+    `ExecStart 指向的 ${entry} 不存在 —— 服务会起来就崩`);
+  assert.equal(entry, 'server/http.mjs');
+});
+
+test('部署：密钥走 EnvironmentFile，不能写进单元文件', () => {
+  const unit = SERVICE();
+
+  // 密钥进了单元文件就等于进了 git
+  assert.doesNotMatch(unit, /Environment=SESSION_SECRET=/,
+    'SESSION_SECRET 不能硬编码在单元文件里');
+  assert.doesNotMatch(unit, /Environment=WX_SECRET=/,
+    'AppSecret 不能硬编码在单元文件里');
+
+  assert.match(unit, /^EnvironmentFile=-\/etc\/bazaar\/env$/m,
+    '应当用 EnvironmentFile 加载密钥，开头的 - 表示文件缺失也不报错');
+});
+
+test('部署：bootstrap.sh 会生成随机密钥并收紧权限', () => {
+  const src = BOOTSTRAP();
+  assert.match(src, /openssl rand -hex 32/, '应当用 openssl 生成随机 SESSION_SECRET');
+  assert.match(src, /chmod 640 "\$ENV_FILE"/, '环境变量文件权限应当收紧到 640');
+  assert.match(src, /if \[ -f "\$ENV_FILE" \]/, '已存在时不能覆盖，否则会把配好的密钥冲掉');
+  // 反过来确认没把密钥写死在脚本里
+  assert.doesNotMatch(src, /SESSION_SECRET=[0-9a-f]{32}/, '不应该有硬编码的密钥');
 });
 
 test('部署：单元文件不带 BOM、不带 CRLF', () => {

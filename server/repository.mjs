@@ -21,7 +21,9 @@ import { randomUUID } from 'node:crypto';
 /** 契约：任何后端实现都必须提供这些方法，签名一致 */
 export const REPOSITORY_METHODS = [
   'createEvent',
+  'getActiveEvent',
   'createStall',
+  'listStalls',
   'createItem',
   'createUser',
   'findUserByOpenid',
@@ -137,11 +139,32 @@ export function createSqliteRepository(db) {
       return { id, name, startsAt, endsAt, status };
     },
 
+    /**
+     * 当前正在进行的场次。
+     * 同一时间只应该有一个，取最新创建的那个；没有就返回 null，
+     * 由上层给出「活动还没开始」这类提示，而不是抛错。
+     */
+    getActiveEvent() {
+      const r = db.prepare(`
+        SELECT * FROM events WHERE status = 'on_sale'
+         ORDER BY created_at DESC LIMIT 1
+      `).get();
+      return r ? {
+        id: r.id, name: r.name, startsAt: r.starts_at,
+        endsAt: r.ends_at, status: r.status,
+      } : null;
+    },
+
     createStall({ eventId, name, loc = null }) {
       const id = newId('st');
       db.prepare(`INSERT INTO stalls (id,event_id,name,loc,created_at)
                   VALUES (?,?,?,?,?)`).run(id, eventId, name, loc, now());
       return { id, eventId, name, loc };
+    },
+
+    listStalls(eventId) {
+      return db.prepare('SELECT * FROM stalls WHERE event_id = ? ORDER BY created_at')
+        .all(eventId).map(mapStall);
     },
 
     createItem({ eventId, stallId = null, name, description = null, emoji = null,

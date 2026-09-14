@@ -18,9 +18,9 @@
 | 给组织方的提案（A4 / PDF） | ✅ 已完成 | [docs/proposal.html](docs/proposal.html) |
 | 微信长图（学生端 / 管理端） | ✅ 已展示（产物可再生，不入库） | [docs/longimage-student.html](docs/longimage-student.html) · [docs/longimage-admin.html](docs/longimage-admin.html) |
 | **阶段 1 · 后端核心**（数据模型 + 防超卖 + 核销） | ✅ 已完成 | [docs/data-model.md](docs/data-model.md) · `server/` |
+| **阶段 3 · 后端接口**（鉴权 + HTTP 接口） | ✅ 已完成 | [docs/api.md](docs/api.md) |
 | 阶段 2 · 小程序分包骨架 | ⏸ 待启动（等方案确认） | — |
-| 阶段 3 · HTTP 接入层（鉴权 + 接口） | ⏸ 待启动 | — |
-| 阶段 4 · 阿里云部署 | 🔧 脚本已就绪，等阶段 3 的入口文件与备案 | [docs/deploy-alicloud.md](docs/deploy-alicloud.md) · `deploy/` |
+| 阶段 4 · 阿里云部署 | 🔧 脚本已就绪，等域名与备案 | [docs/deploy-alicloud.md](docs/deploy-alicloud.md) · `deploy/` |
 | 阶段 5 · 联调与演练 | ⏸ 待启动 | — |
 | 阶段 6 · 接入猫猫图鉴分包 | ⏸ 以后 | — |
 
@@ -59,11 +59,23 @@ npm run longimage
 
 ```powershell
 npm run serve      # 打开 http://localhost:8080/ 看原型演示台
-npm test           # 跑全部测试（68 项）
+npm test           # 跑全部测试（158 项）
+npm start          # 起后端接口（需要 SESSION_SECRET 环境变量）
 npm run longimage  # 重新生成微信长图（产物不入库）
 ```
 
 需要 **Node 22+**（后端用了内置的 `node:sqlite`）。全仓库零第三方依赖。
+
+### 本地起后端
+
+```powershell
+$env:SESSION_SECRET = (openssl rand -hex 32)   # 或随便一个 16 位以上的字符串
+$env:DB_PATH = ".\tmp\bazaar.db"
+$env:PORT = "3000"
+npm start
+```
+
+不配 `WX_APPID` / `WX_SECRET` 也能起，只是 `/api/login` 会失败——其余接口照常。
 
 ---
 
