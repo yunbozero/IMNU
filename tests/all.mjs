@@ -13,5 +13,6 @@ import './longimage.test.mjs';
 import './repository.test.mjs';
 import './quota-concurrency.test.mjs';
 import './invariants.test.mjs';
+import './backup.test.mjs';
 import './deploy.test.mjs';
 import './lan.test.mjs';

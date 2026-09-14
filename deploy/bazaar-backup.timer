@@ -1,0 +1,17 @@
+[Unit]
+Description=每天凌晨自动备份校园义卖数据库
+Documentation=https://github.com/yunbozero/IMNU
+
+[Timer]
+# 凌晨 3:30。义卖是白天的活动，这个点不会跟业务抢锁。
+OnCalendar=*-*-* 03:30:00
+
+# 机器关机错过了就开机补跑一次。
+# 校园服务器经常不是 7x24 开着的，这条很重要。
+Persistent=true
+
+# 稍微错开一点，避免和其他定时任务挤在同一秒
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

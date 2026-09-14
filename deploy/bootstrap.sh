@@ -18,6 +18,7 @@ DATA_DIR=/srv/bazaar/data
 BACKUP_DIR=/srv/bazaar/backup
 SERVICE=bazaar
 NODE_MAJOR=22
+BACKUP_KEEP=14
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -84,6 +85,19 @@ install -m 644 "$SCRIPT_DIR/bazaar.service" "/etc/systemd/system/${SERVICE}.serv
 systemctl daemon-reload
 systemctl enable "$SERVICE" >/dev/null
 # 刻意不 start：代码可能还没拉下来，起来了也是不停重启
+
+# 自动备份：备份单元 + 定时器
+if [ -f "$SCRIPT_DIR/bazaar-backup.service" ] && [ -f "$SCRIPT_DIR/bazaar-backup.timer" ]; then
+  log "安装自动备份（每天 03:30，保留 ${BACKUP_KEEP:-14} 份）"
+  install -m 644 "$SCRIPT_DIR/bazaar-backup.service" "/etc/systemd/system/${SERVICE}-backup.service"
+  install -m 644 "$SCRIPT_DIR/bazaar-backup.timer"   "/etc/systemd/system/${SERVICE}-backup.timer"
+  systemctl daemon-reload
+  systemctl enable --now "${SERVICE}-backup.timer" >/dev/null
+  systemctl list-timers "${SERVICE}-backup.timer" --no-pager | head -3
+  # 装完立刻先备一份，别等到今晚才发现脚本是坏的
+  systemctl start "${SERVICE}-backup.service" || \
+    warn "首次备份没成功。等数据库就绪后手动跑一次：sudo systemctl start ${SERVICE}-backup"
+fi
 
 # ---------- 8. nginx 站点（仅当域名已填好） ----------
 SITE=/etc/nginx/sites-available/$SERVICE

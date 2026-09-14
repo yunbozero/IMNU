@@ -123,6 +123,8 @@ sudo bash /srv/bazaar/app/deploy/deploy.sh
 | 证书有效 | `echo \| openssl s_client -connect 你的域名:443 2>/dev/null \| openssl x509 -noout -dates` | 未过期 |
 | 续期可用 | `sudo certbot renew --dry-run` | 成功 |
 | 数据库在 | `ls -l /srv/bazaar/data/` | 有 `.db` 文件 |
+| **备份在跑** | `systemctl list-timers bazaar-backup.timer` | 有 `NEXT` 时间 |
+| **备份可用** | `sudo systemctl start bazaar-backup && sudo -u bazaar node /srv/bazaar/app/server/backup.mjs list` | 列表里有今天的一份 |
 | 端口没裸奔 | 阿里云安全组只放 22 / 80 / 443 | 3000 不对外 |
 
 **最后一步**：去微信公众平台 → 开发管理 → 开发设置 → 服务器域名，把 `https://你的域名` 加进 **request 合法域名**。这一步不做，小程序发不出请求。
@@ -133,11 +135,51 @@ sudo bash /srv/bazaar/app/deploy/deploy.sh
 
 - **服务器要续费。** 过期不光服务停，备案也会被注销，重新走一遍很麻烦。
 - **证书自动续期。** certbot 装了定时任务，但偶尔看一眼 `certbot renew --dry-run`。
-- **备份 SQLite。** 用了 WAL 模式，直接拷 `.db` 一个文件是不够的，要连 `-wal` 一起拷。稳妥做法：
-  ```bash
-  sqlite3 /srv/bazaar/data/bazaar.db ".backup '/srv/bazaar/backup/bazaar-$(date +%F).db'"
-  ```
 - **换届交接。** 服务器账号、域名账号、备案主体都要能转交。这是自建方案相比云开发最麻烦的一点，**提前把账号信息写在一个社团共用的地方**。
+
+### 备份是自动的，但恢复要会手动做
+
+`bootstrap.sh` 已经装好定时器：**每天 03:30 自动备份，保留最近 14 份**，机器关机错过会在开机后补跑。
+
+但它用的是 SQLite 的 `VACUUM INTO`，**不是 `cp`**。原因值得记住：
+
+> 数据库跑在 WAL 模式下，最近的写入可能还在 `-wal` 文件里没落盘。
+> **服务运行中直接 `cp bazaar.db`，拷出来的很可能是缺数据的**——而且它坏得很安静，
+> 文件看着好好的，就是少东西。`tests/backup.test.mjs` 里有一条测试专门证明了这件事。
+
+**手动操作：**
+
+```bash
+# 看有哪些备份
+sudo -u bazaar DB_PATH=/srv/bazaar/data/bazaar.db BACKUP_DIR=/srv/bazaar/backup \
+  node /srv/bazaar/app/server/backup.mjs list
+
+# 立刻备一份（义卖当天建议改成每小时备一次）
+sudo systemctl start bazaar-backup
+
+# 校验某一份能不能用 —— 备份不校验，等于没有备份
+sudo -u bazaar node /srv/bazaar/app/server/backup.mjs verify /srv/bazaar/backup/xxx.db
+```
+
+**恢复（出事了才用）：**
+
+```bash
+sudo systemctl stop bazaar                       # 1. 必须先停服务
+sudo -u bazaar DB_PATH=/srv/bazaar/data/bazaar.db \
+  node /srv/bazaar/app/server/backup.mjs restore /srv/bazaar/backup/xxx.db --yes
+sudo systemctl start bazaar                      # 2. 再起来
+```
+
+恢复脚本会：先校验备份，不合格直接拒绝、**绝不动线上库**；把当前库改名留底而不是删掉；
+拷回来之后**清掉旧的 `-wal` / `-shm`**——那是旧库的预写日志，留着会被当成新库的日志去重放，直接把库搞坏。
+
+**义卖当天建议把频率调高。** 编辑 `/etc/systemd/system/bazaar-backup.timer`，把 `OnCalendar` 改成 `*-*-* *:00:00`（每小时），然后：
+
+```bash
+sudo systemctl daemon-reload && sudo systemctl restart bazaar-backup.timer
+```
+
+活动结束后改回每天一次。
 
 ---
 
@@ -145,9 +187,13 @@ sudo bash /srv/bazaar/app/deploy/deploy.sh
 
 | 文件 | 在哪跑 | 干什么 |
 | --- | --- | --- |
-| `deploy/bootstrap.sh` | 服务器（root，一次） | 装依赖、建用户和目录、装 systemd 单元 |
-| `deploy/bazaar.service` | 服务器 | systemd 单元，管进程守护和开机自启 |
-| `deploy/nginx.conf` | 服务器 | 反向代理 + HTTPS |
+| `deploy/bootstrap.sh` | 服务器（root，一次） | 装依赖、建用户和目录、装 systemd 单元与备份定时器 |
+| `deploy/bazaar.service` | 服务器 | 主服务：进程守护 + 开机自启 |
+| `deploy/bazaar-backup.service` | 服务器 | 备份单元（`server/backup.mjs backup`） |
+| `deploy/bazaar-backup.timer` | 服务器 | 每天 03:30 触发备份 |
+| `deploy/nginx.conf` | 服务器 | 反向代理 |
 | `deploy/deploy.sh` | 服务器 | 拉代码、跑测试、重启 |
+| `server/backup.mjs` | 服务器 | 备份 / 校验 / 恢复的实现 |
 
-四处配置里的**路径、端口、用户名必须保持一致**，`tests/deploy.test.mjs` 会盯着这件事。
+这些配置里的**路径、端口、用户名必须保持一致**，`tests/deploy.test.mjs` 会盯着这件事——
+比如备份单元读的库必须和主服务写的是同一个，`ReadWritePaths` 必须同时放行数据目录和备份目录。

@@ -1,0 +1,37 @@
+[Unit]
+Description=IMNU 校园义卖 · 数据库备份
+Documentation=https://github.com/yunbozero/IMNU
+After=network.target
+
+[Service]
+Type=oneshot
+User=bazaar
+Group=bazaar
+WorkingDirectory=/srv/bazaar/app
+
+Environment=DB_PATH=/srv/bazaar/data/bazaar.db
+Environment=BACKUP_DIR=/srv/bazaar/backup
+Environment=BACKUP_KEEP=14
+
+ExecStart=/usr/bin/node server/backup.mjs backup
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=bazaar-backup
+
+# ---------- 加固 ----------
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+LockPersonality=true
+
+# 两个目录都要放行：
+#   data   —— 打开源库做 VACUUM INTO 时，SQLite 要读写同目录的 -wal / -shm
+#   backup —— 写出备份文件
+ReadWritePaths=/srv/bazaar/data /srv/bazaar/backup

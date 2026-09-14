@@ -40,10 +40,72 @@ function shVar(src, name) {
    ============================================================ */
 
 test('部署：四个产物与手册都在', () => {
-  for (const f of ['bootstrap.sh', 'deploy.sh', 'bazaar.service', 'nginx.conf']) {
+  for (const f of ['bootstrap.sh', 'deploy.sh', 'bazaar.service', 'nginx.conf',
+                   'bazaar-backup.service', 'bazaar-backup.timer']) {
     assert.ok(fs.existsSync(path.join(DEPLOY, f)), `缺少 deploy/${f}`);
   }
   assert.ok(fs.existsSync(DOC), '缺少 docs/deploy-alicloud.md');
+});
+
+/* ============================================================
+   ★ 自动备份：目录、用户、保留份数都要对得上
+   ============================================================ */
+
+const BACKUP_UNIT = () => read(path.join(DEPLOY, 'bazaar-backup.service'));
+const BACKUP_TIMER = () => read(path.join(DEPLOY, 'bazaar-backup.timer'));
+
+test('备份：数据库与备份目录与主服务、初始化脚本一致', () => {
+  const unit = BACKUP_UNIT();
+
+  assert.equal(envOf(unit, 'DB_PATH'), envOf(SERVICE(), 'DB_PATH'),
+    '备份脚本读的库必须和主服务写的是同一个');
+
+  const backupDir = envOf(unit, 'BACKUP_DIR');
+  assert.equal(backupDir, shVar(BOOTSTRAP(), 'BACKUP_DIR'),
+    'BACKUP_DIR 与 bootstrap.sh 建出来的目录不一致');
+
+  assert.equal(envOf(unit, 'BACKUP_KEEP'), shVar(BOOTSTRAP(), 'BACKUP_KEEP'),
+    '保留份数与 bootstrap.sh 不一致');
+
+  assert.match(unit, new RegExp(`^User=${shVar(BOOTSTRAP(), 'APP_USER')}$`, 'm'),
+    '备份必须以运行账号执行，否则会写出 root 拥有的文件');
+});
+
+test('备份：ReadWritePaths 必须同时放行数据目录和备份目录', () => {
+  const rw = /^ReadWritePaths=(.+)$/m.exec(BACKUP_UNIT());
+  assert.ok(rw, '备份单元缺少 ReadWritePaths');
+  const writable = rw[1].trim().split(/\s+/);
+
+  // 源库要读写（VACUUM INTO 会碰 -wal / -shm）
+  assert.ok(writable.includes(path.posix.dirname(envOf(BACKUP_UNIT(), 'DB_PATH'))),
+    'ProtectSystem=strict 下，不放开数据目录 SQLite 读不了源库');
+  // 目标目录要能写
+  assert.ok(writable.includes(envOf(BACKUP_UNIT(), 'BACKUP_DIR')),
+    '不放开备份目录就写不出备份文件');
+});
+
+test('备份：定时器要能在关机错过后补跑', () => {
+  const timer = BACKUP_TIMER();
+  assert.match(timer, /^OnCalendar=/m, '缺少 OnCalendar');
+  assert.match(timer, /^Persistent=true$/m,
+    '缺 Persistent=true 的话，机器关机错过就永远不补跑 —— 校园服务器经常不是 7x24 开着');
+  assert.match(timer, /^WantedBy=timers\.target$/m, '缺少 [Install]，开机不会自启');
+});
+
+test('备份：备份单元的两个文件都无 BOM、无 CRLF', () => {
+  for (const f of ['bazaar-backup.service', 'bazaar-backup.timer']) {
+    const raw = fs.readFileSync(path.join(DEPLOY, f));
+    assert.notEqual(raw[0], 0xef, `${f} 带 BOM`);
+    assert.equal(raw.includes(Buffer.from('\r\n')), false, `${f} 里是 CRLF`);
+  }
+});
+
+test('备份：bootstrap.sh 会安装并启用备份定时器', () => {
+  const src = BOOTSTRAP();
+  assert.match(src, /bazaar-backup\.timer/, 'bootstrap.sh 应当安装备份定时器');
+  assert.match(src, /enable --now "\$\{SERVICE\}-backup\.timer"/, '应当启用定时器');
+  assert.match(src, /systemctl start "\$\{SERVICE\}-backup\.service"/,
+    '装完应当立刻试备一份，否则要等到当晚才发现脚本是坏的');
 });
 
 /* ============================================================
