@@ -16,6 +16,10 @@
  * 所有 `error` 都是稳定的机器可读字符串，`message` 才是给人看的中文。
  */
 import { generateCode } from './repository.mjs';
+import {
+  ROLE_LABEL, isRole, canManage, canRedeem,
+  checkRoleChange, checkOwnerTransfer,
+} from './roles.mjs';
 
 export const API_VERSION = '1.0.0';
 
@@ -27,7 +31,8 @@ export const CODE_RETRY = 5;
 const ok = (body = {}) => ({ status: 200, body: { ok: true, ...body } });
 const fail = (error, message, status = 200) => ({ status, body: { ok: false, error, message } });
 
-const isStaff = (user) => !!user && ['volunteer', 'admin', 'owner'].includes(user.role);
+const isStaff = (user) => !!user && canRedeem(user.role);
+const isManager = (user) => !!user && canManage(user.role);
 
 /* ============================================================
    给小程序看的文案 —— 统一放在一处，前端就不用自己拼
@@ -294,5 +299,197 @@ export function createApi({
       if (r.reason === 'cancelled') return fail('cancelled', MESSAGES.cancelled);
       return fail(r.reason, '核销失败');
     },
+
+    /* ============================================================
+       管理端。门槛：deputy 及以上；改角色按 roles.mjs 的策略。
+       ============================================================ */
+
+    /** 物品上下架 / 增减名额 */
+    adminUpdateItem({ body, user }) {
+      if (!user) return fail('unauthorized', '请先登录', 401);
+      if (!isManager(user)) return fail('forbidden', '你没有管理权限', 403);
+
+      const itemId = asId(body?.itemId);
+      if (!itemId) return fail('bad_request', '缺少 itemId', 400);
+
+      const status = body?.status === undefined ? null : body.status;
+      if (status !== null && !['on_sale', 'off_shelf'].includes(status)) {
+        return fail('bad_request', '状态只能是 on_sale 或 off_shelf', 400);
+      }
+
+      let quotaDelta = 0;
+      if (body?.quotaDelta !== undefined) {
+        quotaDelta = Number(body.quotaDelta);
+        if (!Number.isInteger(quotaDelta)) {
+          return fail('bad_request', 'quotaDelta 必须是整数', 400);
+        }
+      }
+      if (status === null && quotaDelta === 0) {
+        return fail('bad_request', '没有要改的内容', 400);
+      }
+
+      const before = repo.getItem(itemId);
+      if (!before) return fail('not_found', '物品不存在', 404);
+
+      const r = repo.updateItem({ itemId, status, quotaDelta });
+      if (!r.ok) return fail(r.reason, r.message || '改不了', 200);
+
+      repo.writeAudit({
+        actorId: user.id, action: 'item.update',
+        targetType: 'item', targetId: itemId,
+        detail: {
+          status: status === null ? undefined : status,
+          quotaDelta,
+          before: { status: before.status, total: before.totalQuota, remaining: before.remainingQuota },
+          after: { status: r.item.status, total: r.item.totalQuota, remaining: r.item.remainingQuota },
+        },
+      });
+
+      return ok({ item: r.item });
+    },
+
+    /** 撤销误核销。门槛比改物品高：只有一级管理员及以上。 */
+    adminUndoRedeem({ body, user }) {
+      if (!user) return fail('unauthorized', '请先登录', 401);
+      if (!isManager(user) || user.role === 'deputy') {
+        return fail('forbidden', '撤销核销需要一级管理员及以上', 403);
+      }
+
+      const reservationId = asId(body?.reservationId);
+      if (!reservationId) return fail('bad_request', '缺少 reservationId', 400);
+
+      const r = repo.undoRedeem(reservationId, user.id);
+      if (!r.ok) return fail(r.reason, r.message || '撤销失败', r.reason === 'not_found' ? 404 : 200);
+
+      repo.writeAudit({
+        actorId: user.id, action: 'reservation.undo_redeem',
+        targetType: 'reservation', targetId: reservationId,
+        detail: { code: r.reservation.code },
+      });
+
+      return ok({ reservation: r.reservation });
+    },
+
+    /** 任命 / 撤销管理员。策略全在 roles.mjs。 */
+    adminSetRole({ body, user }) {
+      if (!user) return fail('unauthorized', '请先登录', 401);
+      if (!isManager(user)) return fail('forbidden', '你没有管理权限', 403);
+
+      const targetId = asId(body?.userId);
+      const nextRole = body?.role;
+      if (!targetId) return fail('bad_request', '缺少 userId', 400);
+      if (!isRole(nextRole)) return fail('bad_request', '角色不合法', 400);
+
+      const target = repo.findUserById(targetId);
+      if (!target) return fail('not_found', '找不到这个人', 404);
+
+      const verdict = checkRoleChange({
+        actorRole: user.role, actorId: user.id,
+        targetRole: target.role, targetId, nextRole,
+      });
+      if (!verdict.ok) {
+        // 明确的角色是在编造请求，给 403；其余是业务规则不允许
+        const status = verdict.reason === 'forbidden' ? 403 : 200;
+        return fail(verdict.reason, verdict.message, status);
+      }
+
+      const r = repo.setUserRole(targetId, nextRole);
+      if (!r.ok) return fail(r.reason, '改不了', 200);
+
+      repo.writeAudit({
+        actorId: user.id, action: 'role.change',
+        targetType: 'user', targetId,
+        detail: { from: r.from, to: r.to },
+      });
+
+      return ok({ user: r.user, from: r.from, to: r.to });
+    },
+
+    /** 转交超管。换届交接用的，只有超管能做。 */
+    adminTransferOwner({ body, user }) {
+      if (!user) return fail('unauthorized', '请先登录', 401);
+
+      const targetId = asId(body?.userId);
+      const verdict = checkOwnerTransfer({
+        actorRole: user.role, actorId: user.id, targetId,
+      });
+      if (!verdict.ok) {
+        return fail(verdict.reason, verdict.message, verdict.reason === 'forbidden' ? 403 : 200);
+      }
+
+      const r = repo.transferOwnership({ fromUserId: user.id, toUserId: targetId });
+      if (!r.ok) return fail(r.reason, '转交失败', 200);
+
+      repo.writeAudit({
+        actorId: user.id, action: 'owner.transfer',
+        targetType: 'user', targetId,
+        detail: { from: r.from.id, to: r.to.id },
+      });
+
+      return ok({ from: r.from, to: r.to });
+    },
+
+    /** 全量预定名单。format=csv 时导出 CSV，给打印纸质兜底名单用。 */
+    adminReservations({ user, query }) {
+      if (!user) return fail('unauthorized', '请先登录', 401);
+      if (!isManager(user)) return fail('forbidden', '你没有管理权限', 403);
+
+      const event = repo.getActiveEvent();
+      if (!event) return fail('no_active_event', '活动还没开始');
+
+      const status = ['reserved', 'redeemed', 'cancelled'].includes(query?.status)
+        ? query.status : null;
+      const rows = repo.listEventReservations(event.id, { status });
+
+      if (query?.format === 'csv') {
+        return { status: 200, raw: { contentType: 'text/csv; charset=utf-8', text: toCsv(rows) } };
+      }
+      return ok({ event, total: rows.length, reservations: rows });
+    },
   };
+}
+
+/* ============================================================
+   名单导出
+   ============================================================ */
+
+/** CSV 字段转义：含逗号/引号/换行的要用双引号包起来 */
+function csvCell(v) {
+  const s = v === null || v === undefined ? '' : String(v);
+  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+export const CSV_HEADER = ['取货码', '物品', '数量', '取货人', '学号', '状态', '预定时间', '核销时间'];
+
+const STATUS_CN = { reserved: '待取货', redeemed: '已取货', cancelled: '已取消' };
+
+function fmtTime(ts) {
+  if (!ts) return '';
+  const d = new Date(Number(ts));
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+/**
+ * 导出 CSV。
+ *
+ * 前面加 BOM 是故意的：不加的话 Excel 打开中文会变乱码，
+ * 而这份文件的主要用途就是打印 —— 乱码的名单在现场没法用。
+ * 注意表里**没有金额列**，这是硬约束。
+ */
+export function toCsv(rows) {
+  const lines = [CSV_HEADER.join(',')];
+  for (const r of rows) {
+    lines.push([
+      r.code,
+      r.itemName,
+      r.qty,
+      r.userName,
+      r.userSid,
+      STATUS_CN[r.status] || r.status,
+      fmtTime(r.createdAt),
+      fmtTime(r.redeemedAt),
+    ].map(csvCell).join(','));
+  }
+  return '\uFEFF' + lines.join('\r\n') + '\r\n';
 }

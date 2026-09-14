@@ -7,6 +7,7 @@
   "scripts": {
     "test": "node tests/all.mjs",
     "start": "node server/http.mjs",
+    "set-owner": "node scripts/set-owner.mjs",
     "serve": "node scripts/serve.mjs",
     "longimage": "node scripts/longimage.mjs"
   }

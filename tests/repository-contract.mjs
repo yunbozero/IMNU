@@ -425,6 +425,217 @@ export function describeRepositoryContract(label, makeRepo) {
     } finally { cleanup && cleanup(); }
   });
 
+  /* ============================================================
+     管理端：改物品 / 撤销核销 / 角色 / 转交
+     ============================================================ */
+
+  t('管理：增减名额会同步调整总数与剩余', () => {
+    const { repo, cleanup } = makeRepo();
+    try {
+      const { item } = fixture(repo, { quota: 10 });
+
+      const add = repo.updateItem({ itemId: item.id, quotaDelta: 5 });
+      assert.equal(add.ok, true);
+      assert.equal(repo.getItem(item.id).totalQuota, 15);
+      assert.equal(repo.getItem(item.id).remainingQuota, 15);
+
+      const cut = repo.updateItem({ itemId: item.id, quotaDelta: -4 });
+      assert.equal(cut.ok, true);
+      assert.equal(repo.getItem(item.id).totalQuota, 11);
+      assert.equal(repo.getItem(item.id).remainingQuota, 11);
+    } finally { cleanup && cleanup(); }
+  });
+
+  t('管理：名额不能降到已锁定数量以下', () => {
+    const { repo, cleanup } = makeRepo();
+    try {
+      const { ev, item } = fixture(repo, { quota: 10 });
+      const u = person(repo, 1);
+      repo.tryReserve({
+        eventId: ev.id, itemId: item.id, userId: u.id, qty: 3, requestId: 'x', code: code(),
+      });
+
+      const r = repo.updateItem({ itemId: item.id, quotaDelta: -8 });   // 10 → 2，但已锁定 3
+      assert.equal(r.ok, false);
+      assert.equal(r.reason, 'quota_below_locked');
+      assert.equal(repo.getItem(item.id).totalQuota, 10, '失败时不能改动');
+    } finally { cleanup && cleanup(); }
+  });
+
+  t('管理：上下架切换，且不动名额', () => {
+    const { repo, cleanup } = makeRepo();
+    try {
+      const { item } = fixture(repo, { quota: 4 });
+
+      assert.equal(repo.updateItem({ itemId: item.id, status: 'off_shelf' }).ok, true);
+      assert.equal(repo.getItem(item.id).status, 'off_shelf');
+      assert.equal(repo.getItem(item.id).remainingQuota, 4);
+
+      assert.equal(repo.updateItem({ itemId: item.id, status: 'on_sale' }).ok, true);
+      assert.equal(repo.getItem(item.id).status, 'on_sale');
+
+      assert.throws(() => repo.updateItem({ itemId: item.id, status: '乱的' }), /未知的物品状态/);
+    } finally { cleanup && cleanup(); }
+  });
+
+  t('管理：撤销核销把状态改回待取货，且不动名额', () => {
+    const { repo, cleanup } = makeRepo();
+    try {
+      const { ev, item } = fixture(repo, { quota: 3 });
+      const u = person(repo, 1);
+      const c = code();
+      const r = repo.tryReserve({
+        eventId: ev.id, itemId: item.id, userId: u.id, qty: 1, requestId: 'u', code: c,
+      });
+
+      repo.redeem(ev.id, c, 'vol-1');
+      assert.equal(repo.getItem(item.id).remainingQuota, 2);
+
+      const undo = repo.undoRedeem(r.reservation.id, 'admin-1');
+      assert.equal(undo.ok, true);
+      assert.equal(undo.reservation.status, 'reserved');
+      assert.equal(undo.reservation.redeemedAt, null, '核销时间要清掉');
+      assert.equal(undo.reservation.operatorId, null, '经手人也要清掉');
+      assert.equal(repo.getItem(item.id).remainingQuota, 2, '撤销核销不该动名额');
+    } finally { cleanup && cleanup(); }
+  });
+
+  t('管理：只能撤销真正被核销过的，且不能撤销两次', () => {
+    const { repo, cleanup } = makeRepo();
+    try {
+      const { ev, item } = fixture(repo, { quota: 3 });
+      const u = person(repo, 1);
+      const f = repo.tryReserve({
+        eventId: ev.id, itemId: item.id, userId: u.id, qty: 1, requestId: 'u', code: code(),
+      });
+
+      const early = repo.undoRedeem(f.reservation.id, 'admin');
+      assert.equal(early.ok, false);
+      assert.equal(early.reason, 'not_redeemed');
+
+      repo.redeem(ev.id, f.reservation.code, 'vol');
+      assert.equal(repo.undoRedeem(f.reservation.id, 'admin').ok, true);
+      assert.equal(repo.undoRedeem(f.reservation.id, 'admin').ok, false);
+    } finally { cleanup && cleanup(); }
+  });
+
+  t('管理：撤销核销之后，这个人依然不能再预定同一件（active_key 是连贯的）', () => {
+    const { repo, cleanup } = makeRepo();
+    try {
+      const { ev, item } = fixture(repo, { quota: 5 });
+      const u = person(repo, 1);
+      const f = repo.tryReserve({
+        eventId: ev.id, itemId: item.id, userId: u.id, qty: 1, requestId: 'a', code: code(),
+      });
+
+      repo.redeem(ev.id, f.reservation.code, 'vol');
+      const afterRedeem = repo.tryReserve({
+        eventId: ev.id, itemId: item.id, userId: u.id, qty: 1, requestId: 'b', code: code(),
+      });
+      assert.equal(afterRedeem.ok, false, '已核销的不能再预定同一件');
+      assert.equal(afterRedeem.reason, 'dup');
+
+      repo.undoRedeem(f.reservation.id, 'admin');
+      const afterUndo = repo.tryReserve({
+        eventId: ev.id, itemId: item.id, userId: u.id, qty: 1, requestId: 'c', code: code(),
+      });
+      assert.equal(afterUndo.ok, false, '撤销核销后仍然不能重复预定');
+      assert.equal(repo.getItem(item.id).remainingQuota, 4, '这些失败都不该白扣名额');
+    } finally { cleanup && cleanup(); }
+  });
+
+  t('管理：直接设置角色，但不允许直接设成超管', () => {
+    const { repo, cleanup } = makeRepo();
+    try {
+      const u = person(repo, 1);
+      const r = repo.setUserRole(u.id, 'deputy');
+      assert.equal(r.ok, true);
+      assert.equal(r.from, 'student');
+      assert.equal(r.to, 'deputy');
+      assert.equal(repo.findUserById(u.id).role, 'deputy');
+
+      const bad = repo.setUserRole(u.id, 'owner');
+      assert.equal(bad.ok, false);
+      assert.equal(bad.reason, 'use_transfer', '超管只能通过转交产生');
+    } finally { cleanup && cleanup(); }
+  });
+
+  t('管理：第一个超管只能从零到一设立，有了之后再也设不了', () => {
+    const { repo, cleanup } = makeRepo();
+    try {
+      const a = person(repo, 1);
+      const b = person(repo, 2);
+
+      assert.equal(repo.countOwners(), 0);
+      assert.equal(repo.bootstrapOwner(a.id).ok, true);
+      assert.equal(repo.countOwners(), 1);
+
+      // 已经有超管了，再来一次必须被拒 —— 否则这个方法就是个抢权限的后门
+      const again = repo.bootstrapOwner(b.id);
+      assert.equal(again.ok, false);
+      assert.equal(again.reason, 'already_has_owner');
+      assert.equal(repo.countOwners(), 1, '任何时候都不能出现两个超管');
+    } finally { cleanup && cleanup(); }
+  });
+
+  t('管理：转交超管后，超管有且只有一个', () => {
+    const { repo, cleanup } = makeRepo();
+    try {
+      const a = person(repo, 1);
+      const b = person(repo, 2);
+      repo.bootstrapOwner(a.id);
+      assert.equal(repo.countOwners(), 1);
+
+      const t1 = repo.transferOwnership({ fromUserId: a.id, toUserId: b.id });
+      assert.equal(t1.ok, true);
+      assert.equal(repo.countOwners(), 1, '转交之后仍然只能有一个超管');
+      assert.equal(repo.findUserById(b.id).role, 'owner');
+      assert.equal(repo.findUserById(a.id).role, 'admin', '原超管降为一级管理员，方便带一段时间');
+    } finally { cleanup && cleanup(); }
+  });
+
+  t('管理：非超管不能转交，也不能转交给自己', () => {
+    const { repo, cleanup } = makeRepo();
+    try {
+      const a = person(repo, 1);
+      const b = person(repo, 2);
+
+      const r1 = repo.transferOwnership({ fromUserId: a.id, toUserId: b.id });
+      assert.equal(r1.ok, false);
+      assert.equal(r1.reason, 'not_owner');
+
+      repo.bootstrapOwner(a.id);
+      const r2 = repo.transferOwnership({ fromUserId: a.id, toUserId: a.id });
+      assert.equal(r2.ok, false);
+      assert.equal(r2.reason, 'self_transfer');
+    } finally { cleanup && cleanup(); }
+  });
+
+  t('管理：能拉出全场次名单（导出纸质兜底名单要用）', () => {
+    const { repo, cleanup } = makeRepo();
+    try {
+      const { ev, item } = fixture(repo, { quota: 6 });
+      const a = person(repo, 1);
+      const b = person(repo, 2);
+
+      const r1 = repo.tryReserve({
+        eventId: ev.id, itemId: item.id, userId: a.id, qty: 1, requestId: 'a', code: code(),
+      });
+      repo.tryReserve({
+        eventId: ev.id, itemId: item.id, userId: b.id, qty: 2, requestId: 'b', code: code(),
+      });
+      repo.cancelReservation(r1.reservation.id);
+
+      const all = repo.listEventReservations(ev.id);
+      assert.equal(all.length, 2);
+      assert.equal(all[0].itemName, '手作黄油曲奇', '名单要带物品名，不然打印出来看不懂');
+      assert.ok(all[0].userName, '名单要带取货人姓名');
+      assert.ok(all[0].userSid, '名单要带学号');
+
+      assert.equal(repo.listEventReservations(ev.id, { status: 'reserved' }).length, 1);
+    } finally { cleanup && cleanup(); }
+  });
+
   t('可以写审计日志', () => {
     const { repo, cleanup } = makeRepo();
     try {

@@ -39,6 +39,14 @@ export const ROUTES = {
   'POST /api/reserve': { handler: 'reserve', auth: 'user', rateLimit: true },
   'POST /api/cancel': { handler: 'cancel', auth: 'user' },
   'POST /api/redeem': { handler: 'redeem', auth: 'user' },
+
+  // 管理端。门槛（二级管理员 / 一级管理员 / 超管）在 api.mjs 里逐个判断，
+  // 这里只保证「必须先登录」。
+  'POST /api/admin/item': { handler: 'adminUpdateItem', auth: 'user' },
+  'POST /api/admin/undo-redeem': { handler: 'adminUndoRedeem', auth: 'user' },
+  'POST /api/admin/role': { handler: 'adminSetRole', auth: 'user' },
+  'POST /api/admin/transfer-owner': { handler: 'adminTransferOwner', auth: 'user' },
+  'GET /api/admin/reservations': { handler: 'adminReservations', auth: 'user' },
 };
 
 function readBody(req) {
@@ -91,6 +99,18 @@ function send(res, status, body, extraHeaders = {}) {
     'cache-control': 'no-store',
     'x-content-type-options': 'nosniff',
     ...extraHeaders,
+  });
+  res.end(payload);
+}
+
+/** 非 JSON 响应（目前只有 CSV 名单导出用） */
+function sendRaw(res, status, contentType, text) {
+  const payload = Buffer.from(text, 'utf8');
+  res.writeHead(status, {
+    'content-type': contentType,
+    'content-length': payload.length,
+    'cache-control': 'no-store',
+    'x-content-type-options': 'nosniff',
   });
   res.end(payload);
 }
@@ -201,9 +221,14 @@ export function createRequestHandler({
         }
       }
 
-      const result = await api[route.handler]({ body, user, auth, rateLimited, ip: req.socket.remoteAddress });
+      const query = Object.fromEntries(url.searchParams.entries());
+      const result = await api[route.handler]({
+        body, user, auth, rateLimited, query, ip: req.socket.remoteAddress,
+      });
       status = result.status;
-      send(res, status, result.body);
+
+      if (result.raw) sendRaw(res, status, result.raw.contentType, result.raw.text);
+      else send(res, status, result.body);
     } catch (e) {
       status = 500;
       // 服务端 bug：日志里留完整堆栈，但绝不把堆栈返回给客户端

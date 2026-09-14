@@ -34,8 +34,15 @@ export const REPOSITORY_METHODS = [
   'getReservation',
   'findByCode',
   'listUserReservations',
+  'listEventReservations',
   'cancelReservation',
   'redeem',
+  'undoRedeem',
+  'updateItem',
+  'setUserRole',
+  'bootstrapOwner',
+  'transferOwnership',
+  'countOwners',
   'writeAudit',
 ];
 
@@ -306,6 +313,36 @@ export function createSqliteRepository(db) {
     },
 
     /**
+     * 某场次的全部预定 —— 管理后台看名单、导出纸质兜底名单都要用。
+     * status 可选，不传就是全部。
+     */
+    listEventReservations(eventId, { status = null } = {}) {
+      const rows = status
+        ? db.prepare('SELECT * FROM reservations WHERE event_id = ? AND status = ? ORDER BY created_at')
+            .all(eventId, status)
+        : db.prepare('SELECT * FROM reservations WHERE event_id = ? ORDER BY created_at')
+            .all(eventId);
+
+      const items = new Map(
+        db.prepare('SELECT id, name FROM items WHERE event_id = ?').all(eventId).map((r) => [r.id, r])
+      );
+      const users = new Map(
+        db.prepare('SELECT id, name, sid FROM users').all().map((r) => [r.id, r])
+      );
+
+      return rows.map((r) => {
+        const it = items.get(r.item_id);
+        const u = users.get(r.user_id);
+        return {
+          ...mapReservation(r),
+          itemName: it ? it.name : null,
+          userName: u ? u.name : null,
+          userSid: u ? u.sid : null,
+        };
+      });
+    },
+
+    /**
      * 取消预定并把名额还回去。
      * 关键：只有 reserved → cancelled 这一次状态转换成功，才允许加名额。
      * 否则重复点击「取消」会让名额虚增。
@@ -358,6 +395,153 @@ export function createSqliteRepository(db) {
 
         return { ok: true, reservation: repo.getReservation(r.id) };
       });
+    },
+
+    /* ---------------- 管理端 ---------------- */
+
+    /**
+     * 撤销一次误核销。
+     *
+     * 注意 active_key 不用动：核销时它**没有被清空**（取消才清空），
+     * 所以撤销回来之后「每人每件只能预定一次」这条约束依然是连贯的。
+     * 如果核销时把 active_key 清了，这里就要处理"他已经又预定了一次"的冲突 —— 那是自找麻烦。
+     */
+    undoRedeem(reservationId, actorId = null) {
+      return inTransactionAbortable(db, () => {
+        const r = db.prepare('SELECT * FROM reservations WHERE id = ?').get(reservationId);
+        if (!r) return abort({ ok: false, reason: 'not_found' });
+        if (r.status !== 'redeemed') {
+          return abort({ ok: false, reason: 'not_redeemed', message: '这笔预定并没有被核销' });
+        }
+
+        const upd = db.prepare(`
+          UPDATE reservations
+             SET status = 'reserved', redeemed_at = NULL, operator_id = NULL
+           WHERE id = ? AND status = 'redeemed'
+        `).run(reservationId);
+
+        if (upd.changes !== 1) return abort({ ok: false, reason: 'conflict' });
+
+        // 名额不受影响：核销本来就没退名额，撤销自然也不动
+        return { ok: true, reservation: repo.getReservation(reservationId), undoneBy: actorId };
+      });
+    },
+
+    /**
+     * 改物品：上下架、增减名额。
+     *
+     * 名额用增量而不是绝对值，并且会拦住两种会破坏账目的改法：
+     *   - 把总数压到已锁定数量以下（已经有 10 个人预定了，总数不能设成 5）
+     *   - 把剩余名额改成负数
+     */
+    updateItem({ itemId, status = null, quotaDelta = 0 }) {
+      if (status !== null && !['on_sale', 'off_shelf'].includes(status)) {
+        throw new Error(`未知的物品状态：${status}`);
+      }
+      if (!Number.isInteger(quotaDelta)) throw new Error('quotaDelta 必须是整数');
+
+      return inTransactionAbortable(db, () => {
+        const it = db.prepare('SELECT * FROM items WHERE id = ?').get(itemId);
+        if (!it) return abort({ ok: false, reason: 'not_found' });
+
+        let { total_quota: total, remaining_quota: remaining } = it;
+
+        if (quotaDelta !== 0) {
+          const held = db.prepare(`
+            SELECT COALESCE(SUM(qty), 0) AS s FROM reservations
+             WHERE item_id = ? AND status IN ('reserved', 'redeemed')
+          `).get(itemId).s;
+
+          const newTotal = total + quotaDelta;
+          const newRemaining = remaining + quotaDelta;
+
+          if (newTotal < held) {
+            return abort({
+              ok: false, reason: 'quota_below_locked',
+              message: `已经有 ${held} 份被预定了，总数不能降到 ${newTotal}`,
+            });
+          }
+          if (newRemaining < 0) {
+            return abort({ ok: false, reason: 'quota_negative', message: '剩余名额不能为负' });
+          }
+          total = newTotal;
+          remaining = newRemaining;
+        }
+
+        db.prepare(`UPDATE items SET status = ?, total_quota = ?, remaining_quota = ? WHERE id = ?`)
+          .run(status === null ? it.status : status, total, remaining, itemId);
+
+        return { ok: true, item: repo.getItem(itemId), quotaDelta };
+      });
+    },
+
+    /**
+     * 直接设置某个人的角色。
+     * ★ 这里**不做权限判断** —— 策略在 roles.mjs，由接口层调 checkRoleChange。
+     *   数据层只保证"不出现第二个超管"这种结构性问题。
+     */
+    setUserRole(userId, role) {
+      const u = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
+      if (!u) return { ok: false, reason: 'not_found' };
+      if (role === 'owner') return { ok: false, reason: 'use_transfer' };
+
+      db.prepare('UPDATE users SET role = ? WHERE id = ?').run(role, userId);
+      return { ok: true, user: repo.findUserById(userId), from: u.role, to: role };
+    },
+
+    /**
+     * 设立第一个超管。
+     *
+     * 必须有这个方法，否则会死锁：转交要求已有一个超管，
+     * 而 setUserRole 又拒绝直接设成 owner —— 那第一个超管永远产生不了。
+     *
+     * 安全性靠「只在当前没有任何超管时才生效」保证：
+     * 一旦有了超管，它永远拒绝，所以没法拿它来抢权限。
+     * ★ 这个方法**不暴露成 HTTP 接口**，只由服务端初始化脚本调用。
+     */
+    bootstrapOwner(userId) {
+      return inTransactionAbortable(db, () => {
+        if (repo.countOwners() > 0) {
+          return abort({ ok: false, reason: 'already_has_owner' });
+        }
+        const u = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
+        if (!u) return abort({ ok: false, reason: 'not_found' });
+
+        db.prepare("UPDATE users SET role = 'owner' WHERE id = ?").run(userId);
+        return { ok: true, user: repo.findUserById(userId) };
+      });
+    },
+
+    /**
+     * 转交超管。必须在一个事务里完成，否则中间态会出现两个超管或零个超管。
+     */
+    transferOwnership({ fromUserId, toUserId }) {
+      return inTransactionAbortable(db, () => {
+        const from = db.prepare('SELECT * FROM users WHERE id = ?').get(fromUserId);
+        const to = db.prepare('SELECT * FROM users WHERE id = ?').get(toUserId);
+
+        if (!from || !to) return abort({ ok: false, reason: 'not_found' });
+        if (from.role !== 'owner') return abort({ ok: false, reason: 'not_owner' });
+        if (fromUserId === toUserId) return abort({ ok: false, reason: 'self_transfer' });
+
+        // 原超管降为一级管理员，而不是降成学生 ——
+        // 换届之后他通常还要帮忙带一段时间
+        db.prepare("UPDATE users SET role = 'admin' WHERE id = ?").run(fromUserId);
+        db.prepare("UPDATE users SET role = 'owner' WHERE id = ?").run(toUserId);
+
+        const owners = db.prepare("SELECT COUNT(*) AS c FROM users WHERE role = 'owner'").get().c;
+        if (owners !== 1) return abort({ ok: false, reason: 'invariant_violated' });
+
+        return {
+          ok: true,
+          from: repo.findUserById(fromUserId),
+          to: repo.findUserById(toUserId),
+        };
+      });
+    },
+
+    countOwners() {
+      return db.prepare("SELECT COUNT(*) AS c FROM users WHERE role = 'owner'").get().c;
     },
 
     /* ---------------- 审计 ---------------- */
