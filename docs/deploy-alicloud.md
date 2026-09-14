@@ -113,6 +113,54 @@ sudo bash /srv/bazaar/app/deploy/deploy.sh
 
 ---
 
+## 5.5 第一次部署后必须做的三件事
+
+**不做这一步，服务能跑但没人能当管理员，换届转交的承诺就是空的。**
+
+### ① 填小程序密钥
+
+```bash
+sudo nano /etc/bazaar/env
+```
+
+填上小程序后台「开发管理 → 开发设置」里的 **AppID** 和 **AppSecret**，然后重启：
+
+```bash
+sudo systemctl restart bazaar
+```
+
+> `SESSION_SECRET` 是 `bootstrap.sh` 自动生成的随机值，**不要动它** —— 改了所有人都会掉登录。
+
+### ② 设立第一个超管
+
+转交要求「已经有一个超管」，而接口又拒绝直接设 owner，所以第一个超管只能由服务端设立：
+
+```bash
+# 先让一个人在小程序里完成登记（学号 + 姓名），然后列出已登记的人
+sudo -u bazaar DB_PATH=/srv/bazaar/data/bazaar.db \
+  node /srv/bazaar/app/scripts/set-owner.mjs --list
+
+# 从列表里找到你的 openid，设成超管
+sudo -u bazaar DB_PATH=/srv/bazaar/data/bazaar.db \
+  node /srv/bazaar/app/scripts/set-owner.mjs <你的openid>
+```
+
+之后**不要再跑这个脚本**。换届时让现任超管在小程序里走「转交超管」。
+
+### ③ 改小程序里的后端地址
+
+`miniprogram/config.js` 里的 `PROD_BASE` 现在是占位域名，必须改成真实域名：
+
+```js
+const PROD_BASE = 'https://你的域名';
+```
+
+改完要重新上传小程序代码。
+
+> 开发阶段它会自动回落到 `http://127.0.0.1:3000`（靠 `__wxConfig.envVersion` 判断），本地联调不用手改。
+
+---
+
 ## 6. 验收清单
 
 | 检查 | 命令 | 期望 |
