@@ -1,0 +1,53 @@
+.hero {
+  width: 100%; height: 520rpx; border-radius: 32rpx; margin-top: 28rpx;
+  display: flex; align-items: center; justify-content: center;
+}
+.hero__emoji { font-size: 190rpx; }
+
+.title { font-size: 42rpx; font-weight: 800; line-height: 1.35; margin: 32rpx 4rpx 0; }
+
+.big-quota { display: flex; align-items: baseline; gap: 16rpx; margin-bottom: 20rpx; }
+.big-quota__num { font-size: 64rpx; font-weight: 800; color: var(--brand); }
+.big-quota__num--none { color: var(--text-3); }
+.big-quota__total { font-size: 27rpx; color: var(--text-2); }
+
+.hint { font-size: 23rpx; color: var(--text-3); margin-top: 18rpx; }
+.desc { font-size: 27rpx; color: var(--text-2); line-height: 1.7; }
+
+/* ---------- 弹层 ---------- */
+.mask {
+  position: fixed; inset: 0; z-index: 100;
+  background: rgba(40, 25, 18, 0.42);
+  display: flex; align-items: flex-end;
+}
+.sheet {
+  width: 100%; background: #fff;
+  border-radius: 40rpx 40rpx 0 0;
+  padding: 24rpx 32rpx calc(32rpx + env(safe-area-inset-bottom));
+  box-sizing: border-box;
+}
+.sheet__grab { width: 76rpx; height: 8rpx; border-radius: 4rpx; background: #E8DCD4; margin: 0 auto 24rpx; }
+.sheet__title { font-size: 34rpx; font-weight: 700; margin-bottom: 28rpx; }
+.sheet__summary {
+  display: flex; gap: 24rpx; align-items: center;
+  background: var(--brand-tint); border-radius: 28rpx; padding: 24rpx;
+}
+.sheet__thumb {
+  width: 120rpx; height: 120rpx; flex: 0 0 120rpx; border-radius: 22rpx;
+  display: flex; align-items: center; justify-content: center; font-size: 52rpx;
+}
+.sheet__name { font-size: 29rpx; font-weight: 700; line-height: 1.35; }
+.sheet__stall { font-size: 23rpx; color: var(--text-2); margin-top: 10rpx; }
+.sheet__tip { font-size: 24rpx; color: var(--text-2); line-height: 1.6; margin: 24rpx 0 28rpx; }
+.sheet__cancel { margin-top: 20rpx; }
+
+.stepper { display: flex; align-items: center; justify-content: space-between; margin: 32rpx 0; }
+.stepper__label { font-size: 28rpx; font-weight: 600; }
+.stepper__ctrl { display: flex; align-items: center; gap: 28rpx; }
+.stepper__btn {
+  width: 68rpx; height: 68rpx; border-radius: 50%;
+  border: 3rpx solid var(--brand-soft); background: #fff; color: var(--brand);
+  display: flex; align-items: center; justify-content: center; font-size: 38rpx;
+}
+.stepper__btn--off { color: #CFC3BB; border-color: #EFE6E0; }
+.stepper__qty { font-size: 34rpx; font-weight: 700; min-width: 44rpx; text-align: center; }

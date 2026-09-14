@@ -1,0 +1,67 @@
+{
+  "description": "IMNU 校园义卖 · 分包结构说明（JSON 不支持注释，写在 description 里）",
+  "note_1": "tabBar 的三个页面必须在主包内 —— 微信不允许 tabBar 指向分包页面。所以「猫猫图鉴」的入口页放在 pages/cats，其余图鉴页面才在 packageCats。",
+  "note_2": "主包要尽量小（硬上限 2MB），义卖和图鉴的主体都放分包，按需加载。",
+  "note_3": "preloadRule 让首页一打开就预下载义卖分包，学生点进去时不用等。",
+  "note_4": "如果将来要拆成两个小程序，packageCats 整个目录搬走即可，义卖一行不用改。",
+
+  "pages": [
+    "pages/home/index",
+    "pages/cats/index",
+    "pages/profile/index"
+  ],
+
+  "subPackages": [
+    {
+      "root": "packageBazaar",
+      "name": "bazaar",
+      "pages": [
+        "pages/items/index",
+        "pages/detail/index",
+        "pages/my-reservations/index",
+        "pages/pickup-code/index",
+        "pages/scan/index"
+      ]
+    },
+    {
+      "root": "packageCats",
+      "name": "cats",
+      "pages": [
+        "pages/detail/index",
+        "pages/adoption/index"
+      ]
+    }
+  ],
+
+  "preloadRule": {
+    "pages/home/index": {
+      "network": "all",
+      "packages": ["packageBazaar"]
+    }
+  },
+
+  "window": {
+    "backgroundTextStyle": "dark",
+    "navigationBarBackgroundColor": "#D2694A",
+    "navigationBarTitleText": "IMNU 校园义卖",
+    "navigationBarTextStyle": "white",
+    "backgroundColor": "#FBEBE3",
+    "enablePullDownRefresh": false
+  },
+
+  "tabBar": {
+    "color": "#8C7A70",
+    "selectedColor": "#D2694A",
+    "backgroundColor": "#FFFFFF",
+    "borderStyle": "white",
+    "list": [
+      { "pagePath": "pages/home/index", "text": "首页" },
+      { "pagePath": "pages/cats/index", "text": "猫猫图鉴" },
+      { "pagePath": "pages/profile/index", "text": "我的" }
+    ]
+  },
+
+  "style": "v2",
+  "sitemapLocation": "sitemap.json",
+  "lazyCodeLoading": "requiredComponents"
+}

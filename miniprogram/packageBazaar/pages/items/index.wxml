@@ -1,0 +1,69 @@
+<view class="page">
+
+  <view class="search">
+    <text class="search__icon">🔍</text>
+    <input
+      class="search__input"
+      placeholder="搜索义卖物品"
+      confirm-type="search"
+      bindinput="onSearch"
+    />
+  </view>
+
+  <view class="segmented">
+    <view
+      class="segmented__item {{activeStall === 'all' ? 'segmented__item--on' : ''}}"
+      data-id="all"
+      bindtap="onStallTap"
+    >全部</view>
+    <view
+      wx:for="{{stalls}}"
+      wx:key="id"
+      class="segmented__item {{activeStall === item.id ? 'segmented__item--on' : ''}}"
+      data-id="{{item.id}}"
+      bindtap="onStallTap"
+    >{{item.name}}</view>
+  </view>
+
+  <view wx:if="{{error}}" class="notice notice--strong" bindtap="load">
+    <text class="notice__b">加载失败：</text>{{error}}（点一下重试）
+  </view>
+
+  <view wx:if="{{!loading && filtered.length === 0}}" class="empty">
+    <view class="empty__icon">🧺</view>
+    <view class="empty__text">这里还没有物品</view>
+  </view>
+
+  <view class="grid">
+    <view
+      wx:for="{{filtered}}"
+      wx:key="id"
+      class="item {{item.remainingQuota <= 0 ? 'item--out' : ''}}"
+      data-id="{{item.id}}"
+      bindtap="goDetail"
+      hover-class="item--hover"
+    >
+      <view class="item__thumb {{item.tint}}">
+        <text>{{item.emoji || '🎁'}}</text>
+        <view wx:if="{{item.remainingQuota <= 0}}" class="item__soldout">已约满</view>
+      </view>
+      <view class="item__name">{{item.name}}</view>
+      <view class="item__stall">{{item.stallName}}</view>
+      <view class="quota">
+        <view class="quota__text">
+          <text>名额</text>
+          <text class="quota__num {{item.level === 'low' ? 'quota__num--low' : ''}} {{item.level === 'none' ? 'quota__num--none' : ''}}">{{item.quotaText}}</text>
+        </view>
+        <view class="quota__bar">
+          <view class="quota__fill {{item.level === 'low' ? 'quota__fill--low' : ''}} {{item.level === 'none' ? 'quota__fill--none' : ''}}" style="width:{{item.percent}}%"></view>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <view class="notice">
+    <text class="notice__b">预定免费，只锁定名额。</text>
+    请于活动当天凭取货码到摊位现场付款取货。
+  </view>
+
+</view>

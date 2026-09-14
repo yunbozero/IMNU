@@ -1,0 +1,61 @@
+{
+  "description": "IMNU 校园义卖 · 微信开发者工具项目配置",
+  "appid": "touristappid",
+  "projectname": "imnu-bazaar",
+  "compileType": "miniprogram",
+  "libVersion": "3.5.0",
+  "miniprogramRoot": "./",
+  "setting": {
+    "urlCheck": true,
+    "es6": true,
+    "enhance": true,
+    "postcss": true,
+    "minified": true,
+    "bigPackageSizeSupport": false,
+    "ignoreUploadUnusedFiles": true,
+    "checkSiteMap": true,
+    "coverView": true,
+    "lazyloadPlaceholderEnable": false,
+    "preloadBackgroundData": false,
+    "autoAudits": false,
+    "uglifyFileName": false,
+    "uploadWithSourceMap": true,
+    "useCompilerPlugins": false,
+    "condition": false,
+    "babelSetting": {
+      "ignore": [],
+      "disablePlugins": [],
+      "outputPath": ""
+    }
+  },
+  "condition": {
+    "miniprogram": {
+      "list": [
+        {
+          "name": "首页",
+          "pathName": "pages/home/index",
+          "query": "",
+          "scene": null
+        },
+        {
+          "name": "义卖物品列表",
+          "pathName": "packageBazaar/pages/items/index",
+          "query": "",
+          "scene": null
+        },
+        {
+          "name": "核销台（志愿者）",
+          "pathName": "packageBazaar/pages/scan/index",
+          "query": "",
+          "scene": null
+        },
+        {
+          "name": "猫猫图鉴",
+          "pathName": "pages/cats/index",
+          "query": "",
+          "scene": null
+        }
+      ]
+    }
+  }
+}

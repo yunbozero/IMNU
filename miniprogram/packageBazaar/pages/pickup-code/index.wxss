@@ -1,0 +1,19 @@
+.fresh { text-align: center; padding: 48rpx 0 8rpx; }
+.fresh__icon {
+  width: 152rpx; height: 152rpx; margin: 0 auto 24rpx;
+  border-radius: 50%; background: #E8F5EE; color: var(--ok);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 80rpx; font-weight: 700;
+}
+.fresh__title { font-size: 36rpx; font-weight: 800; }
+
+.statusbar-card__time { font-weight: 400; opacity: 0.8; }
+
+.copy {
+  display: inline-block; margin-top: 24rpx;
+  font-size: 25rpx; color: var(--brand);
+  padding: 12rpx 32rpx; border-radius: 30rpx;
+  border: 2rpx solid var(--brand-soft);
+}
+
+.cancel { margin-top: 36rpx; }

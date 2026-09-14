@@ -1,0 +1,56 @@
+<view class="page page--tabbar">
+
+  <view class="cats-hero">
+    <view class="cats-hero__avatar">🐾</view>
+    <view class="cats-hero__title">IMNU 猫咪图鉴</view>
+    <view class="cats-hero__sub">关爱校园里的每一条小生命</view>
+  </view>
+
+  <view class="segmented">
+    <view
+      wx:for="{{groups}}"
+      wx:key="key"
+      class="segmented__item {{active === item.key ? 'segmented__item--on' : ''}}"
+      data-key="{{item.key}}"
+      bindtap="onTabTap"
+    >{{item.label}}</view>
+  </view>
+
+  <view wx:if="{{cats.length === 0}}" class="empty">
+    <view class="empty__icon">🐈</view>
+    <view class="empty__text">这一栏暂时没有记录</view>
+  </view>
+
+  <view class="cat-grid">
+    <view
+      wx:for="{{cats}}"
+      wx:key="id"
+      class="cat-card"
+      data-id="{{item.id}}"
+      bindtap="goDetail"
+      hover-class="cat-card--hover"
+    >
+      <view class="cat-card__thumb {{item.tint}}">{{item.emoji}}</view>
+      <view class="cat-card__name">{{item.name}}</view>
+      <view class="cat-card__loc">{{item.location}}</view>
+    </view>
+  </view>
+
+  <view class="card">
+    <view class="card__title">校园喂养提示</view>
+    <view wx:for="{{tips}}" wx:key="label" class="tip">
+      <text class="tip__label {{item.tone === 'ok' ? 'tip__label--ok' : ''}}">{{item.label}}：</text>
+      <text class="tip__text">{{item.text}}</text>
+    </view>
+  </view>
+
+  <view class="entry entry--staff" bindtap="goAdoption" hover-class="entry--hover">
+    <view class="entry__icon">🏠</view>
+    <view class="grow">
+      <view class="entry__title">送养信息</view>
+      <view class="entry__desc">查看近期救助与送养动态</view>
+    </view>
+    <view class="entry__arrow">›</view>
+  </view>
+
+</view>

@@ -1,0 +1,100 @@
+<view class="page page--tabbar">
+
+  <!-- 已登记 -->
+  <block wx:if="{{user}}">
+    <view class="me">
+      <view class="me__avatar">🎪</view>
+      <view class="me__name">{{user.name}}</view>
+      <view class="me__sid">{{user.sid}}</view>
+      <view class="me__role">{{isStaff ? '志愿者' : '学生'}}</view>
+    </view>
+
+    <view class="grid2">
+      <view class="entry entry--small" bindtap="goMyReservations" hover-class="entry--hover">
+        <view class="entry__icon entry__icon--sm">🎫</view>
+        <view class="entry__title entry__title--sm">我的预定</view>
+        <view class="entry__desc entry__desc--sm">查看取货码</view>
+      </view>
+      <view class="entry entry--small" bindtap="goItems" hover-class="entry--hover">
+        <view class="entry__icon entry__icon--sm">🎁</view>
+        <view class="entry__title entry__title--sm">逛义卖</view>
+        <view class="entry__desc entry__desc--sm">看看还有什么</view>
+      </view>
+    </view>
+
+    <view wx:if="{{isStaff}}" class="entry entry--staff" bindtap="goScan" hover-class="entry--hover">
+      <view class="entry__icon">✅</view>
+      <view class="grow">
+        <view class="entry__title">志愿者核销台</view>
+        <view class="entry__desc">扫码或输码，现场核销</view>
+      </view>
+      <view class="entry__arrow">›</view>
+    </view>
+
+    <view class="card">
+      <view class="card__title">活动规则</view>
+      <view class="rule"><text class="rule__k">预定免费：</text>小程序只登记名额，不出售商品、不收取任何费用。</view>
+      <view class="rule"><text class="rule__k">现场取货：</text>活动当天到对应摊位，出示取货码并付款后取走物品。</view>
+      <view class="rule"><text class="rule__k">一人一份：</text>同一件物品每人限预定一次。</view>
+      <view class="rule"><text class="rule__k rule__k--ok">及时取消：</text>无法到场请提前取消，把名额让给其他同学。</view>
+    </view>
+
+    <view class="logout" bindtap="onLogout">退出登录</view>
+  </block>
+
+  <!-- 还没登记 -->
+  <block wx:else>
+    <view class="me">
+      <view class="me__avatar">👤</view>
+      <view class="me__name">还没登记</view>
+      <view class="me__sid">登记后才能预定名额</view>
+    </view>
+
+    <view class="notice notice--strong">
+      <text class="notice__b">本小程序仅登记预定名额</text>，不出售商品、不收取任何费用。
+      预定成功后，请于义卖当天凭取货码到摊位现场付款取货。
+    </view>
+
+    <view class="card">
+      <view class="field">
+        <view class="field__label">学号</view>
+        <input
+          class="field__input"
+          type="number"
+          maxlength="16"
+          placeholder="请输入学号"
+          value="{{sid}}"
+          bindinput="onSidInput"
+        />
+        <view class="field__tip">用于现场核对身份，请填写本人真实学号</view>
+      </view>
+
+      <view class="field">
+        <view class="field__label">姓名</view>
+        <input
+          class="field__input"
+          maxlength="12"
+          placeholder="请输入真实姓名"
+          value="{{name}}"
+          bindinput="onNameInput"
+        />
+      </view>
+
+      <view class="agree" bindtap="toggleAgree">
+        <view class="agree__box {{agree ? 'agree__box--on' : ''}}"></view>
+        <view class="agree__text">
+          我已阅读并同意《活动规则》，承诺预定后按时取货；无故未取货将影响后续活动参与。
+        </view>
+      </view>
+
+      <button
+        class="btn {{submitting ? 'btn--disabled' : ''}}"
+        disabled="{{submitting}}"
+        bindtap="submitRegister"
+      >{{submitting ? '提交中…' : '完成登记'}}</button>
+    </view>
+
+    <view class="footer-note">信息仅用于本次活动身份核对，活动结束后统一删除</view>
+  </block>
+
+</view>

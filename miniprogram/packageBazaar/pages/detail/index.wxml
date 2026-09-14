@@ -1,0 +1,91 @@
+<view class="page page--actionbar">
+
+  <view wx:if="{{error}}" class="notice notice--strong">{{error}}</view>
+
+  <block wx:if="{{item}}">
+    <view class="hero {{item.tint}}">
+      <text class="hero__emoji">{{item.emoji || '🎁'}}</text>
+    </view>
+
+    <view class="title">{{item.name}}</view>
+
+    <view class="card">
+      <view class="card__title">剩余名额</view>
+      <view class="big-quota">
+        <text class="big-quota__num {{level === 'none' ? 'big-quota__num--none' : ''}}">{{item.remainingQuota}}</text>
+        <text class="big-quota__total">/ {{item.totalQuota}} 份</text>
+      </view>
+      <view class="quota__bar">
+        <view class="quota__fill {{level === 'low' ? 'quota__fill--low' : ''}} {{level === 'none' ? 'quota__fill--none' : ''}}" style="width:{{percent}}%"></view>
+      </view>
+      <view class="hint">名额实时更新，以提交时的结果为准</view>
+    </view>
+
+    <view class="panel">
+      <view class="panel__row"><text class="panel__k">所属摊位</text><text class="panel__v">{{stall.name || '—'}}</text></view>
+      <view class="panel__row"><text class="panel__k">摊位位置</text><text class="panel__v">{{stall.loc || '—'}}</text></view>
+      <view class="panel__row"><text class="panel__k">取货方式</text><text class="panel__v">凭取货码现场付款取货</text></view>
+    </view>
+
+    <view class="card" wx:if="{{item.description}}">
+      <view class="card__title">物品说明</view>
+      <view class="desc">{{item.description}}</view>
+    </view>
+
+    <view class="notice">
+      <text class="notice__b">预定免费，仅锁定名额。</text>
+      本小程序不收款，请于义卖当天凭取货码到摊位现场付款取货。
+    </view>
+  </block>
+
+  <!-- 底部操作栏 -->
+  <view class="actionbar" wx:if="{{item}}">
+    <view class="actionbar__info">
+      <view class="actionbar__t1">{{myReservation ? '你已预定' : '剩余名额'}}</view>
+      <view class="actionbar__t2">{{myReservation ? (item.name) : quotaText}}</view>
+    </view>
+    <button
+      class="btn {{item.remainingQuota <= 0 && !myReservation ? 'btn--disabled' : ''}} {{myReservation ? 'btn--ghost' : ''}}"
+      disabled="{{item.remainingQuota <= 0 && !myReservation}}"
+      bindtap="onPrimaryTap"
+    >{{myReservation ? '查看取货码' : (item.remainingQuota <= 0 ? '已约满' : '预定名额')}}</button>
+  </view>
+
+</view>
+
+<!-- 确认预定弹层 -->
+<view wx:if="{{showSheet}}" class="mask" bindtap="closeSheet">
+  <view class="sheet" catchtap="noop">
+    <view class="sheet__grab"></view>
+    <view class="sheet__title">确认预定</view>
+
+    <view class="sheet__summary">
+      <view class="sheet__thumb {{item.tint}}">{{item.emoji || '🎁'}}</view>
+      <view class="grow">
+        <view class="sheet__name">{{item.name}}</view>
+        <view class="sheet__stall">{{stall.name}} · {{stall.loc}}</view>
+      </view>
+    </view>
+
+    <view class="stepper" wx:if="{{maxQty > 1}}">
+      <text class="stepper__label">预定数量</text>
+      <view class="stepper__ctrl">
+        <view class="stepper__btn {{qty <= 1 ? 'stepper__btn--off' : ''}}" bindtap="decQty">−</view>
+        <text class="stepper__qty">{{qty}}</text>
+        <view class="stepper__btn {{qty >= maxQty ? 'stepper__btn--off' : ''}}" bindtap="incQty">＋</view>
+      </view>
+    </view>
+
+    <view class="panel">
+      <view class="panel__row"><text class="panel__k">取货人</text><text class="panel__v">{{userLabel}}</text></view>
+      <view class="panel__row"><text class="panel__k">取货地点</text><text class="panel__v">{{stall.name}}</text></view>
+    </view>
+
+    <view class="sheet__tip">预定成功后名额即为你保留。如无法到场，请提前取消。</view>
+
+    <button class="btn {{submitting ? 'btn--disabled' : ''}}" disabled="{{submitting}}" bindtap="confirmReserve">
+      {{submitting ? '提交中…' : '确认预定'}}
+    </button>
+    <button class="btn btn--grey sheet__cancel" bindtap="closeSheet">再想想</button>
+  </view>
+</view>

@@ -1,0 +1,62 @@
+<view class="page page--tabbar">
+
+  <view class="hero">
+    <view class="hero__mark">🎪</view>
+    <view class="hero__title">IMNU 校园义卖</view>
+    <view class="hero__sub">{{eventText}}</view>
+  </view>
+
+  <view wx:if="{{error}}" class="notice notice--strong" bindtap="load">
+    <text class="notice__b">加载失败：</text>{{error}}
+    <text>（点一下重试）</text>
+  </view>
+
+  <!-- 主入口：义卖 -->
+  <view class="entry entry--primary" bindtap="goItems" hover-class="entry--hover">
+    <view class="entry__icon">🎁</view>
+    <view class="grow">
+      <view class="entry__title">逛义卖</view>
+      <view class="entry__desc">{{bazaarDesc}}</view>
+    </view>
+    <view class="entry__arrow">›</view>
+  </view>
+
+  <view class="grid2">
+    <view class="entry entry--small" bindtap="goMyReservations" hover-class="entry--hover">
+      <view class="entry__icon entry__icon--sm">🎫</view>
+      <view class="entry__title entry__title--sm">我的预定</view>
+      <view class="entry__desc entry__desc--sm">查看取货码</view>
+    </view>
+
+    <view class="entry entry--small" bindtap="goCats" hover-class="entry--hover">
+      <view class="entry__icon entry__icon--sm">🐱</view>
+      <view class="entry__title entry__title--sm">猫猫图鉴</view>
+      <view class="entry__desc entry__desc--sm">校园里的它们</view>
+    </view>
+  </view>
+
+  <!-- 只有志愿者看得到。注意这只是界面控制，真正的权限判断在服务端。 -->
+  <view wx:if="{{isStaff}}" class="entry entry--staff" bindtap="goScan" hover-class="entry--hover">
+    <view class="entry__icon">✅</view>
+    <view class="grow">
+      <view class="entry__title">志愿者核销台</view>
+      <view class="entry__desc">扫码或输码，现场核销取货</view>
+    </view>
+    <view class="entry__arrow">›</view>
+  </view>
+
+  <view wx:if="{{!hasUser}}" class="entry entry--hint" bindtap="goProfile" hover-class="entry--hover">
+    <view class="entry__icon entry__icon--sm">👤</view>
+    <view class="grow">
+      <view class="entry__title entry__title--sm">还没登记学号</view>
+      <view class="entry__desc entry__desc--sm">登记后才能预定名额</view>
+    </view>
+    <view class="entry__arrow">›</view>
+  </view>
+
+  <view class="notice">
+    <text class="notice__b">本小程序只登记预定名额，不收款、不做线上交易。</text>
+    请于义卖当天凭取货码到摊位现场付款取货。
+  </view>
+
+</view>

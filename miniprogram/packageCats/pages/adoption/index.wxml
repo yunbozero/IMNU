@@ -1,0 +1,20 @@
+<view class="page">
+
+  <view class="intro">
+    <view class="intro__title">送养与救助动态</view>
+    <view class="intro__sub">以下信息由校内喂养志愿者维护</view>
+  </view>
+
+  <view wx:for="{{items}}" wx:key="id" class="card">
+    <view class="card__title">{{item.title}}</view>
+    <view class="time">{{item.time}}</view>
+    <view class="text">{{item.text}}</view>
+  </view>
+
+  <view class="notice">
+    领养是一份十几年的责任。请确认宿舍条件、家人意见和毕业后能否带走，再决定要不要带它回家。
+  </view>
+
+  <button class="btn contact" bindtap="onContact">联系我们</button>
+
+</view>

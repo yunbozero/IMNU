@@ -1,0 +1,191 @@
+/* ============================================================
+   IMNU 校园义卖 · 全局样式
+   设计语言沿用前端原型：陶土橙 + 暖米底 + 白色大圆角卡片
+   原型按 375px 宽设计，小程序用 rpx，1px = 2rpx
+   ============================================================ */
+
+page {
+  --brand: #D2694A;
+  --brand-dark: #BF5738;
+  --brand-soft: #F7E2D9;
+  --brand-tint: #FBEDE7;
+
+  --text: #2B2119;
+  --text-2: #8C7A70;
+  --text-3: #B5A69C;
+
+  --ok: #3E9E6A;
+  --danger: #C6432F;
+
+  background: linear-gradient(180deg, #FDF3ED 0%, #FBEBE3 520rpx, #FDF5F0 100%);
+  min-height: 100vh;
+  color: var(--text);
+  font-size: 30rpx;
+  line-height: 1.6;
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", sans-serif;
+}
+
+/* ---------- 布局 ---------- */
+.page { padding: 0 32rpx 40rpx; }
+.page--tabbar { padding-bottom: 180rpx; }
+.page--actionbar { padding-bottom: 200rpx; }
+.row { display: flex; align-items: center; }
+.row--between { display: flex; align-items: center; justify-content: space-between; }
+.grow { flex: 1; min-width: 0; }
+
+/* ---------- 卡片 ---------- */
+.card {
+  background: #fff;
+  border-radius: 32rpx;
+  padding: 32rpx;
+  box-shadow: 0 4rpx 20rpx rgba(150, 90, 60, 0.06);
+  margin-top: 28rpx;
+}
+.card__title { font-size: 32rpx; font-weight: 700; margin-bottom: 16rpx; }
+
+.panel { background: #fff; border-radius: 32rpx; box-shadow: 0 4rpx 20rpx rgba(150, 90, 60, 0.06); }
+.panel__row {
+  display: flex; justify-content: space-between; gap: 28rpx;
+  padding: 26rpx 32rpx; font-size: 27rpx;
+  border-bottom: 1rpx solid rgba(43, 33, 25, 0.06);
+}
+.panel__row:last-child { border-bottom: 0; }
+.panel__k { color: var(--text-2); flex: 0 0 auto; }
+.panel__v { font-weight: 600; text-align: right; }
+
+/* ---------- 提示条 ---------- */
+.notice {
+  background: #FDF0E9;
+  border: 1rpx solid #F4DDD0;
+  border-radius: 28rpx;
+  padding: 24rpx 28rpx;
+  font-size: 25rpx;
+  line-height: 1.65;
+  color: #8A5A44;
+  margin-top: 28rpx;
+}
+.notice--strong { background: #FBE9E4; border-color: #F3D2C8; color: #A83E22; }
+.notice__b { font-weight: 700; }
+
+/* ---------- 按钮 ---------- */
+.btn {
+  width: 100%;
+  border-radius: 28rpx;
+  padding: 28rpx 36rpx;
+  font-size: 32rpx;
+  font-weight: 600;
+  background: var(--brand);
+  color: #fff;
+  line-height: 1.2;
+  border: 0;
+}
+.btn::after { border: 0; }
+.btn--ghost { background: #fff; color: var(--brand); border: 3rpx solid var(--brand-soft); }
+.btn--grey { background: #F2EAE4; color: var(--text-2); }
+.btn--disabled { background: #E6DAD3 !important; color: #A99B92 !important; }
+.btn--danger { background: #fff; color: var(--danger); border: 3rpx solid #F2D8D3; }
+
+/* ---------- 底部操作栏 ---------- */
+.actionbar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+  background: rgba(255, 255, 255, 0.97);
+  border-top: 1rpx solid rgba(43, 33, 25, 0.08);
+  padding: 20rpx 32rpx calc(20rpx + env(safe-area-inset-bottom));
+  display: flex; align-items: center; gap: 24rpx;
+}
+.actionbar__info { flex: 1; min-width: 0; }
+.actionbar__t1 { font-size: 24rpx; color: var(--text-2); }
+.actionbar__t2 { font-size: 28rpx; font-weight: 700; }
+.actionbar .btn { width: auto; flex: 0 0 auto; padding: 28rpx 56rpx; }
+
+/* ---------- 标签 ---------- */
+.tag {
+  display: inline-block; font-size: 21rpx; font-weight: 600;
+  padding: 4rpx 16rpx; border-radius: 14rpx;
+  background: var(--brand-soft); color: var(--brand-dark);
+}
+.tag--grey { background: #F1EAE5; color: var(--text-2); }
+.tag--green { background: #E8F5EE; color: var(--ok); }
+
+/* ---------- 色底（占位图） ---------- */
+.t-pink { background: #FBE4E4; }
+.t-green { background: #E6F0E6; }
+.t-blue { background: #E5EAF6; }
+.t-yellow { background: #FBF3D8; }
+.t-purple { background: #EFE7F7; }
+.t-orange { background: #FBE7DC; }
+
+/* ---------- 名额进度 ---------- */
+.quota { margin-top: 10rpx; }
+.quota__text { display: flex; justify-content: space-between; font-size: 22rpx; color: var(--text-2); }
+.quota__num { font-weight: 700; color: var(--brand); }
+.quota__num--low { color: #E08A3C; }
+.quota__num--none { color: var(--text-3); }
+.quota__bar { height: 8rpx; border-radius: 4rpx; background: #F1E6DF; overflow: hidden; margin-top: 10rpx; }
+.quota__fill { height: 100%; background: var(--brand); border-radius: 4rpx; }
+.quota__fill--low { background: #E08A3C; }
+.quota__fill--none { background: #CFC3BB; }
+
+/* ---------- 空状态 ---------- */
+.empty { text-align: center; padding: 120rpx 40rpx; color: var(--text-3); }
+.empty__icon { font-size: 96rpx; margin-bottom: 24rpx; opacity: 0.6; }
+.empty__text { font-size: 27rpx; margin-bottom: 36rpx; }
+
+/* ---------- 取货码 ---------- */
+.codebox {
+  background: #fff; border-radius: 40rpx; padding: 44rpx 36rpx;
+  box-shadow: 0 4rpx 20rpx rgba(150, 90, 60, 0.06);
+  text-align: center; margin-top: 28rpx;
+}
+.codebox__label { font-size: 23rpx; color: var(--text-2); margin-bottom: 16rpx; }
+.codebox__digits {
+  font-size: 76rpx; font-weight: 800; letter-spacing: 10rpx;
+  font-variant-numeric: tabular-nums; line-height: 1.2;
+}
+.codebox__hint { font-size: 24rpx; color: var(--text-2); margin-top: 20rpx; line-height: 1.6; }
+
+/* ---------- 状态条 ---------- */
+.statusbar-card {
+  display: flex; align-items: center; gap: 20rpx;
+  border-radius: 28rpx; padding: 26rpx 32rpx;
+  font-size: 27rpx; font-weight: 600; margin-top: 28rpx;
+}
+.statusbar-card--ok { background: #E8F5EE; color: var(--ok); }
+.statusbar-card--wait { background: var(--brand-tint); color: var(--brand-dark); }
+.statusbar-card--off { background: #F1EAE5; color: var(--text-2); }
+
+/* ---------- 志愿者端大字按钮 ---------- */
+.bigbtn {
+  width: 100%; border-radius: 36rpx; background: var(--brand); color: #fff;
+  padding: 60rpx 40rpx; font-size: 40rpx; font-weight: 700; letter-spacing: 2rpx;
+  line-height: 1.2; border: 0;
+  box-shadow: 0 12rpx 36rpx rgba(210, 105, 74, 0.25);
+}
+.bigbtn::after { border: 0; }
+.bigbtn--sec {
+  background: #fff; color: var(--brand); border: 3rpx solid var(--brand-soft);
+  box-shadow: 0 4rpx 20rpx rgba(150, 90, 60, 0.06);
+  padding: 40rpx; font-size: 32rpx;
+}
+
+/* ---------- 数字键盘 ---------- */
+.slots { display: flex; gap: 18rpx; justify-content: center; margin: 24rpx 0; }
+.slots__cell {
+  width: 88rpx; height: 112rpx; border-radius: 24rpx; background: #F6EFEA;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 48rpx; font-weight: 800;
+}
+.slots__cell--filled { background: var(--brand-soft); }
+.slots__cell--cursor { box-shadow: inset 0 0 0 4rpx var(--brand); background: #fff; }
+
+.keys { display: flex; flex-wrap: wrap; }
+.keys__item {
+  width: 33.333%; box-sizing: border-box; padding: 8rpx;
+}
+.keys__btn {
+  height: 112rpx; border-radius: 26rpx; background: #F6EFEA;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 42rpx; font-weight: 600; border: 0;
+}
+.keys__btn::after { border: 0; }
+.keys__btn--fn { font-size: 30rpx; color: var(--text-2); background: transparent; }

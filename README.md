@@ -19,10 +19,32 @@
 | 微信长图（学生端 / 管理端） | ✅ 已展示（产物可再生，不入库） | [docs/longimage-student.html](docs/longimage-student.html) · [docs/longimage-admin.html](docs/longimage-admin.html) |
 | **阶段 1 · 后端核心**（数据模型 + 防超卖 + 核销） | ✅ 已完成 | [docs/data-model.md](docs/data-model.md) · `server/` |
 | **阶段 3 · 后端接口**（鉴权 + HTTP 接口） | ✅ 已完成 | [docs/api.md](docs/api.md) |
-| 阶段 2 · 小程序分包骨架 | ⏸ 待启动（等方案确认） | — |
+| **阶段 2 · 小程序分包骨架** | ✅ 已完成 | `miniprogram/` |
 | 阶段 4 · 阿里云部署 | 🔧 脚本已就绪，等域名与备案 | [docs/deploy-alicloud.md](docs/deploy-alicloud.md) · `deploy/` |
 | 阶段 5 · 联调与演练 | ⏸ 待启动 | — |
-| 阶段 6 · 接入猫猫图鉴分包 | ⏸ 以后 | — |
+| 阶段 6 · 猫猫图鉴内容填充 | ⏸ 骨架已就位，等真实数据 | `miniprogram/packageCats/` |
+
+### 小程序结构
+
+```
+miniprogram/
+  app.json / app.js / app.wxss     全局配置与样式（设计语言沿用原型）
+  config.js                        换环境只改这一个文件
+  data/cats.js                     猫猫图鉴静态数据（必须在主包）
+  services/platform.js             把 wx 的能力收在一处 → 可在 Node 里测试
+  services/api.js                  接口客户端，翻译 ok:false 约定
+  services/session.js              登录、登记、token
+  pages/                           主包：首页 / 猫猫图鉴 / 我的
+  packageBazaar/                   分包：义卖全部页面
+  packageCats/                     分包：图鉴详情与送养
+```
+
+**两条微信的硬性规则，已经变成断言：**
+
+- **tabBar 页面必须在主包** —— 所以「猫猫图鉴」的入口页在 `pages/cats`，其余在 `packageCats`
+- **主包不能引用分包的文件** —— 所以图鉴数据 `data/cats.js` 放主包（分包引用主包是允许的）
+
+将来要拆成两个小程序，`packageCats/` 整个搬走即可，义卖一行不用改。
 
 ### ⏰ 现在就该去启动备案
 

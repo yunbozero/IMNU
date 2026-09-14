@@ -1,0 +1,54 @@
+<view class="page">
+
+  <view wx:if="{{error}}" class="notice notice--strong">{{error}}</view>
+
+  <block wx:if="{{reservation}}">
+
+    <view wx:if="{{fresh}}" class="fresh">
+      <view class="fresh__icon">✓</view>
+      <view class="fresh__title">预定成功，名额已锁定</view>
+    </view>
+
+    <view class="{{statusClass}}">
+      <text>{{statusText}}</text>
+      <text wx:if="{{reservation.redeemedAt}}" class="statusbar-card__time">· {{reservation.redeemedAt}}</text>
+    </view>
+
+    <view class="codebox">
+      <view class="codebox__label">取货码</view>
+      <view class="codebox__digits">{{codeText}}</view>
+      <view class="codebox__hint">
+        取货时向志愿者出示或报出这 6 位数字
+      </view>
+      <view class="copy" bindtap="copyCode">复制取货码</view>
+    </view>
+
+    <!--
+      TODO（下一阶段）：这里要放真正的二维码，志愿者扫一下就能核销。
+      需要一个小程序端的二维码生成器，或者由后端返回 base64 图片。
+      目前可用路径是志愿者在核销台手动输入这 6 位数字，功能不受影响。
+    -->
+
+    <view class="panel">
+      <view class="panel__row"><text class="panel__k">物品</text><text class="panel__v">{{reservation.itemName}}</text></view>
+      <view class="panel__row"><text class="panel__k">数量</text><text class="panel__v">{{reservation.qty}} 份</text></view>
+      <view class="panel__row"><text class="panel__k">取货摊位</text><text class="panel__v">{{reservation.stallName}}</text></view>
+      <view class="panel__row"><text class="panel__k">摊位位置</text><text class="panel__v">{{reservation.stallLoc}}</text></view>
+    </view>
+
+    <view wx:if="{{reservation.status === 'reserved'}}" class="notice notice--strong">
+      <text class="notice__b">你还没有付款。</text>
+      本小程序只锁定名额，不收任何费用。请于活动当天到摊位现场付款取货。
+    </view>
+
+    <view class="notice">
+      请当面出示，<text class="notice__b">不要截图转发</text>给他人 ——
+      取货码被别人用掉之后，你就取不到货了。
+    </view>
+
+    <button wx:if="{{canCancel}}" class="btn btn--danger cancel" bindtap="onCancel">
+      取消预定并释放名额
+    </button>
+
+  </block>
+</view>

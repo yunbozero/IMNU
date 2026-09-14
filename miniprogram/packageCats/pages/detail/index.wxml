@@ -1,0 +1,24 @@
+<view class="page" wx:if="{{cat}}">
+
+  <view class="hero {{cat.tint}}">
+    <text class="hero__emoji">{{cat.emoji}}</text>
+  </view>
+
+  <view class="name-row">
+    <text class="name">{{cat.name}}</text>
+    <text class="tag {{cat.status === 'onCampus' ? 'tag--green' : 'tag--grey'}}">{{statusText}}</text>
+  </view>
+
+  <view class="panel">
+    <view class="panel__row"><text class="panel__k">性别</text><text class="panel__v">{{cat.gender}}</text></view>
+    <view class="panel__row"><text class="panel__k">出没地点</text><text class="panel__v">{{cat.location}}</text></view>
+  </view>
+
+  <view class="card">
+    <view class="card__title">性格</view>
+    <view class="body-text">{{cat.personality}}</view>
+  </view>
+
+  <view class="notice" wx:if="{{cat.note}}">{{cat.note}}</view>
+
+</view>

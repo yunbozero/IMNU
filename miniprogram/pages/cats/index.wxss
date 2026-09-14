@@ -1,0 +1,59 @@
+.cats-hero { text-align: center; padding: 50rpx 0 36rpx; }
+.cats-hero__avatar {
+  width: 176rpx; height: 176rpx; margin: 0 auto 26rpx;
+  border-radius: 50%; background: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 78rpx;
+  box-shadow: 0 12rpx 40rpx rgba(150, 90, 60, 0.13);
+}
+.cats-hero__title { font-size: 42rpx; font-weight: 800; letter-spacing: 1rpx; }
+.cats-hero__sub { font-size: 25rpx; color: var(--text-2); margin-top: 10rpx; }
+
+.segmented {
+  display: flex; gap: 8rpx; background: #F3E2D9;
+  border-radius: 26rpx; padding: 8rpx; margin: 36rpx 0 28rpx;
+}
+.segmented__item {
+  flex: 1; text-align: center; font-size: 27rpx; font-weight: 600;
+  color: var(--text-2); padding: 18rpx 0; border-radius: 20rpx;
+}
+.segmented__item--on { background: var(--brand); color: #fff; }
+
+.cat-grid { display: flex; flex-wrap: wrap; gap: 24rpx; }
+.cat-card {
+  width: calc(50% - 12rpx);
+  box-sizing: border-box;
+  background: #fff; border-radius: 32rpx; padding: 20rpx;
+  box-shadow: 0 4rpx 20rpx rgba(150, 90, 60, 0.06);
+}
+.cat-card--hover { opacity: 0.75; }
+.cat-card__thumb {
+  width: 100%; height: 208rpx; border-radius: 24rpx;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 84rpx;
+}
+.cat-card__name { font-size: 30rpx; font-weight: 700; margin-top: 18rpx; }
+.cat-card__loc {
+  font-size: 22rpx; color: var(--text-3); margin-top: 6rpx;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.tip { display: flex; font-size: 26rpx; line-height: 1.65; margin-top: 10rpx; }
+.tip__label { flex: 0 0 auto; font-weight: 700; color: var(--brand); }
+.tip__label--ok { color: var(--ok); }
+.tip__text { color: var(--text-2); }
+
+.entry {
+  display: flex; align-items: center; gap: 24rpx;
+  background: #fff; border-radius: 32rpx; padding: 32rpx; margin-top: 28rpx;
+  box-shadow: 0 4rpx 20rpx rgba(150, 90, 60, 0.06);
+}
+.entry--hover { opacity: 0.75; }
+.entry__icon {
+  width: 88rpx; height: 88rpx; flex: 0 0 88rpx; border-radius: 26rpx;
+  background: var(--brand-tint);
+  display: flex; align-items: center; justify-content: center; font-size: 44rpx;
+}
+.entry__title { font-size: 34rpx; font-weight: 700; }
+.entry__desc { font-size: 24rpx; color: var(--text-2); margin-top: 6rpx; }
+.entry__arrow { font-size: 44rpx; color: var(--text-3); line-height: 1; }

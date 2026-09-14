@@ -1,0 +1,62 @@
+<view class="page">
+
+  <view wx:if="{{error}}" class="notice notice--strong">{{error}}</view>
+
+  <block wx:if="{{isStaff}}">
+    <view class="desk">
+      <view class="desk__icon">🏪</view>
+      <view class="grow">
+        <view class="desk__title">核销台</view>
+        <view class="desk__sub">核销前请先确认已收款</view>
+      </view>
+      <view class="desk__count">
+        <view class="desk__num">{{doneCount}}</view>
+        <view class="desk__label">本次已核销</view>
+      </view>
+    </view>
+
+    <button class="bigbtn" bindtap="onScan">📷　扫码核销</button>
+    <button class="bigbtn bigbtn--sec pad-btn" bindtap="openPad">⌨️　手动输入取货码</button>
+
+    <view class="notice">
+      同学扫不动码时，让他直接报 6 位数字，用「手动输入」核销。
+      两条路都通，别在摊位前卡住。
+    </view>
+  </block>
+
+  <!-- 核销结果：占满全屏，一眼可辨 -->
+  <view wx:if="{{result}}" class="result {{result.ok ? 'result--ok' : 'result--bad'}}" bindtap="closeResult">
+    <view class="result__mark">{{result.ok ? '✓' : '✕'}}</view>
+    <view class="result__title">{{result.title}}</view>
+    <view class="result__sub">{{result.sub}}</view>
+    <view wx:if="{{result.rows.length}}" class="result__detail">
+      <view wx:for="{{result.rows}}" wx:key="0" class="result__row">
+        <text>{{item[0]}}</text><text>{{item[1]}}</text>
+      </view>
+    </view>
+    <view class="result__hint">{{result.ok ? '3 秒后自动返回' : '点任意处返回'}}</view>
+  </view>
+
+</view>
+
+<!-- 手动输码 -->
+<view wx:if="{{showPad}}" class="mask" bindtap="closePad">
+  <view class="sheet" catchtap="noop">
+    <view class="sheet__grab"></view>
+    <view class="sheet__title sheet__title--center">输入取货码</view>
+    <view class="sheet__tip sheet__tip--center">请同学报出取货码</view>
+
+    <view class="slots">
+      <view wx:for="{{slots}}" wx:key="index" class="{{item.cls}}">{{item.ch}}</view>
+    </view>
+
+    <view class="keys">
+      <view class="keys__item" wx:for="{{[1,2,3,4,5,6,7,8,9]}}" wx:key="*this">
+        <button class="keys__btn" data-k="{{item}}" bindtap="onKey">{{item}}</button>
+      </view>
+      <view class="keys__item"><button class="keys__btn keys__btn--fn" data-k="clear" bindtap="onKey">清空</button></view>
+      <view class="keys__item"><button class="keys__btn" data-k="0" bindtap="onKey">0</button></view>
+      <view class="keys__item"><button class="keys__btn keys__btn--fn" data-k="del" bindtap="onKey">⌫</button></view>
+    </view>
+  </view>
+</view>

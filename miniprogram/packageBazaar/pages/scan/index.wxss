@@ -1,0 +1,62 @@
+.desk {
+  display: flex; align-items: center; gap: 24rpx;
+  background: #fff; border-radius: 32rpx; padding: 28rpx 32rpx; margin: 28rpx 0;
+  box-shadow: 0 4rpx 20rpx rgba(150, 90, 60, 0.06);
+}
+.desk__icon {
+  width: 84rpx; height: 84rpx; flex: 0 0 84rpx; border-radius: 26rpx;
+  background: var(--brand-tint);
+  display: flex; align-items: center; justify-content: center; font-size: 40rpx;
+}
+.desk__title { font-size: 30rpx; font-weight: 700; }
+.desk__sub { font-size: 23rpx; color: var(--text-2); margin-top: 4rpx; }
+.desk__count { text-align: right; }
+.desk__num { font-size: 44rpx; font-weight: 800; color: var(--brand); line-height: 1.1; }
+.desk__label { font-size: 21rpx; color: var(--text-2); }
+
+.pad-btn { margin-top: 24rpx; }
+
+/* ---------- 弹层 ---------- */
+.mask {
+  position: fixed; inset: 0; z-index: 100;
+  background: rgba(40, 25, 18, 0.42);
+  display: flex; align-items: flex-end;
+}
+.sheet {
+  width: 100%; background: #fff;
+  border-radius: 40rpx 40rpx 0 0;
+  padding: 24rpx 32rpx calc(32rpx + env(safe-area-inset-bottom));
+  box-sizing: border-box;
+}
+.sheet__grab { width: 76rpx; height: 8rpx; border-radius: 4rpx; background: #E8DCD4; margin: 0 auto 24rpx; }
+.sheet__title { font-size: 34rpx; font-weight: 700; }
+.sheet__title--center { text-align: center; }
+.sheet__tip { font-size: 25rpx; color: var(--text-2); margin-top: 8rpx; }
+.sheet__tip--center { text-align: center; }
+
+/* ---------- 核销结果 ---------- */
+.result {
+  position: fixed; inset: 0; z-index: 200;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 64rpx 48rpx; text-align: center; color: #fff;
+}
+.result--ok { background: linear-gradient(170deg, #46A874, #2E855A); }
+.result--bad { background: linear-gradient(170deg, #CC4B36, #A5341F); }
+.result__mark {
+  width: 196rpx; height: 196rpx; border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 108rpx; font-weight: 700; margin-bottom: 40rpx;
+}
+.result__title { font-size: 54rpx; font-weight: 800; letter-spacing: 2rpx; }
+.result__sub { font-size: 29rpx; opacity: 0.94; margin-top: 16rpx; line-height: 1.6; }
+.result__detail {
+  background: rgba(255, 255, 255, 0.17); border-radius: 32rpx;
+  padding: 8rpx 36rpx; width: 100%; box-sizing: border-box; margin-top: 48rpx;
+}
+.result__row {
+  display: flex; justify-content: space-between; gap: 28rpx;
+  padding: 22rpx 0; font-size: 29rpx;
+}
+.result__row text:last-child { font-weight: 700; text-align: right; }
+.result__hint { font-size: 24rpx; opacity: 0.8; margin-top: 48rpx; }
