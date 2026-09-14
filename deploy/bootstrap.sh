@@ -17,8 +17,8 @@ APP_DIR=/srv/bazaar/app
 DATA_DIR=/srv/bazaar/data
 BACKUP_DIR=/srv/bazaar/backup
 SERVICE=bazaar
-NODE_MAJOR=22
 BACKUP_KEEP=14
+# Node 的最低版本要求见下面「2. Node.js」一节（MIN_NODE_MAJOR / MIN_NODE_MINOR）
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -38,14 +38,42 @@ apt-get update -qq
 apt-get install -y -qq curl ca-certificates gnupg sqlite3 ufw >/dev/null
 
 # ---------- 2. Node.js ----------
-if command -v node >/dev/null && [ "$(node -p 'process.versions.node.split(".")[0]')" -ge "$NODE_MAJOR" ]; then
-  log "Node.js 已满足要求：$(node --version)，跳过安装"
+# 后端用了内置的 node:sqlite，它从 Node 22.5 才有。
+#
+# ★ 不能只看大版本号：22.0~22.4 也是「22」，但没有这个模块。
+# ★ 也不能只看版本号：发行版编译 Node 时可能根本没带 sqlite，
+#   所以直接 require 一下才是真的验证。
+MIN_NODE_MAJOR=22
+MIN_NODE_MINOR=5
+
+node_ok() {
+  command -v node >/dev/null 2>&1 || return 1
+  node -e "
+    const [maj, min] = process.versions.node.split('.').map(Number);
+    const needMaj = $MIN_NODE_MAJOR, needMin = $MIN_NODE_MINOR;
+    if (maj < needMaj || (maj === needMaj && min < needMin)) process.exit(1);
+    require('node:sqlite');
+  " >/dev/null 2>&1
+}
+
+if node_ok; then
+  log "Node.js 已满足要求：$(node --version)"
 else
-  log "安装 Node.js ${NODE_MAJOR}.x"
-  # 后端用了内置的 node:sqlite，Node 版本不够会直接跑不起来
-  curl -fsSL "https://deb.nodesource.com/setup_${NODE_MAJOR}.x" | bash - >/dev/null
-  apt-get install -y -qq nodejs >/dev/null
-  node --version
+  # 先用发行版自带的。Ubuntu 26.04 起自带 Node 22，够用，
+  # 而且少一个第三方源 —— 少一层可能失败的东西。
+  log "尝试用发行版仓库安装 Node.js"
+  apt-get install -y -qq nodejs >/dev/null 2>&1 || true
+
+  if ! node_ok; then
+    log "发行版的 Node 不满足要求，改用 NodeSource 装 ${MIN_NODE_MAJOR}.x"
+    curl -fsSL "https://deb.nodesource.com/setup_${MIN_NODE_MAJOR}.x" | bash - >/dev/null
+    apt-get install -y -qq nodejs >/dev/null
+  fi
+
+  node_ok || die "Node.js 不满足要求：需要 >= ${MIN_NODE_MAJOR}.${MIN_NODE_MINOR} 且带 node:sqlite。
+      当前版本：$(node --version 2>/dev/null || echo '未安装')
+      后端依赖内置的 node:sqlite，装不对会直接跑不起来。"
+  log "Node.js 就绪：$(node --version)"
 fi
 
 # ---------- 3. nginx 与 certbot ----------

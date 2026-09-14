@@ -10,6 +10,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -191,6 +192,42 @@ test('部署：systemd 单元启用了基础加固', () => {
     assert.match(unit, new RegExp(`^${key}=`, 'm'), `缺少加固项 ${key}`);
   }
   assert.match(unit, /^ProtectSystem=strict$/m);
+});
+
+test('部署：Node 版本检查必须校验次版本，而且要真的 require 一次', () => {
+  const src = BOOTSTRAP();
+
+  // node:sqlite 从 Node 22.5 才有。只比大版本的话，22.0~22.4 会被误判成"满足要求"，
+  // 然后服务启动时报 "Cannot find module 'node:sqlite'" —— 报错完全不指向根因。
+  const m = /MIN_NODE_MINOR=(\d+)/.exec(src);
+  assert.ok(m, '缺少 MIN_NODE_MINOR');
+  assert.ok(Number(m[1]) >= 5,
+    `MIN_NODE_MINOR 应当 >= 5（node:sqlite 从 22.5 开始），实际 ${m[1]}`);
+
+  assert.match(src, /min < needMin/, '版本比较里必须包含次版本号');
+
+  // 光看版本号还不够：发行版编译 Node 时可能根本没带 sqlite 模块。
+  // 直接 require 一下才是真的验证。
+  assert.match(src, /require\(['"]node:sqlite['"]\)/,
+    "必须真的 require('node:sqlite') 一次，只看版本号看不出模块在不在");
+});
+
+test('部署：本机 Node 确实带 node:sqlite（否则前后端都跑不起来）', () => {
+  const r = spawnSync(process.execPath, ['-e', "require('node:sqlite'); console.log('ok')"],
+    { encoding: 'utf8' });
+  assert.equal(r.status, 0, `node:sqlite 不可用：${r.stderr}`);
+  assert.match(r.stdout, /ok/);
+});
+
+test('部署：bootstrap.sh 优先用发行版自带的 Node（少一层第三方源依赖）', () => {
+  const src = BOOTSTRAP();
+  // Ubuntu 26.04 自带 Node 22，够用；先试发行版，不行再退回 NodeSource
+  const distroAt = src.indexOf('apt-get install -y -qq nodejs');
+  const nodesourceAt = src.indexOf('deb.nodesource.com');
+  assert.ok(distroAt > 0, '应当先尝试发行版仓库');
+  assert.ok(nodesourceAt > 0, '应当保留 NodeSource 作为退路');
+  assert.ok(distroAt < nodesourceAt,
+    '必须先试发行版自带的 Node —— 少一个第三方源就少一处会失败的地方');
 });
 
 test('部署：ExecStart 指向仓库里的入口文件', () => {
