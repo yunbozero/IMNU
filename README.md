@@ -18,11 +18,18 @@
 | 给组织方的提案（A4 / PDF） | ✅ 已完成 | [docs/proposal.html](docs/proposal.html) |
 | 微信长图（学生端 / 管理端） | ✅ 已展示（产物可再生，不入库） | [docs/longimage-student.html](docs/longimage-student.html) · [docs/longimage-admin.html](docs/longimage-admin.html) |
 | **阶段 1 · 后端核心**（数据模型 + 防超卖 + 核销） | ✅ 已完成 | [docs/data-model.md](docs/data-model.md) · `server/` |
-| 阶段 2 · 小程序分包骨架 | ⏸ 待启动 | — |
+| 阶段 2 · 小程序分包骨架 | ⏸ 待启动（等方案确认） | — |
 | 阶段 3 · HTTP 接入层（鉴权 + 接口） | ⏸ 待启动 | — |
-| 阶段 4 · 阿里云部署（域名 / 备案 / HTTPS） | ⏸ 备案越早启动越好 | — |
+| 阶段 4 · 阿里云部署 | 🔧 脚本已就绪，等阶段 3 的入口文件与备案 | [docs/deploy-alicloud.md](docs/deploy-alicloud.md) · `deploy/` |
 | 阶段 5 · 联调与演练 | ⏸ 待启动 | — |
 | 阶段 6 · 接入猫猫图鉴分包 | ⏸ 以后 | — |
+
+### ⏰ 现在就该去启动备案
+
+**备案是 1–3 周的不可压缩等待期，只能等，所以它是整个项目的关键路径。**
+今天就去买域名和服务器、提交备案；备案期间服务器照样能用来开发，不影响进度。
+
+采购清单、备案要点、验收步骤都写在 [docs/deploy-alicloud.md](docs/deploy-alicloud.md) 里。
 
 ### 后端核心已经证明了什么
 

@@ -1,0 +1,45 @@
+[Unit]
+Description=IMNU 校园义卖 API
+Documentation=https://github.com/yunbozero/IMNU
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=bazaar
+Group=bazaar
+WorkingDirectory=/srv/bazaar/app
+
+Environment=NODE_ENV=production
+Environment=PORT=3000
+Environment=DB_PATH=/srv/bazaar/data/bazaar.db
+
+ExecStart=/usr/bin/node server/http.mjs
+
+Restart=always
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=bazaar
+
+# ---------- 加固 ----------
+# 就算服务被攻破，也把能造成的破坏限制在最小范围
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6
+RestrictNamespaces=true
+LockPersonality=true
+
+# ProtectSystem=strict 会把整个文件系统挂成只读，
+# 这里显式开一个可写目录。SQLite 在 WAL 模式下会在同目录生成
+# -wal 和 -shm 文件，所以必须放行整个数据目录，而不只是那个 .db 文件。
+ReadWritePaths=/srv/bazaar/data
+
+[Install]
+WantedBy=multi-user.target
