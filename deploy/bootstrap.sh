@@ -203,22 +203,35 @@ fi
 log "初始化完成"
 cat <<'EOF'
 
-接下来：
+接下来（按顺序）：
 
-  1. 拉代码（如果还没拉）
-       sudo -u bazaar git clone <仓库地址> /srv/bazaar/app
+  1. 填小程序密钥
+       sudo nano /etc/bazaar/env
+       # 填 WX_APPID / WX_SECRET；不要动 SESSION_SECRET（改了所有人掉登录）
 
-  2. 起服务
+  2. 起服务并验证后端
        sudo systemctl start bazaar
-       sudo systemctl status bazaar
+       sudo systemctl status bazaar --no-pager
+       curl -s http://127.0.0.1:3000/api/health     # 看到 {"ok":true,...} 就成了
 
-  3. 域名解析生效、备案通过之后申请证书
+  3. 设立第一个超管（不做的话没人能当管理员）
+       # 先让一个人在小程序里完成登记，然后：
+       sudo -u bazaar DB_PATH=/srv/bazaar/data/bazaar.db \
+         node /srv/bazaar/app/scripts/set-owner.mjs --list
+       # 从列表里找到 openid，设成超管
+       sudo -u bazaar DB_PATH=/srv/bazaar/data/bazaar.db \
+         node /srv/bazaar/app/scripts/set-owner.mjs <openid>
+
+  4. 域名解析生效、备案通过之后申请证书
        sudo certbot --nginx -d 你的域名
 
-  4. 验收
-       curl -s https://你的域名/api/health
+  5. 验收首页和接口（首页不能是 404，备案抽查会看）
+       curl -sI https://你的域名/ | head -1
+       curl -s  https://你的域名/api/health
 
-  5. 别忘了微信公众平台 → 开发设置 → 服务器域名
-     把 https://你的域名 加进 request 合法域名
+  6. 微信公众平台 → 开发管理 → 开发设置 → 服务器域名
+       把 https://你的域名 加进 request 合法域名
+
+完整说明见 docs/deploy-alicloud.md
 
 EOF
