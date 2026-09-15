@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>IMNU 校园义卖</title>
+<style>
+  :root { --brand:#D2694A; --ink:#2B2119; --ink2:#6B5A50; --line:#EFE0D7; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+    padding: 32px 20px;
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: linear-gradient(180deg, #FDF3ED 0%, #FBEBE3 60%, #FDF5F0 100%);
+    color: var(--ink); line-height: 1.7;
+  }
+  .card {
+    width: 100%; max-width: 560px; background: #fff;
+    border-radius: 20px; padding: 40px 34px;
+    box-shadow: 0 6px 28px rgba(150, 90, 60, 0.09);
+  }
+  .mark { font-size: 48px; line-height: 1; margin-bottom: 22px; }
+  h1 { margin: 0 0 10px; font-size: 25px; font-weight: 800; letter-spacing: .5px; }
+  .sub { margin: 0 0 26px; color: var(--ink2); font-size: 14px; }
+  hr { border: 0; border-top: 1px solid var(--line); margin: 26px 0; }
+  p { margin: 0 0 14px; font-size: 14.5px; color: var(--ink2); }
+  p:last-child { margin-bottom: 0; }
+  strong { color: var(--ink); }
+  .note {
+    background: #FDF0E9; border: 1px solid #F4DDD0; border-radius: 12px;
+    padding: 14px 16px; font-size: 13.5px; color: #8A5A44; margin-top: 22px;
+  }
+  .foot { margin-top: 28px; font-size: 12.5px; color: #9A887E; }
+</style>
+</head>
+<body>
+  <main class="card">
+    <div class="mark">🎪</div>
+    <h1>IMNU 校园义卖</h1>
+    <p class="sub">内蒙古师范大学 · 校园公益活动</p>
+
+    <hr>
+
+    <p>
+      本域名用于<strong>「IMNU 校园义卖」微信小程序</strong>的后端服务，
+      为小程序提供活动信息、名额登记与现场核销功能。
+    </p>
+    <p>
+      这里<strong>没有网页版</strong>可以浏览。要参加义卖，请在微信中打开
+      「IMNU 校园义卖」小程序。
+    </p>
+
+    <div class="note">
+      本服务仅登记预订名额，<strong>不出售商品、不收取任何费用</strong>。
+      义卖物品的付款与交付均在活动当天的线下摊位完成。
+    </div>
+
+    <p class="foot">
+      接口状态：<a href="/api/health" style="color:var(--brand)">/api/health</a><br>
+      主办方：校学生社团联合会
+    </p>
+  </main>
+</body>
+</html>

@@ -16,6 +16,7 @@ BASE_DIR=/srv/bazaar
 APP_DIR=/srv/bazaar/app
 DATA_DIR=/srv/bazaar/data
 BACKUP_DIR=/srv/bazaar/backup
+WWW_DIR=/srv/bazaar/www
 SERVICE=bazaar
 BACKUP_KEEP=14
 # Node 的最低版本要求见下面「2. Node.js」一节（MIN_NODE_MAJOR / MIN_NODE_MINOR）
@@ -91,10 +92,31 @@ fi
 
 # ---------- 5. 目录 ----------
 log "创建目录"
-mkdir -p "$APP_DIR" "$DATA_DIR" "$BACKUP_DIR"
+mkdir -p "$APP_DIR" "$DATA_DIR" "$BACKUP_DIR" "$WWW_DIR"
 chown -R "$APP_USER:$APP_USER" "$BASE_DIR"
 # 代码目录只读、数据目录可写，与 systemd 的 ProtectSystem=strict 呼应
 chmod 750 "$DATA_DIR" "$BACKUP_DIR"
+
+# 网站根目录要留给 nginx 读：
+#   nginx 的 worker 跑在 www-data 下，不是 $APP_USER。
+#   目录保持 755 让它能进来，页面本身 644 让它能读。
+chmod 755 "$WWW_DIR"
+
+if [ -f "$SCRIPT_DIR/www/index.html" ]; then
+  install -m 644 "$SCRIPT_DIR/www/index.html" "$WWW_DIR/index.html"
+  log "已放置首页 $WWW_DIR/index.html"
+else
+  # 没有页面也不能让根路径空着 —— 备案抽查时 404 会被认为「与备案信息不符」
+  warn "找不到 $SCRIPT_DIR/www/index.html，先放一个占位页"
+  cat > "$WWW_DIR/index.html" <<'HTML'
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
+<title>IMNU 校园义卖</title></head><body>
+<p>本域名用于「IMNU 校园义卖」小程序的后端服务。</p>
+<p>本服务仅登记预订名额，不出售商品、不收取任何费用。</p>
+</body></html>
+HTML
+  chmod 644 "$WWW_DIR/index.html"
+fi
 
 # ---------- 6. 防火墙 ----------
 log "配置防火墙（只放 22 / 80 / 443）"

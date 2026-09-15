@@ -10,7 +10,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -212,11 +211,13 @@ test('部署：Node 版本检查必须校验次版本，而且要真的 require 
     "必须真的 require('node:sqlite') 一次，只看版本号看不出模块在不在");
 });
 
-test('部署：本机 Node 确实带 node:sqlite（否则前后端都跑不起来）', () => {
-  const r = spawnSync(process.execPath, ['-e', "require('node:sqlite'); console.log('ok')"],
-    { encoding: 'utf8' });
-  assert.equal(r.status, 0, `node:sqlite 不可用：${r.stderr}`);
-  assert.match(r.stdout, /ok/);
+test('部署：本机 Node 确实带 node:sqlite（否则前后端都跑不起来）', async () => {
+  // ★ 刻意用进程内 import，不起子进程。
+  //   起子进程要管道，而受限沙箱禁止命名管道 —— 那样这条测试会因为
+  //   "环境跑不了"而失败，和 node:sqlite 在不在毫无关系，纯粹是假信号。
+  await assert.doesNotReject(() => import('node:sqlite'),
+    '本机 Node 缺少 node:sqlite —— 前后端都依赖它');
+  assert.ok(Number(process.versions.node.split('.')[0]) >= 22, 'Node 版本太低');
 });
 
 test('部署：bootstrap.sh 优先用发行版自带的 Node（少一层第三方源依赖）', () => {
@@ -289,6 +290,59 @@ test('部署：nginx 转发了必要的代理头', () => {
   for (const h of ['Host', 'X-Real-IP', 'X-Forwarded-For', 'X-Forwarded-Proto']) {
     assert.match(conf, new RegExp(`proxy_set_header\\s+${h}\\s`), `缺少 proxy_set_header ${h}`);
   }
+});
+
+/* ============================================================
+   根路径：备案抽查不能是 404
+   ============================================================ */
+
+test('部署：根路径必须提供页面，不能返回 404', () => {
+  const conf = NGINX();
+
+  // 备案通过后管局/阿里云会抽查。http://域名/ 返回 404 可能被判定为
+  // 「备案信息与实际提供的服务不符」，严重的话备案会被注销。
+  assert.doesNotMatch(conf, /location\s*\/\s*\{[^}]*return\s+404/,
+    '根路径不能只返回 404 —— 备案抽查会看到');
+  assert.match(conf, /location\s*\/\s*\{[^}]*root\s+\S+/,
+    '根路径应当配置一个静态站点根目录');
+});
+
+test('部署：nginx 的网站根目录与 bootstrap.sh 建的目录一致', () => {
+  const m = /location\s*\/\s*\{[^}]*root\s+(\S+?);/.exec(NGINX());
+  assert.ok(m, 'nginx 里找不到 root 指令');
+  assert.equal(m[1].trim(), shVar(BOOTSTRAP(), 'WWW_DIR'),
+    'nginx 的 root 与 bootstrap.sh 的 WWW_DIR 不一致，页面会 404');
+});
+
+test('部署：首页文件存在，且 bootstrap.sh 会把它装过去', () => {
+  const page = path.join(DEPLOY, 'www', 'index.html');
+  assert.ok(fs.existsSync(page), '缺少 deploy/www/index.html');
+
+  const src = BOOTSTRAP();
+  assert.match(src, /install -m 644 "\$SCRIPT_DIR\/www\/index\.html"/,
+    'bootstrap.sh 应当把首页装到网站根目录');
+  assert.match(src, /先放一个占位页/, '缺少页面文件时应当有兜底，不能让根路径空着');
+});
+
+test('部署：首页内容要和备案口径一致，且不出现金额', () => {
+  const html = read(path.join(DEPLOY, 'www', 'index.html'));
+
+  // 和备案时填的服务内容对得上，抽查才不会被判定为不符
+  assert.match(html, /校园义卖/, '首页应当说明这个域名是做什么的');
+  assert.match(html, /小程序/, '应当说明服务于小程序');
+  assert.match(html, /仅登记.{0,8}名额/, '应当保留"仅登记名额"这句合规声明');
+
+  for (const w of ['价格', '金额', '订单', '购买', '支付']) {
+    assert.ok(!html.includes(w), `首页不该出现「${w}」`);
+  }
+  assert.doesNotMatch(html, /¥|\d+\s*元/, '首页不该出现金额');
+});
+
+test('部署：网站根目录对 nginx 可读（worker 不是运行账号）', () => {
+  // nginx 的 worker 跑在 www-data 下，不是 bazaar。
+  // 目录要是 750 且属主是 bazaar，nginx 根本进不去 —— 表现是 403。
+  assert.match(BOOTSTRAP(), /chmod 755 "\$WWW_DIR"/,
+    'www 目录必须放行到 755，否则 nginx（www-data）读不到');
 });
 
 test('部署：nginx 里还有未替换的域名占位符（提醒换掉）', () => {

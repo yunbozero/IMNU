@@ -168,6 +168,7 @@ const PROD_BASE = 'https://你的域名';
 | 服务在跑 | `systemctl status bazaar` | `active (running)` |
 | 开机自启 | `systemctl is-enabled bazaar` | `enabled` |
 | 接口通 | `curl -s https://你的域名/api/health` | `{"ok":true,...}` |
+| **首页能访问** | `curl -sI https://你的域名/` | `200`，**不能是 404**（见下） |
 | 证书有效 | `echo \| openssl s_client -connect 你的域名:443 2>/dev/null \| openssl x509 -noout -dates` | 未过期 |
 | 续期可用 | `sudo certbot renew --dry-run` | 成功 |
 | 数据库在 | `ls -l /srv/bazaar/data/` | 有 `.db` 文件 |
@@ -176,6 +177,16 @@ const PROD_BASE = 'https://你的域名';
 | 端口没裸奔 | 阿里云安全组只放 22 / 80 / 443 | 3000 不对外 |
 
 **最后一步**：去微信公众平台 → 开发管理 → 开发设置 → 服务器域名，把 `https://你的域名` 加进 **request 合法域名**。这一步不做，小程序发不出请求。
+
+### 为什么根路径必须有一个页面
+
+`/` 返回 404 是会被抓的：**备案通过之后，管局和阿里云会抽查**。如果访问你的域名根路径得到 404，可能被判定为「备案信息与实际提供的服务不符」，**严重的话备案会被注销**。
+
+所以 `bootstrap.sh` 会把 `deploy/www/index.html` 装到 `/srv/bazaar/www/`，nginx 的根路径指向它。页面内容要和备案时填的服务内容对得上。
+
+**要改成自己的网站**，编辑 `/srv/bazaar/www/` 下的文件即可，nginx 不用动。
+
+> 目录权限是特意设成 755 的：nginx 的 worker 跑在 `www-data` 下，**不是** `bazaar` 账号。要是目录跟着数据目录一起收紧成 750，nginx 进不去，表现就是 403。
 
 ---
 
