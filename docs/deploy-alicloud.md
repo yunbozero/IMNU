@@ -97,13 +97,45 @@ sudo certbot renew --dry-run
 
 ## 5. 发布
 
-服务器上首次拉代码：
+### 先解决：服务器怎么拉代码
+
+如果仓库是**私有**的，`git clone` 会要求认证。三种做法，按省事程度排：
+
+**① 仓库改成公开**（最省事）
+
+代码里没有任何密钥（`SESSION_SECRET` 和 `AppSecret` 都是部署时在服务器上生成的，不进 git），改成 public 之后：
 
 ```bash
-sudo -u bazaar git clone <仓库地址> /srv/bazaar/app
+sudo -u bazaar git clone https://github.com/<你>/IMNU.git /srv/bazaar/app
 ```
 
-之后每次发布，**本地 `git push`，然后**：
+**② Deploy Key**（最规范，推荐长期用）
+
+```bash
+# 在服务器上生成一对只用于拉代码的密钥
+sudo -u bazaar mkdir -p /srv/bazaar/.ssh
+sudo -u bazaar ssh-keygen -t ed25519 -f /srv/bazaar/.ssh/id_ed25519 -N "" -C "bazaar@server"
+
+# 打印公钥，粘到 GitHub 仓库 → Settings → Deploy keys（只读权限就够）
+sudo cat /srv/bazaar/.ssh/id_ed25519.pub
+
+# 用 SSH 拉
+sudo -u bazaar git clone git@github.com:<你>/IMNU.git /srv/bazaar/app
+```
+
+> 有些服务器封了出站 22 端口。连不上就把 remote 改成 `ssh://git@ssh.github.com:443/<你>/IMNU.git`。
+
+**③ Personal Access Token**
+
+```bash
+sudo -u bazaar git clone https://<token>@github.com/<你>/IMNU.git /srv/bazaar/app
+```
+
+> ⚠️ token 会明文留在 `.git/config` 里。要用这条路，记得给 token 只勾 `repo` 读权限，并且**换人时记得吊销**。
+
+### 之后每次发布
+
+本地 `git push`，然后在服务器上：
 
 ```bash
 sudo bash /srv/bazaar/app/deploy/deploy.sh
