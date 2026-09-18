@@ -13,7 +13,7 @@
 
 // 本地联调时改成 http://127.0.0.1:3000（并在开发者工具里勾掉域名校验）
 const DEV_BASE = 'http://127.0.0.1:3000';
-const PROD_BASE = 'https://your-domain.example.com';
+const PROD_BASE = 'https://neishidemao.cn';
 
 export const API_BASE = PROD_BASE;
 

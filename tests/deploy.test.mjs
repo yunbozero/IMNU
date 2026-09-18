@@ -350,9 +350,33 @@ test('部署：网站根目录对 nginx 可读（worker 不是运行账号）', 
     'www 目录必须放行到 755，否则 nginx（www-data）读不到');
 });
 
-test('部署：nginx 里还有未替换的域名占位符（提醒换掉）', () => {
-  assert.match(NGINX(), /YOUR_DOMAIN/, '应当保留 YOUR_DOMAIN 占位符，并让 bootstrap 检测出来');
-  assert.match(BOOTSTRAP(), /YOUR_DOMAIN/, 'bootstrap.sh 应当检测占位符是否还没替换');
+test('部署：nginx 的 server_name 必须是真实域名，不能留着占位符', () => {
+  const m = /^\s*server_name\s+([^;]+);/m.exec(NGINX());
+  assert.ok(m, 'nginx 里找不到 server_name');
+
+  const names = m[1].trim().split(/\s+/);
+  assert.ok(names.length > 0);
+
+  for (const n of names) {
+    assert.notEqual(n, 'YOUR_DOMAIN', 'server_name 还是占位符，nginx 不会对外服务');
+    assert.match(n, /^[a-z0-9-]+(\.[a-z0-9-]+)+$/i, `server_name 不像域名：${n}`);
+  }
+
+  // 主域名必须在里面（www 可选）
+  assert.ok(names.some((n) => n === 'neishidemao.cn' || n === 'www.neishidemao.cn'),
+    `server_name 里没找到本项目域名：${names.join(' ')}`);
+});
+
+test('部署：小程序里的生产地址要和 nginx 的域名对得上', () => {
+  const names = /^\s*server_name\s+([^;]+);/m.exec(NGINX())[1].trim().split(/\s+/);
+  const domain = names.find((n) => !n.startsWith('www.')) || names[0];
+
+  const cfg = fs.readFileSync(path.join(ROOT, 'miniprogram', 'config.js'), 'utf8');
+  const base = /PROD_BASE\s*=\s*'([^']+)'/.exec(cfg);
+  assert.ok(base, '找不到 PROD_BASE');
+
+  assert.equal(base[1], `https://${domain}`,
+    `小程序的 PROD_BASE 应当指向 nginx 的域名（https://${domain}）`);
 });
 
 /* ============================================================
