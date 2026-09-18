@@ -3,63 +3,146 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>IMNU 校园义卖</title>
+<title>校园流浪猫救助 · 学生公益项目</title>
+<meta name="description" content="内蒙古师范大学在校学生自发组织的校园流浪猫救助项目：日常喂养、绝育、送养，以及为筹集救助资源而办的校园义卖。">
 <style>
-  :root { --brand:#D2694A; --ink:#2B2119; --ink2:#6B5A50; --line:#EFE0D7; }
+  :root {
+    --brand: #D2694A;
+    --brand-dark: #BF5738;
+    --tint: #FBEDE7;
+    --ink: #2B2119;
+    --ink2: #6B5A50;
+    --ink3: #9A887E;
+    --line: #EFE0D7;
+  }
   * { box-sizing: border-box; }
   body {
-    margin: 0; min-height: 100vh;
-    display: flex; align-items: center; justify-content: center;
-    padding: 32px 20px;
+    margin: 0;
     font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
     background: linear-gradient(180deg, #FDF3ED 0%, #FBEBE3 60%, #FDF5F0 100%);
-    color: var(--ink); line-height: 1.7;
+    color: var(--ink);
+    line-height: 1.78;
+    -webkit-font-smoothing: antialiased;
   }
-  .card {
-    width: 100%; max-width: 560px; background: #fff;
-    border-radius: 20px; padding: 40px 34px;
-    box-shadow: 0 6px 28px rgba(150, 90, 60, 0.09);
+  .wrap { max-width: 680px; margin: 0 auto; padding: 0 22px 56px; }
+
+  header { text-align: center; padding: 66px 0 10px; }
+  header .mark { font-size: 58px; line-height: 1; margin-bottom: 20px; }
+  header h1 { margin: 0 0 10px; font-size: 29px; font-weight: 800; letter-spacing: 1px; }
+  header .sub { margin: 0; color: var(--ink2); font-size: 14.5px; }
+
+  section {
+    background: #fff; border-radius: 18px; padding: 26px 26px 24px;
+    margin-top: 20px; box-shadow: 0 4px 22px rgba(150, 90, 60, 0.07);
   }
-  .mark { font-size: 48px; line-height: 1; margin-bottom: 22px; }
-  h1 { margin: 0 0 10px; font-size: 25px; font-weight: 800; letter-spacing: .5px; }
-  .sub { margin: 0 0 26px; color: var(--ink2); font-size: 14px; }
-  hr { border: 0; border-top: 1px solid var(--line); margin: 26px 0; }
-  p { margin: 0 0 14px; font-size: 14.5px; color: var(--ink2); }
+  h2 { margin: 0 0 14px; font-size: 17px; font-weight: 700; letter-spacing: .5px; }
+  p { margin: 0 0 12px; font-size: 15px; color: var(--ink2); }
   p:last-child { margin-bottom: 0; }
   strong { color: var(--ink); }
+
+  ul, ol { margin: 0; padding: 0; list-style: none; }
+  ul li {
+    font-size: 15px; color: var(--ink2);
+    padding: 11px 0; border-bottom: 1px solid var(--line);
+  }
+  ul li:last-child { border-bottom: 0; }
+  ul li b { color: var(--ink); }
+
+  ol { counter-reset: step; }
+  ol li { position: relative; padding: 9px 0 9px 40px; font-size: 15px; color: var(--ink2); }
+  ol li::before {
+    content: counter(step);
+    counter-increment: step;
+    position: absolute; left: 0; top: 11px;
+    width: 26px; height: 26px; border-radius: 50%;
+    background: var(--tint); color: var(--brand-dark);
+    font-size: 13px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+  }
+
   .note {
     background: #FDF0E9; border: 1px solid #F4DDD0; border-radius: 12px;
-    padding: 14px 16px; font-size: 13.5px; color: #8A5A44; margin-top: 22px;
+    padding: 15px 17px; font-size: 14px; color: #8A5A44;
   }
-  .foot { margin-top: 28px; font-size: 12.5px; color: #9A887E; }
+
+  footer {
+    text-align: center; margin-top: 32px;
+    font-size: 12.5px; color: var(--ink3); line-height: 2;
+  }
+  footer a { color: var(--brand); text-decoration: none; }
 </style>
 </head>
 <body>
-  <main class="card">
-    <div class="mark">🎪</div>
-    <h1>IMNU 校园义卖</h1>
-    <p class="sub">内蒙古师范大学 · 校园公益活动</p>
+<div class="wrap">
 
-    <hr>
+  <header>
+    <div class="mark">🐾</div>
+    <h1>校园流浪猫救助</h1>
+    <p class="sub">内蒙古师范大学 · 学生自发公益项目</p>
+  </header>
 
+  <section>
+    <h2>我们是谁</h2>
     <p>
-      本域名用于<strong>「IMNU 校园义卖」微信小程序</strong>的后端服务，
-      为小程序提供活动信息、名额登记与现场核销功能。
+      我们是一群内蒙古师范大学的在校学生，自发组织起来照顾校园里的流浪猫。
+      从日常投喂开始，慢慢做到绝育、伤病救助和送养。
     </p>
     <p>
-      这里<strong>没有网页版</strong>可以浏览。要参加义卖，请在微信中打开
-      「IMNU 校园义卖」小程序。
+      这个页面是项目的介绍页。日常动态、猫咪档案和义卖活动，都在<strong>微信小程序</strong>里。
     </p>
+  </section>
 
+  <section>
+    <h2>我们在做什么</h2>
+    <ul>
+      <li><b>日常喂养</b> —— 固定投喂点，只喂猫粮和清水，不喂人吃的食物</li>
+      <li><b>绝育</b> —— 从源头减少流浪猫数量，这是最有效也最容易被忽略的一环</li>
+      <li><b>伤病救助</b> —— 发现受伤或生病的猫，送医、治疗、安置</li>
+      <li><b>送养</b> —— 为亲人的猫咪寻找靠谱的领养家庭，签协议并回访</li>
+      <li><b>校园义卖</b> —— 同学们捐出闲置物品和手作，义卖所得用于流浪猫的医疗与绝育</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>小程序里有什么</h2>
+    <ul>
+      <li><b>猫猫图鉴</b> —— 校园里每只猫的档案、出没地点、喂养提示与送养信息</li>
+      <li><b>义卖预定</b> —— 浏览义卖物品、登记预定名额、领取取货码</li>
+    </ul>
+    <p style="margin-top:14px">
+      义卖物品有限，热门的手作和限量物品常常开场就被抢空。
+      小程序把「排队登记」搬到了线上：提前锁定名额，活动当天凭取货码直接到摊位取走。
+    </p>
+  </section>
+
+  <section>
+    <h2>怎么参与</h2>
+    <ol>
+      <li>在微信里打开我们的校园公益小程序</li>
+      <li>翻翻猫猫图鉴，认识一下校园里的它们</li>
+      <li>逛义卖，看到喜欢的登记一个预定名额</li>
+      <li>活动当天带上取货码，到对应摊位取走</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>关于这个项目</h2>
     <div class="note">
-      本服务仅登记预订名额，<strong>不出售商品、不收取任何费用</strong>。
-      义卖物品的付款与交付均在活动当天的线下摊位完成。
+      本项目由内蒙古师范大学<strong>在校学生自发组织</strong>，属于学生公益活动，
+      目前<strong>尚无学校官方身份</strong>。小程序仅用于登记预定名额，
+      <strong>不进行任何在线交易</strong>。
     </div>
-
-    <p class="foot">
-      接口状态：<a href="/api/health" style="color:var(--brand)">/api/health</a><br>
-      主办方：校学生社团联合会
+    <p style="margin-top:14px">
+      如果你也在校园里见过它们，或者想帮忙喂养、送养、出一份力，
+      欢迎通过小程序里的「联系我们」找到我们。
     </p>
-  </main>
+  </section>
+
+  <footer>
+    <div>接口状态：<a href="/api/health">/api/health</a></div>
+    <div>校园流浪猫救助 · 学生公益项目</div>
+  </footer>
+
+</div>
 </body>
 </html>
