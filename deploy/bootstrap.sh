@@ -185,17 +185,22 @@ fi
 # ---------- 8. nginx 站点（仅当域名已填好） ----------
 SITE=/etc/nginx/sites-available/$SERVICE
 if [ -f "$SCRIPT_DIR/nginx.conf" ]; then
-  if grep -q 'YOUR_DOMAIN' "$SCRIPT_DIR/nginx.conf"; then
-    warn "deploy/nginx.conf 里还是 YOUR_DOMAIN 占位符，先不装。"
+  # ★ 只看 server_name 那一行，不要 grep 整个文件。
+  #   整个文件里 "YOUR_DOMAIN" 也出现在头部注释的操作说明里，
+  #   那样 grep 永远匹配，站点永远装不上，而 nginx 会一直服务默认页 ——
+  #   现象是"访问域名看到 Welcome to nginx"，完全不指向真正的原因。
+  if grep -qE '^[[:space:]]*server_name[[:space:]]+.*YOUR_DOMAIN' "$SCRIPT_DIR/nginx.conf"; then
+    warn "deploy/nginx.conf 的 server_name 还是 YOUR_DOMAIN 占位符，先不装。"
     warn "把域名换掉之后重跑本脚本，或者手动执行："
-    warn "  sed 's/YOUR_DOMAIN/你的域名/g' deploy/nginx.conf > $SITE"
-    warn "  ln -sf $SITE /etc/nginx/sites-enabled/$SERVICE && nginx -t && systemctl reload nginx"
+    warn "  sed -i 's/server_name YOUR_DOMAIN;/server_name 你的域名;/' deploy/nginx.conf"
+    warn "  sudo bash deploy/bootstrap.sh"
   else
     log "安装 nginx 站点配置"
     install -m 644 "$SCRIPT_DIR/nginx.conf" "$SITE"
     ln -sf "$SITE" "/etc/nginx/sites-enabled/$SERVICE"
     rm -f /etc/nginx/sites-enabled/default
     nginx -t && systemctl reload nginx
+    log "站点已启用：$(grep -E '^[[:space:]]*server_name' "$SITE" | head -1 | tr -s ' ')"
   fi
 fi
 

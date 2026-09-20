@@ -350,6 +350,24 @@ test('部署：网站根目录对 nginx 可读（worker 不是运行账号）', 
     'www 目录必须放行到 755，否则 nginx（www-data）读不到');
 });
 
+test('部署：检测域名占位符时必须锚定 server_name，不能扫整个文件', () => {
+  // 我踩过的坑：nginx.conf 头部注释里写着「把 YOUR_DOMAIN 换成你的域名」，
+  // 而 bootstrap.sh 用 `grep -q 'YOUR_DOMAIN' 整个文件` 判断域名填了没有 ——
+  // 于是永远匹配，站点永远装不上，nginx 一直服务默认页。
+  // 现象是「访问域名看到 Welcome to nginx」，完全不指向真正的原因。
+  const conf = NGINX();
+  const bootstrap = BOOTSTRAP();
+
+  // 前提：注释里确实还有这个词
+  assert.ok(conf.includes('YOUR_DOMAIN'),
+    'nginx.conf 的注释里应当还有操作说明（这条测试的前提）');
+
+  const m = /grep[^\n]*YOUR_DOMAIN[^\n]*/.exec(bootstrap);
+  assert.ok(m, 'bootstrap.sh 里应当有占位符检测');
+  assert.match(m[0], /server_name/,
+    '检测必须锚定 server_name 行；扫整个文件的话，注释里的 YOUR_DOMAIN 会让它永远误判');
+});
+
 test('部署：nginx 的 server_name 必须是真实域名，不能留着占位符', () => {
   const m = /^\s*server_name\s+([^;]+);/m.exec(NGINX());
   assert.ok(m, 'nginx 里找不到 server_name');
