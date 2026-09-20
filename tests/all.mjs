@@ -21,6 +21,7 @@ import './encoding.test.mjs';
 import './invariants.test.mjs';
 import './lan.test.mjs';
 import './longimage.test.mjs';
+import './miniprogram-build.test.mjs';
 import './miniprogram-lint.test.mjs';
 import './miniprogram.test.mjs';
 import './proposal.test.mjs';
