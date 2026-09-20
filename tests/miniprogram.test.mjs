@@ -16,6 +16,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ROUTES } from '../server/http.mjs';
+import { pickBaseUrl, API_BASE } from '../miniprogram/config.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MP = path.join(ROOT, 'miniprogram');
@@ -298,4 +299,31 @@ test('小程序：生产环境地址必须是 HTTPS 且不是占位符以外的�
     '生产地址不能是本机地址，正式版发不出请求');
   assert.doesNotMatch(url, /^https:\/\/\d+\.\d+\.\d+\.\d+/,
     '不能直接用 IP —— 小程序不支持 IP，必须用已备案的域名');
+});
+
+test('小程序：请求地址按「跑在哪儿」选，不是按 envVersion 选', () => {
+  // 开发者工具（模拟器）→ 本机后端
+  assert.equal(pickBaseUrl({ platform: 'devtools', envVersion: 'develop' }),
+    'http://127.0.0.1:3000', '开发者工具里应该连本机后端');
+
+  // 真机：预览的 envVersion 是 'develop'，体验版是 'trial'，都**不是** release。
+  // 这里曾经写成 `IS_DEV ? DEV_BASE : PROD_BASE`，于是真机也拿到 127.0.0.1 ——
+  // 那是手机自己，请求全部失败，现象看起来是「后端挂了」。这条断言防止改回去。
+  for (const platform of ['ios', 'android', 'windows', 'mac']) {
+    for (const envVersion of ['develop', 'trial', 'release']) {
+      assert.equal(pickBaseUrl({ platform, envVersion }), API_BASE,
+        `真机 ${platform} / ${envVersion} 必须连线上地址，不能是本机回环`);
+    }
+  }
+
+  // 读不到环境（例如被 Node import）时保守选线上，不要意外连本机
+  assert.equal(pickBaseUrl({}), API_BASE);
+  assert.equal(pickBaseUrl(), API_BASE);
+});
+
+test('小程序：开发地址与生产地址各自形态正确，不能互相串', () => {
+  assert.match(API_BASE, /^https:\/\//, '生产地址必须是 HTTPS 域名');
+  assert.match(pickBaseUrl({ platform: 'devtools' }), /^http:\/\/127\.0\.0\.1:\d+$/,
+    '开发地址应当是本机 http，真机连不上是预期的');
+  assert.notEqual(pickBaseUrl({ platform: 'devtools' }), API_BASE);
 });
