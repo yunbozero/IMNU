@@ -11,11 +11,15 @@ set -euo pipefail
 
 APP_USER=bazaar
 APP_DIR=/srv/bazaar/app
+WWW_DIR=/srv/bazaar/www
 SERVICE=bazaar
 PORT=3000
 BRANCH="${BRANCH:-main}"
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 log()  { printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
+warn() { printf '\033[1;33m[!] %s\033[0m\n' "$*"; }
 die()  { printf '\033[1;31m[x] %s\033[0m\n' "$*" >&2; exit 1; }
 
 [ "$(id -u)" -eq 0 ] || die "请用 root 执行：sudo bash deploy/deploy.sh"
@@ -46,7 +50,20 @@ if ! node tests/all.mjs; then
   die "测试未通过，已中止。服务保持原状，线上还是 $PREV。"
 fi
 
-# ---------- 3. 重启 ----------
+# ---------- 3. 更新静态页 ----------
+# ⚠️ nginx 不读仓库，它读的是 $WWW_DIR 下的副本。
+#    所以「只拉代码 + 重启」不会更新首页文案 —— 改网站名称那次就踩了这个坑：
+#    仓库里名字早改了，线上一直显示旧的，而且不报任何错。
+#    放在测试闸门之后：测试没过就不该动线上的文件。
+log "更新首页"
+if [ -f "$SCRIPT_DIR/www/index.html" ]; then
+  install -m 644 "$SCRIPT_DIR/www/index.html" "$WWW_DIR/index.html"
+  log "已更新 $WWW_DIR/index.html"
+else
+  warn "找不到 $SCRIPT_DIR/www/index.html，保留线上原来的页面"
+fi
+
+# ---------- 4. 重启 ----------
 log "重启 $SERVICE"
 systemctl restart "$SERVICE"
 sleep 2
@@ -57,7 +74,7 @@ if ! systemctl is-active --quiet "$SERVICE"; then
   die "重启失败"
 fi
 
-# ---------- 4. 健康检查 ----------
+# ---------- 5. 健康检查 ----------
 log "健康检查"
 for i in 1 2 3 4 5; do
   if curl -fsS --max-time 3 "http://127.0.0.1:${PORT}/api/health" >/dev/null 2>&1; then

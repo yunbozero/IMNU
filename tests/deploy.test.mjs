@@ -324,6 +324,27 @@ test('部署：首页文件存在，且 bootstrap.sh 会把它装过去', () => 
   assert.match(src, /先放一个占位页/, '缺少页面文件时应当有兜底，不能让根路径空着');
 });
 
+test('部署：发布脚本也要更新首页（只拉代码的话线上永远显示旧文案）', () => {
+  // 踩过的坑：nginx 不读仓库，读的是 WWW_DIR 下的副本，而副本只有 bootstrap.sh 装。
+  // 于是 deploy.sh 拉完代码、重启、健康检查全绿，首页文案却一个字没变 ——
+  // 改网站名称那次就是这样：仓库里早改了，线上还是「校园流浪猫救助」，且不报错。
+  const sh = DEPLOY_SH();
+
+  assert.equal(shVar(sh, 'WWW_DIR'), shVar(BOOTSTRAP(), 'WWW_DIR'),
+    'deploy.sh 与 bootstrap.sh 的 WWW_DIR 必须一致，否则装到了别的目录');
+
+  assert.match(sh, /install -m 644 "\$SCRIPT_DIR\/www\/index\.html" "\$WWW_DIR\/index\.html"/,
+    'deploy.sh 必须把首页重装到 WWW_DIR，否则改了文案线上不会变');
+
+  // 而且要排在测试闸门之后：测试没过就不该动线上文件
+  const testAt = sh.indexOf('node tests/all.mjs');
+  const installAt = sh.indexOf('$WWW_DIR/index.html');
+  assert.ok(testAt !== -1, 'deploy.sh 里找不到测试闸门');
+  assert.ok(installAt !== -1, 'deploy.sh 里找不到首页安装步骤');
+  assert.ok(testAt < installAt,
+    '更新首页必须排在测试之后 —— 测试没过还去改线上文件，就失去了闸门的意义');
+});
+
 test('部署：网站名称符合个人备案规范，且 title / h1 / 手册三处一致', () => {
   const html = read(path.join(DEPLOY, 'www', 'index.html'));
 

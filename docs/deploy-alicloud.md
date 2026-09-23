@@ -185,7 +185,17 @@ sudo -u bazaar git clone https://<token>@github.com/<你>/IMNU.git /srv/bazaar/a
 sudo bash /srv/bazaar/app/deploy/deploy.sh
 ```
 
-脚本会 `git pull`、跑一遍测试、再重启服务。**测试不过就不重启** —— 避免把线上搞挂。
+脚本会 `git fetch` + `reset`、跑一遍测试、更新首页、再重启服务。**测试不过就不重启** —— 避免把线上搞挂。
+
+> ⚠️ 改首页文案（比如网站名称、备案口径）时注意：**nginx 不读仓库**，它读的是
+> `/srv/bazaar/www/index.html` 这个副本。所以只 `git pull` 是不够的，必须重新装一次 ——
+> `deploy.sh` 会做这件事，但如果你手动 pull，记得补一句：
+>
+> ```bash
+> sudo install -m 644 /srv/bazaar/app/deploy/www/index.html /srv/bazaar/www/index.html
+> ```
+>
+> 这个坑很安静：不报错，只是线上一直显示旧文案。改网站名称那次就踩了。
 
 ---
 
@@ -327,7 +337,7 @@ sudo systemctl daemon-reload && sudo systemctl restart bazaar-backup.timer
 | `deploy/bazaar-backup.service` | 服务器 | 备份单元（`server/backup.mjs backup`） |
 | `deploy/bazaar-backup.timer` | 服务器 | 每天 03:30 触发备份 |
 | `deploy/nginx.conf` | 服务器 | 反向代理 |
-| `deploy/deploy.sh` | 服务器 | 拉代码、跑测试、重启 |
+| `deploy/deploy.sh` | 服务器 | 拉代码、跑测试、**更新首页**、重启 |
 | `server/backup.mjs` | 服务器 | 备份 / 校验 / 恢复的实现 |
 
 这些配置里的**路径、端口、用户名必须保持一致**，`tests/deploy.test.mjs` 会盯着这件事——
