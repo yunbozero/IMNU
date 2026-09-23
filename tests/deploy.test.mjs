@@ -450,6 +450,34 @@ test('部署：备案备注符合个人口径（第一人称、无组织与公�
   }
 });
 
+test('部署：页脚有备案号位置，且链接到工信部备案系统（法规要求）', () => {
+  // 《非经营性互联网信息服务备案管理办法》第十三条：应在主页底部标明备案编号，
+  // 并在备案编号下方按要求链接工信部备案管理系统网址。管局和接入商会抽查这一条。
+  const html = read(path.join(DEPLOY, 'www', 'index.html'));
+
+  const footer = /<footer>([\s\S]*?)<\/footer>/.exec(html);
+  assert.ok(footer, '首页缺 <footer>');
+  assert.match(footer[1], /beian\.miit\.gov\.cn/,
+    '备案号链接必须在页脚 —— 法规要求是「主页底部」');
+
+  // 备案号和链接必须在一起，且是工信部官方 https 地址
+  const m = /<a[^>]+href="(https:\/\/beian\.miit\.gov\.cn\/?)"[^>]*>([^<]+)<\/a>/.exec(html);
+  assert.ok(m, '页脚必须有指向 https://beian.miit.gov.cn/ 的链接');
+  const text = m[2].trim();
+
+  // 要么是明确的占位符，要么是真实备案号 —— 编一个假号比留占位符更糟
+  const isPlaceholder = /待管局下发/.test(text);
+  const isReal = /[\u4e00-\u9fa5]ICP备\d{4,}号(-\d+)?/.test(text);
+  assert.ok(isPlaceholder || isReal,
+    `备案号位置应为「待管局下发」占位符或真实备案号（形如 蒙ICP备2026000000号-1），当前是「${text}」`);
+  assert.ok(!/X{3,}|0{6,}/.test(text),
+    `不要编造备案号（当前「${text}」）—— 还没拿到就写「待管局下发」`);
+
+  // deploy.sh 靠这个字面量判断「还没填」，两边漂移的话提醒永远不会响
+  assert.ok(DEPLOY_SH().includes('待管局下发'),
+    'deploy.sh 的备案号提醒依赖「待管局下发」这个字面量，不能改掉');
+});
+
 test('部署：网站根目录对 nginx 可读（worker 不是运行账号）', () => {
   // nginx 的 worker 跑在 www-data 下，不是 bazaar。
   // 目录要是 750 且属主是 bazaar，nginx 根本进不去 —— 表现是 403。

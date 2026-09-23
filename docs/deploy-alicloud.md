@@ -243,17 +243,47 @@ sudo -u bazaar DB_PATH=/srv/bazaar/data/bazaar.db \
 
 之后**不要再跑这个脚本**。换届时让现任超管在小程序里走「转交超管」。
 
-### ③ 改小程序里的后端地址
+### ③ 确认小程序里的后端地址
 
-`miniprogram/config.js` 里的 `PROD_BASE` 现在是占位域名，必须改成真实域名：
+`miniprogram/config.js` 里的 `PROD_BASE` 应当就是 nginx 的域名：
 
 ```js
-const PROD_BASE = 'https://你的域名';
+const PROD_BASE = 'https://neishidemao.cn';
 ```
 
-改完要重新上传小程序代码。
+`tests/deploy.test.mjs` 会校验它和 `deploy/nginx.conf` 的 `server_name` 对得上，换域名时两边一起改。
 
-> 开发阶段它会自动回落到 `http://127.0.0.1:3000`（靠 `__wxConfig.envVersion` 判断），本地联调不用手改。
+> 地址是按**跑在哪儿**选的，不是按版本：只有开发者工具（`platform === 'devtools'`）才回落
+> `http://127.0.0.1:3000`，真机预览和体验版一律走线上。
+> **别改回按 `envVersion` 判断** —— 那样真机会拿到 `127.0.0.1`（手机自己），
+> 所有请求静默失败，现象看起来是「后端挂了」。
+
+---
+
+## 5.6 备案通过后：把备案号挂到页脚
+
+《非经营性互联网信息服务备案管理办法》第十三条要求在主页底部标明备案编号，并链接工信部备案系统。
+管局和接入商会抽查这一条。
+
+页脚现在是占位符 `ICP 备案号：待管局下发`。拿到备案号后：
+
+1. **在本地改**，不要只改服务器 —— `deploy.sh` 会 `git reset --hard`，服务器上的手改会被冲掉。
+   改 `deploy/www/index.html` 页脚那行，把「待管局下发」换成真实备案号，形如 `蒙ICP备2026000000号-1`。
+
+2. 提交推送，然后在服务器上跑：
+
+   ```bash
+   sudo bash /srv/bazaar/app/deploy/deploy.sh
+   ```
+
+3. 验证：
+
+   ```bash
+   curl -s -H 'Host: neishidemao.cn' http://127.0.0.1/ | grep -o '蒙ICP备[^<]*'
+   ```
+
+`deploy.sh` 在占位符还在时会**每次发布都提醒一次**，所以不会「忘了就一直挂在线上」。
+`tests/deploy.test.mjs` 则挡住链接被删或备案号被编造。
 
 ---
 

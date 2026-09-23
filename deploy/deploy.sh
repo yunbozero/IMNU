@@ -70,6 +70,12 @@ log "更新首页"
 if [ -f "$SCRIPT_DIR/www/index.html" ]; then
   install -m 644 "$SCRIPT_DIR/www/index.html" "$WWW_DIR/index.html"
   log "已更新 $WWW_DIR/index.html"
+
+  # 法规要求拿到备案号后必须挂在页脚。备案通过前这里是占位符，
+  # 每次发布都提醒一次，别让「待管局下发」就这么一直挂在线上。
+  if grep -q '待管局下发' "$WWW_DIR/index.html"; then
+    warn "首页页脚还是备案号占位符（待管局下发）——拿到备案号后要在【仓库里】替换，见 docs/deploy-alicloud.md"
+  fi
 else
   warn "找不到 $SCRIPT_DIR/www/index.html，保留线上原来的页面"
 fi

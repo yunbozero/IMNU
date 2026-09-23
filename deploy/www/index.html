@@ -140,6 +140,13 @@
   <footer>
     <div>接口状态：<a href="/api/health">/api/health</a></div>
     <div>檐下猫小记 · 个人站点</div>
+    <!-- 法规要求：主页底部中央标明备案编号，并链接工信部备案系统。
+         拿到备案号后把下面的「待管局下发」换成真实备案号（形如「蒙ICP备2026000000号-1」）。
+         ⚠️ 必须在仓库里改再发布：deploy.sh 会 git reset --hard，只改服务器上的文件会被冲掉。
+         tests/deploy.test.mjs 会盯着这个链接不许删。 -->
+    <div class="icp">
+      <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener">ICP 备案号：待管局下发</a>
+    </div>
   </footer>
 
 </div>
