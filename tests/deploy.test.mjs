@@ -345,6 +345,27 @@ test('部署：发布脚本也要更新首页（只拉代码的话线上永远�
     '更新首页必须排在测试之后 —— 测试没过还去改线上文件，就失去了闸门的意义');
 });
 
+test('部署：发布脚本要先放行 git safe.directory（否则第二次发布必挂）', () => {
+  // 第二个「跑第二遍才暴露」的坑：脚本以 root 跑 git，但第 1 步结束会把仓库
+  // chown 给服务账号。于是第二次执行时仓库属主 ≠ 当前用户，git 直接拒绝：
+  //   fatal: detected dubious ownership in repository
+  // 报错完全指不到那行 chown，而且现象是「发布没效果」—— 很容易误判成网络问题。
+  const sh = DEPLOY_SH();
+
+  // 前提：脚本确实会把仓库交给服务账号（这正是必须放行的原因）
+  assert.match(sh, /chown -R "\$APP_USER:\$APP_USER" "\$APP_DIR"/,
+    '脚本会把仓库 chown 给服务账号 —— 这就是 safe.directory 必须存在的原因');
+
+  assert.match(sh, /safe\.directory/,
+    'deploy.sh 必须自己加 safe.directory 例外，不能指望手上有个人去敲那条命令');
+
+  const safeAt = sh.indexOf('safe.directory');
+  const fetchAt = sh.indexOf('git fetch');
+  assert.ok(fetchAt !== -1, 'deploy.sh 里找不到 git fetch');
+  assert.ok(safeAt < fetchAt,
+    'safe.directory 必须在任何 git 操作之前设置，否则第一次 git 调用就会挂');
+});
+
 test('部署：网站名称符合个人备案规范，且 title / h1 / 手册三处一致', () => {
   const html = read(path.join(DEPLOY, 'www', 'index.html'));
 

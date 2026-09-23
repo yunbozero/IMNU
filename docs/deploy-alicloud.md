@@ -197,6 +197,16 @@ sudo bash /srv/bazaar/app/deploy/deploy.sh
 >
 > 这个坑很安静：不报错，只是线上一直显示旧文案。改网站名称那次就踩了。
 
+> ⚠️ 如果以 root 跑 git 报 `fatal: detected dubious ownership in repository at '/srv/bazaar/app'`：
+> 这是 `deploy.sh` 第 1 步结尾把仓库 `chown` 给服务账号 `bazaar` 造成的 ——
+> 仓库属主从此不等于执行者（root）。**它会让旧版脚本跑不了第二遍**，
+> 现象是「发布没效果」，很容易误判成网络或代理问题。
+> 新版脚本自己会加 `safe.directory` 例外；遇到旧版或手动操作时，先跑一次：
+>
+> ```bash
+> sudo git config --global --add safe.directory /srv/bazaar/app
+> ```
+
 ---
 
 ## 5.5 第一次部署后必须做的三件事

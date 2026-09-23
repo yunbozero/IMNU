@@ -25,6 +25,17 @@ die()  { printf '\033[1;31m[x] %s\033[0m\n' "$*" >&2; exit 1; }
 [ "$(id -u)" -eq 0 ] || die "请用 root 执行：sudo bash deploy/deploy.sh"
 [ -d "$APP_DIR/.git" ] || die "$APP_DIR 不是一个 git 仓库，请先 clone"
 
+# ---------- 0. 放行 git safe.directory ----------
+# 本脚本以 root 运行，但第 1 步结束时会 `chown -R $APP_USER "$APP_DIR"` ——
+# 于是**第二次**发布时，仓库属主（bazaar）不等于当前用户（root），
+# git 会以 "detected dubious ownership" 拒绝所有操作，连 fetch 都做不了。
+# 结果：这个脚本从来没成功跑过第二遍，而报错完全指不到真正的原因（那行 chown）。
+# 这不是安全问题，是脚本自己造成的权限切换，所以给它加一条例外；重复执行无副作用。
+if ! git config --global --get-all safe.directory | grep -qxF "$APP_DIR"; then
+  git config --global --add safe.directory "$APP_DIR"
+  log "已放行 git safe.directory：$APP_DIR"
+fi
+
 cd "$APP_DIR"
 
 # ---------- 1. 取代码 ----------
