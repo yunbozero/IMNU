@@ -327,3 +327,26 @@ test('小程序：开发地址与生产地址各自形态正确，不能互相�
     '开发地址应当是本机 http，真机连不上是预期的');
   assert.notEqual(pickBaseUrl({ platform: 'devtools' }), API_BASE);
 });
+
+test('小程序：管理端计划还在，且没丢掉合规约束和本期范围', () => {
+  // 计划文档容易在后续编辑里被清空或改味，这里把它钉住几处关键决定。
+  const plan = read(path.join(ROOT, 'docs', 'admin-plan.md'));
+
+  // 方向：做在小程序里（理由也一并留着，否则以后有人会重新纠结要不要做网页端）
+  assert.match(plan, /管理端做在小程序里/, '必须保留「做在小程序里」这个已定方向');
+
+  // 本期五项
+  for (const w of ['看预定名单', '改物品名额', '撤销误核销', '取消别人的预定', '取货码二维码']) {
+    assert.ok(plan.includes(w), `管理端计划里少了本期范围「${w}」`);
+  }
+
+  // 明确不做的两项也要留着，免得又有人提
+  assert.match(plan, /分时段取货/, '要保留「本期不做分时段取货」这个决定');
+  assert.match(plan, /摊位分权/, '要保留「本期不做摊位分权」这个决定');
+
+  // 唯一要动后端的那个，必须写明复用已有取消逻辑，不能另写更新语句
+  assert.match(plan, /cancelReservation/, '取消别人的预定必须复用 cancelReservation 的名额回滚逻辑');
+
+  // ★ 合规：管理端不改变主体性质，但文案守同一套口径
+  assert.match(plan, /不改变小程序的主体性质/, '要写明有管理端不等于组织运营');
+});
