@@ -17,6 +17,7 @@ import './api-admin.test.mjs';
 import './auth.test.mjs';
 import './backup.test.mjs';
 import './deploy.test.mjs';
+import './dev-runtime.test.mjs';
 import './encoding.test.mjs';
 import './invariants.test.mjs';
 import './lan.test.mjs';

@@ -17,10 +17,12 @@
  *     DB_PATH=... node scripts/set-owner.mjs --list
  *   会列出所有已登记的人。
  */
-import { openMigrated } from '../server/db.mjs';
+import { openMigrated, DEV_DB_PATH } from '../server/db.mjs';
 import { createSqliteRepository } from '../server/repository.mjs';
 
-const dbPath = process.env.DB_PATH || './tmp/bazaar.db';
+// 默认值和本地起服务时用的是同一个（server/db.mjs 里统一定义）。
+// 线上跑这个脚本必须显式给 DB_PATH=/srv/bazaar/data/bazaar.db。
+const dbPath = process.env.DB_PATH || DEV_DB_PATH;
 const openid = process.argv[2] || process.env.OWNER_OPENID || '';
 
 const db = openMigrated(dbPath);

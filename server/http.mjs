@@ -8,18 +8,19 @@
  *
  * 需要的环境变量：
  *   SESSION_SECRET  必填，签发 token 用。生成：openssl rand -hex 32
- *   DB_PATH         默认 /srv/bazaar/data/bazaar.db
+ *   DB_PATH         默认 /srv/bazaar/data/bazaar.db（DEV_FAKE_LOGIN=1 时默认 tmp/bazaar-dev.db）
  *   PORT            默认 3000
  *   WX_APPID / WX_SECRET   换 openid 用；不填则登录接口直接报错
  *   NODE_ENV=production
+ *   DEV_FAKE_LOGIN=1       仅本地联调：任何 code 都能登录。生产用不了，见 resolveRuntime
  */
 import http from 'node:http';
 import { createApi } from './api.mjs';
 import {
   verifyToken, parseBearer, signToken,
-  createWechatSessionProvider, createRateLimiter,
+  createWechatSessionProvider, createFakeSessionProvider, createRateLimiter,
 } from './auth.mjs';
-import { openMigrated } from './db.mjs';
+import { openMigrated, PROD_DB_PATH, DEV_DB_PATH } from './db.mjs';
 import { createSqliteRepository } from './repository.mjs';
 
 /** 请求体上限。义卖接口的 body 都是几十字节，64KB 已经很宽松。 */
@@ -294,32 +295,78 @@ export function startServer({
    CLI
    ============================================================ */
 
-function main() {
-  const secret = process.env.SESSION_SECRET;
+/** 只在本地假登录模式下使用 —— 那个模式下认证本来就是敞开的 */
+const DEV_SECRET = 'dev-only-secret-not-for-production';
+
+/**
+ * 决定运行时用哪个会话提供者、哪个库、哪个密钥。
+ *
+ * 抽成导出的纯函数，是为了**能直接测「假登录不可能在生产被打开」**，
+ * 而不是靠人读一遍代码然后相信它 —— 安全开关最怕的就是「看着没问题」。
+ *
+ *   DEV_FAKE_LOGIN=1  本地联调开关（微信登录要 AppID/AppSecret，本地想跑通端到端得绕过）。
+ *                     两道独立的锁，任何一道命中就拒绝启动：
+ *                       1. 线上 systemd 单元写死了 NODE_ENV=production
+ *                       2. 线上的 DB_PATH 一定在 /srv/bazaar 下
+ *                     所以就算有人把本地的环境变量整份抄到服务器上，也起不来。
+ */
+export function resolveRuntime(env = {}) {
+  const fakeLogin = env.DEV_FAKE_LOGIN === '1';
+  const dbPath = env.DB_PATH || (fakeLogin ? DEV_DB_PATH : PROD_DB_PATH);
+
+  if (fakeLogin) {
+    if (env.NODE_ENV === 'production') {
+      throw new Error('拒绝启动：DEV_FAKE_LOGIN=1 与 NODE_ENV=production 同时存在 —— 假登录只能在本地用。');
+    }
+    if (String(dbPath).includes('/srv/bazaar')) {
+      throw new Error(`拒绝启动：DEV_FAKE_LOGIN=1 却指向线上数据目录 ${dbPath} —— 假登录只能在本地用。`);
+    }
+  }
+
+  const secret = env.SESSION_SECRET || (fakeLogin ? DEV_SECRET : null);
   if (!secret || secret.length < 16) {
-    console.error('[x] 缺少 SESSION_SECRET（至少 16 个字符）。生成方法：');
-    console.error('    openssl rand -hex 32');
+    throw new Error('缺少 SESSION_SECRET（至少 16 个字符）。生成：openssl rand -hex 32');
+  }
+
+  let sessions;
+  let warning = null;
+
+  if (fakeLogin) {
+    sessions = createFakeSessionProvider();
+    warning = '[!] 已启用本地假登录（DEV_FAKE_LOGIN=1）：任何 code 都能登录。线上绝不可用。';
+  } else if (env.WX_APPID && env.WX_SECRET) {
+    sessions = createWechatSessionProvider({ appId: env.WX_APPID, appSecret: env.WX_SECRET });
+  } else {
+    sessions = {
+      async exchange() {
+        throw new Error('未配置 WX_APPID / WX_SECRET，无法完成微信登录');
+      },
+    };
+    warning = '[!] 未配置 WX_APPID / WX_SECRET，/api/login 会失败。本地联调请设 DEV_FAKE_LOGIN=1';
+  }
+
+  return {
+    port: Number(env.PORT || 3000),
+    host: env.HOST || '127.0.0.1',
+    dbPath,
+    secret,
+    sessions,
+    fakeLogin,
+    warning,
+  };
+}
+
+function main() {
+  let runtime;
+  try {
+    runtime = resolveRuntime(process.env);
+  } catch (e) {
+    console.error(`[x] ${e.message}`);
     process.exit(1);
   }
 
-  const port = Number(process.env.PORT || 3000);
-  const dbPath = process.env.DB_PATH || '/srv/bazaar/data/bazaar.db';
-  const host = process.env.HOST || '127.0.0.1';
-
-  const sessions = process.env.WX_APPID && process.env.WX_SECRET
-    ? createWechatSessionProvider({
-        appId: process.env.WX_APPID,
-        appSecret: process.env.WX_SECRET,
-      })
-    : {
-        async exchange() {
-          throw new Error('未配置 WX_APPID / WX_SECRET，无法完成微信登录');
-        },
-      };
-
-  if (!process.env.WX_APPID) {
-    console.warn('[!] 未配置 WX_APPID / WX_SECRET，/api/login 会失败。');
-  }
+  const { port, host, dbPath, secret, sessions, warning } = runtime;
+  if (warning) console.warn(warning);
 
   startServer({ port, host, dbPath, secret, sessions }).then(async ({ server, close }) => {
     console.log(`✅ bazaar-api 已启动 http://${host}:${port}`);

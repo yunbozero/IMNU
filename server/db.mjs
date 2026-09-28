@@ -12,6 +12,20 @@ import { DatabaseSync } from 'node:sqlite';
 import fs from 'node:fs';
 import path from 'node:path';
 
+/**
+ * 数据库路径的**唯一来源**。
+ *
+ * 之前这几处各写一份默认值，结果本地联调时服务连 tmp/bazaar-dev.db、
+ * set-owner 却连 tmp/bazaar.db —— 两个不同的文件，现象是「明明登记过了却说没有用户」。
+ * 所以只在这里定义，谁要用谁 import。
+ */
+
+/** 线上路径。同时也是「这是线上」的判据之一（见 http.mjs 的 resolveRuntime） */
+export const PROD_DB_PATH = '/srv/bazaar/data/bazaar.db';
+
+/** 本地联调用的库，放在已被 .gitignore 挡掉的 tmp/ 下 */
+export const DEV_DB_PATH = 'tmp/bazaar-dev.db';
+
 export const SCHEMA = `
 -- ============================================================
 -- 用户：学生 / 志愿者 / 管理员
