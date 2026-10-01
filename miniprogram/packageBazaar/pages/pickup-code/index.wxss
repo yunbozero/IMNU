@@ -9,6 +9,17 @@
 
 .statusbar-card__time { font-weight: 400; opacity: 0.8; }
 
+/* 二维码。
+   画图用的尺寸是 JS 通过 select 查询拿到的 width（CSS 像素），
+   所以这里改尺寸不用同步改 JS；按设备像素比放大那步在页面里做。 */
+.qr {
+  display: block;
+  width: 440rpx;
+  height: 440rpx;
+  margin: 28rpx auto 4rpx;
+  background: #fff;
+}
+
 .copy {
   display: inline-block; margin-top: 24rpx;
   font-size: 25rpx; color: var(--brand);

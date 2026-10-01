@@ -17,17 +17,20 @@
     <view class="codebox">
       <view class="codebox__label">取货码</view>
       <view class="codebox__digits">{{codeText}}</view>
+
+      <!-- 二维码：志愿者用核销台扫它。画不出来时下面那 6 位数字仍然可用。 -->
+      <canvas
+        wx:if="{{reservation.status === 'reserved'}}"
+        type="2d"
+        id="qr"
+        class="qr"
+      ></canvas>
+
       <view class="codebox__hint">
-        取货时向志愿者出示或报出这 6 位数字
+        取货时向志愿者出示二维码，或直接报出这 6 位数字
       </view>
       <view class="copy" bindtap="copyCode">复制取货码</view>
     </view>
-
-    <!--
-      TODO（下一阶段）：这里要放真正的二维码，志愿者扫一下就能核销。
-      需要一个小程序端的二维码生成器，或者由后端返回 base64 图片。
-      目前可用路径是志愿者在核销台手动输入这 6 位数字，功能不受影响。
-    -->
 
     <view class="panel">
       <view class="panel__row"><text class="panel__k">物品</text><text class="panel__v">{{reservation.itemName}}</text></view>

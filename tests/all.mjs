@@ -28,6 +28,7 @@ import './miniprogram.test.mjs';
 import './proposal.test.mjs';
 import './prototype.test.mjs';
 import './quota-concurrency.test.mjs';
+import './qrcode.test.mjs';
 import './repository.test.mjs';
 import './roles.test.mjs';
 import './secrets.test.mjs';

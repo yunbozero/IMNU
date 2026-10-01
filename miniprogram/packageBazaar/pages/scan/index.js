@@ -1,9 +1,11 @@
 import * as api from '../../../services/api.js';
 import * as session from '../../../services/session.js';
 import { platform } from '../../../services/platform.js';
-import { clockText } from '../../../utils/format.js';
+import { clockText, PICKUP_CODE_LEN } from '../../../utils/format.js';
 
-const CODE_LEN = 6;
+// 位数只有一处定义（utils/format.js）。取货码页生成二维码时用的是同一个常量 ——
+// 两边一旦不一致，扫出来的码就会被判成「不是有效的取货码」。
+const CODE_LEN = PICKUP_CODE_LEN;
 
 Page({
   data: {

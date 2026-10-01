@@ -2,6 +2,7 @@ import * as api from '../../../services/api.js';
 import * as session from '../../../services/session.js';
 import { platform } from '../../../services/platform.js';
 import { groupCode, statusText } from '../../../utils/format.js';
+import { buildQr, drawQr } from '../../utils/qr-draw.js';
 
 Page({
   data: {
@@ -62,12 +63,48 @@ Page({
         }[reservation.status] || 'statusbar-card',
         canCancel: reservation.status === 'reserved',
       });
+
+      this.renderQr();
     } catch (e) {
       if (e && e.code === 'need_register') return session.handleError(e);
       this.setData({ error: (e && e.message) || '加载失败' });
     } finally {
       this.setData({ loading: false });
     }
+  },
+
+  /**
+   * 把取货码画成二维码，给核销台扫。
+   *
+   * 拿 canvas 节点是异步的，而且这一步失败**不能影响取货** ——
+   * 画不出来就退化成「报 6 位数字」，那条路一直是通的。
+   * 所以整段包在 try/catch 里，失败就静默放弃。
+   */
+  renderQr() {
+    wx.createSelectorQuery()
+      .in(this)
+      .select('#qr')
+      .fields({ node: true, size: true })
+      .exec((res) => {
+        const node = res && res[0] && res[0].node;
+        if (!node) return;
+
+        try {
+          const info = wx.getWindowInfo ? wx.getWindowInfo() : wx.getSystemInfoSync();
+          const dpr = info.pixelRatio || 2;
+          const cssSize = Math.floor(res[0].width) || 220;
+
+          // 按设备像素比放大再缩放，否则在高分屏上会是糊的
+          node.width = cssSize * dpr;
+          node.height = cssSize * dpr;
+
+          const ctx = node.getContext('2d');
+          ctx.scale(dpr, dpr);
+          drawQr(ctx, buildQr(this.data.reservation.code), { size: cssSize });
+        } catch (e) {
+          // 静默放弃：数字取货码仍然可用
+        }
+      });
   },
 
   copyCode() {

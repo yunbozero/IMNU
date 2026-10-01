@@ -2,10 +2,18 @@
  * 纯展示用的格式化函数。都是纯函数，方便单测。
  */
 
+/**
+ * 取货码位数。
+ *
+ * ★ 必须只有一处定义：取货码页按它生成二维码，核销台按它校验手输/扫码结果。
+ *   两边一旦不一致，扫出来的码就会被判成「不是有效的取货码」。
+ */
+export const PICKUP_CODE_LEN = 6;
+
 /** '482913' → '482 913'，方便学生口报给志愿者 */
 export function groupCode(code) {
   const s = String(code || '');
-  return s.length === 6 ? `${s.slice(0, 3)} ${s.slice(3)}` : s;
+  return s.length === PICKUP_CODE_LEN ? `${s.slice(0, 3)} ${s.slice(3)}` : s;
 }
 
 /** 预定状态 → 给学生看的三个词。不要把内部状态机暴露出去。 */
