@@ -43,11 +43,47 @@ export const getToken = () => platform().getStorage(TOKEN_KEY);
 export const getScope = () => platform().getStorage(SCOPE_KEY);
 export const getUser = () => loadUser();
 
-/** 志愿者/管理员才看得到核销入口。注意这只是界面控制，真正的权限在服务端。 */
+/**
+ * 界面用的角色判定。
+ *
+ * ⚠️ 这两个列表是服务端 `server/roles.mjs` 的**副本**（小程序不能 import 服务端代码），
+ *    所以它们必须和那边的 `canRedeem` / `canManage` 完全一致。
+ *    这里曾经手写成 ['volunteer','admin','owner']，**漏了 deputy** ——
+ *    于是副主任管理员在界面上被当成学生，管理入口压根不显示。
+ *    `tests/miniprogram.test.mjs` 会拿服务端的角色表来校验这两个列表，改了会红。
+ *
+ * 注意这只是**界面控制**，真正的权限判定始终在服务端。
+ */
+export const ROLES_CAN_REDEEM = ['volunteer', 'deputy', 'admin', 'owner'];
+export const ROLES_CAN_MANAGE = ['deputy', 'admin', 'owner'];
+
+/** 能进核销台（志愿者及以上） */
 export function isStaff() {
   const u = loadUser();
-  return !!u && ['volunteer', 'admin', 'owner'].includes(u.role);
+  return !!u && ROLES_CAN_REDEEM.includes(u.role);
 }
+
+/** 能进管理端（副主任管理员及以上）。门槛比核销台高一级。 */
+export function isManager() {
+  const u = loadUser();
+  return !!u && ROLES_CAN_MANAGE.includes(u.role);
+}
+
+/**
+ * 角色显示名。同样是服务端 ROLE_LABEL 的副本。
+ *
+ * 之前界面只有「志愿者 / 学生」两档，于是**管理员也被显示成志愿者**。
+ * 测试会校验这里的键覆盖服务端的全部角色，漏一个就红。
+ */
+export const ROLE_LABEL = {
+  student: '学生',
+  volunteer: '志愿者',
+  deputy: '副主任管理员',
+  admin: '管理员',
+  owner: '超级管理员',
+};
+
+export const roleLabel = (user) => (user && ROLE_LABEL[user.role]) || '学生';
 
 export function clearSession() {
   platform().removeStorage(TOKEN_KEY);

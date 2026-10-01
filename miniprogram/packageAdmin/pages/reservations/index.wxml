@@ -1,0 +1,65 @@
+<view class="page">
+
+  <view class="panel admstats">
+    <view class="admstats__cell">
+      <view class="admstats__n">{{stats.reserved}}</view>
+      <view class="admstats__k">待取货</view>
+    </view>
+    <view class="admstats__cell">
+      <view class="admstats__n">{{stats.redeemed}}</view>
+      <view class="admstats__k">已取货</view>
+    </view>
+    <view class="admstats__cell">
+      <view class="admstats__n">{{stats.total}}</view>
+      <view class="admstats__k">合计</view>
+    </view>
+  </view>
+
+  <view class="search">
+    <text class="search__icon">🔍</text>
+    <input
+      class="search__input"
+      placeholder="搜取货码 / 物品 / 姓名"
+      confirm-type="search"
+      bindinput="onSearch"
+    />
+  </view>
+
+  <view class="segmented">
+    <view
+      wx:for="{{tabs}}"
+      wx:key="key"
+      class="segmented__item {{active === item.key ? 'segmented__item--on' : ''}}"
+      data-key="{{item.key}}"
+      bindtap="onTabTap"
+    >{{item.label}}</view>
+  </view>
+
+  <view wx:if="{{error}}" class="notice notice--strong" bindtap="load">
+    <text class="notice__b">打不开：</text>{{error}}（点一下重试）
+  </view>
+
+  <view wx:if="{{!loading && list.length === 0}}" class="empty">
+    <view class="empty__icon">📋</view>
+    <view class="empty__text">没有符合条件的记录</view>
+  </view>
+
+  <view wx:for="{{list}}" wx:key="id" class="adm">
+    <view class="adm__top">
+      <text class="adm__code">{{item.codeText}}</text>
+      <text class="{{item.statusClass}}">{{item.statusText}}</text>
+    </view>
+    <view class="adm__name">{{item.itemName}}</view>
+    <view class="adm__who">{{item.whoText}}</view>
+    <view class="adm__bottom">
+      <text class="adm__time">{{item.timeText}}</text>
+      <button
+        wx:if="{{canUndo && item.status === 'redeemed'}}"
+        class="adm__undo"
+        data-id="{{item.id}}"
+        bindtap="undoRedeem"
+      >撤销核销</button>
+    </view>
+  </view>
+
+</view>

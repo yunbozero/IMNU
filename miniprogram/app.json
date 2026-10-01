@@ -30,6 +30,13 @@
         "pages/detail/index",
         "pages/adoption/index"
       ]
+    },
+    {
+      "root": "packageAdmin",
+      "name": "admin",
+      "pages": [
+        "pages/reservations/index"
+      ]
     }
   ],
 

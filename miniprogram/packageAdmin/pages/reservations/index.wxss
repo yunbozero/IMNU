@@ -1,0 +1,62 @@
+/* 管理端样式。只在这个分包里用，所以不放进 app.wxss —— 主包要保持小。 */
+
+/* 搜索框和分段控件照抄物品列表页的定义，保证两个页面看起来是一样的。
+   它们不在 app.wxss 里，所以这里是各页一份。 */
+.search {
+  display: flex; align-items: center; gap: 16rpx;
+  height: 88rpx; border-radius: 44rpx; background: #fff;
+  padding: 0 32rpx; margin-top: 28rpx;
+  box-shadow: 0 4rpx 20rpx rgba(150, 90, 60, 0.06);
+}
+.search__icon { font-size: 28rpx; color: var(--text-3); }
+.search__input { flex: 1; font-size: 28rpx; }
+
+.segmented {
+  display: flex; gap: 8rpx; background: #F3E2D9;
+  border-radius: 26rpx; padding: 8rpx; margin: 28rpx 0;
+}
+.segmented__item {
+  flex: 1; text-align: center; font-size: 26rpx; font-weight: 600;
+  color: var(--text-2); padding: 16rpx 0; border-radius: 20rpx;
+  overflow: hidden; white-space: nowrap;
+}
+.segmented__item--on { background: var(--brand); color: #fff; }
+
+/* ---------- 顶部统计 ---------- */
+.admstats {
+  display: flex;
+  padding: 28rpx 0;
+  margin-top: 28rpx;
+}
+.admstats__cell { flex: 1; text-align: center; }
+.admstats__cell + .admstats__cell { border-left: 1rpx solid rgba(43, 33, 25, 0.07); }
+.admstats__n { font-size: 46rpx; font-weight: 800; line-height: 1.2; }
+.admstats__k { font-size: 24rpx; color: var(--text-2); margin-top: 6rpx; }
+
+/* ---------- 名单条目 ---------- */
+.adm {
+  background: #fff; border-radius: 28rpx;
+  padding: 26rpx 30rpx; margin-top: 22rpx;
+  box-shadow: 0 4rpx 20rpx rgba(150, 90, 60, 0.06);
+}
+.adm__top { display: flex; align-items: center; justify-content: space-between; }
+.adm__code {
+  font-size: 40rpx; font-weight: 800; letter-spacing: 4rpx;
+  font-variant-numeric: tabular-nums;
+}
+.adm__name { font-size: 30rpx; font-weight: 600; margin-top: 14rpx; }
+.adm__who { font-size: 26rpx; color: var(--text-2); margin-top: 6rpx; }
+.adm__bottom {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-top: 18rpx;
+}
+.adm__time { font-size: 24rpx; color: var(--text-3); }
+
+/* 小号按钮：不能复用 .btn，那个是通栏宽度 */
+.adm__undo {
+  margin: 0; padding: 0 28rpx; line-height: 2.2;
+  font-size: 24rpx; font-weight: 600;
+  background: #fff; color: var(--brand);
+  border: 3rpx solid var(--brand-soft); border-radius: 24rpx;
+}
+.adm__undo::after { border: 0; }

@@ -16,6 +16,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ROUTES } from '../server/http.mjs';
+import { ROLES, canRedeem, canManage } from '../server/roles.mjs';
+import { ROLES_CAN_REDEEM, ROLES_CAN_MANAGE, ROLE_LABEL } from '../miniprogram/services/session.js';
 import { pickBaseUrl, API_BASE } from '../miniprogram/config.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -349,4 +351,26 @@ test('小程序：管理端计划还在，且没丢掉合规约束和本期范�
 
   // ★ 合规：管理端不改变主体性质，但文案守同一套口径
   assert.match(plan, /不改变小程序的主体性质/, '要写明有管理端不等于组织运营');
+});
+
+test('小程序：界面角色判定必须和服务端 roles.mjs 一致', () => {
+  // 这两个列表是小程序里手写的服务端角色表副本 —— 曾经漏了 deputy，
+  // 于是副主任管理员在界面上被当成学生、管理入口不显示。
+  // 这里用服务端的谓词反推应有列表，而不是再抄一遍。
+  const expectedRedeem = ROLES.filter(canRedeem).sort();
+  const expectedManage = ROLES.filter(canManage).sort();
+
+  assert.deepEqual([...ROLES_CAN_REDEEM].sort(), expectedRedeem,
+    `能核销的角色应当是 [${expectedRedeem}]，界面写的是 [${ROLES_CAN_REDEEM}]`);
+  assert.deepEqual([...ROLES_CAN_MANAGE].sort(), expectedManage,
+    `能管理的角色应当是 [${expectedManage}]，界面写的是 [${ROLES_CAN_MANAGE}]`);
+
+  // 管理门槛必须严格高于核销门槛，否则会出现「能进管理端却进不了核销台」
+  for (const r of ROLES_CAN_MANAGE) {
+    assert.ok(ROLES_CAN_REDEEM.includes(r), `能管理的角色 ${r} 必须也能核销`);
+  }
+
+  // 显示名要覆盖全部角色 —— 漏一个就会在界面上显示成默认的「学生」
+  assert.deepEqual(Object.keys(ROLE_LABEL).sort(), [...ROLES].sort(),
+    `角色显示名必须覆盖服务端全部角色 [${ROLES}]，当前只有 [${Object.keys(ROLE_LABEL)}]`);
 });

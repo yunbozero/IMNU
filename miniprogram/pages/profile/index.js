@@ -10,6 +10,8 @@ Page({
   data: {
     user: null,
     isStaff: false,
+    isManager: false,
+    roleText: '学生',
     // 登记表单
     needRegister: false,
     sid: '',
@@ -33,6 +35,8 @@ Page({
     this.setData({
       user,
       isStaff: session.isStaff(),
+      isManager: session.isManager(),
+      roleText: session.roleLabel(user),
       needRegister: !user,
     });
   },
@@ -81,6 +85,11 @@ Page({
 
   goScan() {
     wx.navigateTo({ url: '/packageBazaar/pages/scan/index' });
+  },
+
+  goAdmin() {
+    if (!this.data.isManager) return;
+    wx.navigateTo({ url: '/packageAdmin/pages/reservations/index' });
   },
 
   goItems() {

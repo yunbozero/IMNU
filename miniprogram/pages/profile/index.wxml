@@ -6,7 +6,7 @@
       <view class="me__avatar">🎪</view>
       <view class="me__name">{{user.name}}</view>
       <view class="me__sid">{{user.sid}}</view>
-      <view class="me__role">{{isStaff ? '志愿者' : '学生'}}</view>
+      <view class="me__role">{{roleText}}</view>
     </view>
 
     <view class="grid2">
@@ -27,6 +27,16 @@
       <view class="grow">
         <view class="entry__title">志愿者核销台</view>
         <view class="entry__desc">扫码或输码，现场核销</view>
+      </view>
+      <view class="entry__arrow">›</view>
+    </view>
+
+    <!-- 管理端：只有副主任管理员及以上看得到。界面挡一道，真正的权限在服务端。 -->
+    <view wx:if="{{isManager}}" class="entry entry--staff" bindtap="goAdmin" hover-class="entry--hover">
+      <view class="entry__icon">📋</view>
+      <view class="grow">
+        <view class="entry__title">管理端 · 预定名单</view>
+        <view class="entry__desc">查谁定了什么、搜取货码、撤销误核销</view>
       </view>
       <view class="entry__arrow">›</view>
     </view>
