@@ -44,6 +44,7 @@ export const ROUTES = {
   // 管理端。门槛（二级管理员 / 一级管理员 / 超管）在 api.mjs 里逐个判断，
   // 这里只保证「必须先登录」。
   'POST /api/admin/item': { handler: 'adminUpdateItem', auth: 'user' },
+  'POST /api/admin/cancel': { handler: 'adminCancel', auth: 'user' },
   'POST /api/admin/undo-redeem': { handler: 'adminUndoRedeem', auth: 'user' },
   'POST /api/admin/role': { handler: 'adminSetRole', auth: 'user' },
   'POST /api/admin/transfer-owner': { handler: 'adminTransferOwner', auth: 'user' },

@@ -258,6 +258,21 @@ Authorization: Bearer <token>
 
 名额用**增量**而不是绝对值。会拦住两种破坏账目的改法：把总数压到已锁定数量以下（已有 10 人预定，总数不能设成 5）、把剩余改成负数。
 
+### `POST /api/admin/cancel`
+
+取消**别人**的预定。**副主任管理员及以上**（和「改物品名额」同一级）。
+
+```json
+{"reservationId": "r_...", "reason": "本人联系不上"}
+```
+
+- `reason` **必填，2–60 字**，会写进 `audit_logs`，连同被取消的是谁一起记下来 ——
+  同学来问「我的名额怎么没了」时查得到。
+- 复用和用户端取消**同一段** `cancelReservation`，所以名额回滚和并发语义完全一致。
+- 只对 `reserved` 有效。已核销的返回 `already_redeemed` 并提示**先撤销核销**；
+  已取消的返回 `cancelled`。
+- 用户端 `POST /api/cancel` 仍然只能取消自己的，这条捷径不会放宽它。
+
 ### `POST /api/admin/undo-redeem`
 
 撤销误核销。**需要一级管理员及以上。**

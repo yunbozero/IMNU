@@ -86,6 +86,13 @@ export function createApi({
     return s.length >= 1 && s.length <= 16 ? s : null;
   };
 
+  /** 取消原因。2–60 字：太短没信息量，太长没人会看。 */
+  const asReason = (v) => {
+    if (typeof v !== 'string') return null;
+    const s = v.trim();
+    return s.length >= 2 && s.length <= 60 ? s : null;
+  };
+
   /* ---------------- handlers ---------------- */
 
   return {
@@ -295,6 +302,52 @@ export function createApi({
       });
 
       return ok({ released: r.released, reservation: r.reservation });
+    },
+
+    /* ---------- 取消别人的预定（管理端） ---------- */
+    /**
+     * 门槛和改物品一样：deputy 及以上。
+     *
+     * ★ 复用 repo.cancelReservation，**绝不另写 UPDATE** ——
+     *   名额回滚的正确性（只有 reserved → cancelled 那一次成功才加名额，
+     *   否则重复点击会让名额虚增）全在它里面，抄一遍必然漏掉。
+     */
+    adminCancel({ body, user }) {
+      if (!user) return fail('unauthorized', '请先登录', 401);
+      if (!isManager(user)) return fail('forbidden', '你没有管理权限', 403);
+
+      const reservationId = asId(body?.reservationId);
+      if (!reservationId) return fail('bad_request', '缺少 reservationId', 400);
+
+      const reason = asReason(body?.reason);
+      if (!reason) return fail('bad_request', '请填写取消原因（2–60 个字）', 400);
+
+      const existing = repo.getReservation(reservationId);
+      if (!existing) return fail('not_found', '预定不存在', 404);
+
+      const r = repo.cancelReservation(reservationId);
+      if (!r.ok) {
+        if (r.reason === 'not_found') return fail('not_found', '预定不存在', 404);
+        // 已核销的必须明确说"先撤销核销"，否则管理员会以为系统坏了
+        if (r.reason === 'redeemed') {
+          return fail('already_redeemed', '这条已经核销过了，要取消请先撤销核销');
+        }
+        if (r.reason === 'cancelled') return fail('cancelled', '这条已经取消过了');
+        return fail(r.reason, '取消失败，请重试');
+      }
+
+      repo.writeAudit({
+        actorId: user.id, action: 'reservation.admin_cancel',
+        targetType: 'reservation', targetId: reservationId,
+        detail: {
+          code: r.reservation.code,
+          targetUserId: existing.userId,     // 被取消的是谁，事后要能查
+          released: r.released,
+          reason,                            // ★ 原因进操作日志
+        },
+      });
+
+      return ok({ released: r.released, reservation: r.reservation, reason });
     },
 
     /* ---------- 核销（志愿者） ---------- */

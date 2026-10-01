@@ -53,12 +53,20 @@
     <view class="adm__who">{{item.whoText}}</view>
     <view class="adm__bottom">
       <text class="adm__time">{{item.timeText}}</text>
-      <button
-        wx:if="{{canUndo && item.status === 'redeemed'}}"
-        class="adm__undo"
-        data-id="{{item.id}}"
-        bindtap="undoRedeem"
-      >撤销核销</button>
+      <view class="adm__ops">
+        <button
+          wx:if="{{item.status === 'reserved'}}"
+          class="adm__btn"
+          data-id="{{item.id}}"
+          bindtap="cancelOther"
+        >取消预定</button>
+        <button
+          wx:if="{{canUndo && item.status === 'redeemed'}}"
+          class="adm__btn"
+          data-id="{{item.id}}"
+          bindtap="undoRedeem"
+        >撤销核销</button>
+      </view>
     </view>
   </view>
 

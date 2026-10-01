@@ -405,3 +405,122 @@ test('管理端：名单可以按状态过滤', async () => {
     assert.equal(cancelled.body.total, 1);
   } finally { await ctx.close(); }
 });
+
+/* ============================================================
+   管理端取消别人的预定
+   ============================================================ */
+
+/** 让某个人预定那件物品，返回 reservation */
+async function reserveAs(ctx, token, requestId) {
+  const r = await call(ctx, 'POST', '/api/reserve', {
+    token, body: { itemId: ctx.ids.itemId, requestId },
+  });
+  assert.equal(r.body.ok, true, JSON.stringify(r.body));
+  return r.body.reservation;
+}
+
+/** 取最后一条某类操作日志的 detail */
+function auditDetail(ctx, action) {
+  const row = ctx.db.prepare(
+    'SELECT detail FROM audit_logs WHERE action = ? ORDER BY id DESC LIMIT 1'
+  ).get(action);
+  return row ? JSON.parse(row.detail || '{}') : null;
+}
+
+test('管理端：副主任可以取消别人的预定，名额释放，原因进日志', async () => {
+  const ctx = await startTestServer();
+  try {
+    const before = (await call(ctx, 'GET', '/api/items')).body.items[0].remainingQuota;
+
+    const r = await reserveAs(ctx, ctx.tokens['code-student'], 'adc-1');
+    const afterReserve = (await call(ctx, 'GET', '/api/items')).body.items[0].remainingQuota;
+    assert.equal(afterReserve, before - 1, '预定后名额应当减一');
+
+    const res = await call(ctx, 'POST', '/api/admin/cancel', {
+      token: ctx.tokens['code-deputy'],
+      body: { reservationId: r.id, reason: '本人联系不上' },
+    });
+    assert.equal(res.body.ok, true, JSON.stringify(res.body));
+    assert.equal(res.body.released, 1);
+
+    // ★ 名额必须回到预定前。这条测的是「复用了 cancelReservation 的回滚」，
+    //   要是谁另写一条 UPDATE 而忘了加名额，这里立刻红。
+    const after = (await call(ctx, 'GET', '/api/items')).body.items[0].remainingQuota;
+    assert.equal(after, before, '取消后名额必须回到预定前');
+
+    const detail = auditDetail(ctx, 'reservation.admin_cancel');
+    assert.equal(detail.reason, '本人联系不上', '原因必须进操作日志');
+    assert.equal(detail.code, r.code, '日志里要留取货码，方便对账');
+    assert.equal(detail.targetUserId, ctx.ids.people['code-student'].id,
+      '要记下被取消的是谁 —— 同学来问时才查得到');
+  } finally { await ctx.close(); }
+});
+
+test('管理端：学生和志愿者不能取消别人的预定', async () => {
+  const ctx = await startTestServer();
+  try {
+    const r = await reserveAs(ctx, ctx.tokens['code-student'], 'adc-2');
+
+    for (const code of ['code-student', 'code-vol']) {
+      const res = await call(ctx, 'POST', '/api/admin/cancel', {
+        token: ctx.tokens[code], body: { reservationId: r.id, reason: '试试看' },
+      });
+      assert.equal(res.status, 403, `${code} 不该能取消别人的预定`);
+    }
+
+    // 越权调用不能有任何副作用
+    const left = (await call(ctx, 'GET', '/api/items')).body.items[0].remainingQuota;
+    assert.equal(left, 9, '越权失败时名额不该被释放');
+  } finally { await ctx.close(); }
+});
+
+test('管理端：取消必须给原因，且长度受限', async () => {
+  const ctx = await startTestServer();
+  try {
+    const r = await reserveAs(ctx, ctx.tokens['code-student'], 'adc-3');
+
+    for (const reason of [undefined, '', '   ', 'x', 'x'.repeat(61)]) {
+      const res = await call(ctx, 'POST', '/api/admin/cancel', {
+        token: ctx.tokens['code-deputy'],
+        body: { reservationId: r.id, reason },
+      });
+      assert.equal(res.status, 400, `原因「${reason}」应当被拒`);
+    }
+
+    // 参数不合法时不能改动任何东西
+    const mine = (await call(ctx, 'GET', '/api/reservations', { token: ctx.tokens['code-student'] }))
+      .body.reservations[0];
+    assert.equal(mine.status, 'reserved', '参数被拒时预定还是原样');
+  } finally { await ctx.close(); }
+});
+
+test('管理端：已核销的要先撤销核销，不能直接取消', async () => {
+  const ctx = await startTestServer();
+  try {
+    const r = await reserveAs(ctx, ctx.tokens['code-student'], 'adc-4');
+    const ok = await call(ctx, 'POST', '/api/redeem', {
+      token: ctx.tokens['code-vol'], body: { code: r.code },
+    });
+    assert.equal(ok.body.ok, true, JSON.stringify(ok.body));
+
+    const res = await call(ctx, 'POST', '/api/admin/cancel', {
+      token: ctx.tokens['code-deputy'],
+      body: { reservationId: r.id, reason: '想取消' },
+    });
+    assert.equal(res.body.ok, false);
+    assert.equal(res.body.error, 'already_redeemed');
+    assert.match(res.body.message, /撤销核销/, '要明确告诉他下一步该做什么');
+  } finally { await ctx.close(); }
+});
+
+test('管理端：取消不存在的预定返回 404', async () => {
+  const ctx = await startTestServer();
+  try {
+    const res = await call(ctx, 'POST', '/api/admin/cancel', {
+      token: ctx.tokens['code-deputy'],
+      body: { reservationId: 'rsv_不存在', reason: '测试' },
+    });
+    assert.equal(res.status, 404);
+    assert.equal(res.body.error, 'not_found');
+  } finally { await ctx.close(); }
+});
