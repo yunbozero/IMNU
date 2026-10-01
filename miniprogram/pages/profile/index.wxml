@@ -41,6 +41,15 @@
       <view class="entry__arrow">›</view>
     </view>
 
+    <view wx:if="{{isManager}}" class="entry entry--staff" bindtap="goAdminItems" hover-class="entry--hover">
+      <view class="entry__icon">📦</view>
+      <view class="grow">
+        <view class="entry__title">管理端 · 物品名额</view>
+        <view class="entry__desc">临时加减名额、上下架</view>
+      </view>
+      <view class="entry__arrow">›</view>
+    </view>
+
     <view class="card">
       <view class="card__title">活动规则</view>
       <view class="rule"><text class="rule__k">预定免费：</text>小程序只登记名额，不出售商品、不收取任何费用。</view>

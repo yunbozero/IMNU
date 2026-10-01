@@ -92,6 +92,11 @@ Page({
     wx.navigateTo({ url: '/packageAdmin/pages/reservations/index' });
   },
 
+  goAdminItems() {
+    if (!this.data.isManager) return;
+    wx.navigateTo({ url: '/packageAdmin/pages/items/index' });
+  },
+
   goItems() {
     wx.navigateTo({ url: '/packageBazaar/pages/items/index' });
   },

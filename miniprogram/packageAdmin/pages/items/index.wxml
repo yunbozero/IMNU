@@ -1,0 +1,70 @@
+<view class="page">
+
+  <view wx:if="{{error}}" class="notice notice--strong" bindtap="load">
+    <text class="notice__b">打不开：</text>{{error}}（点一下重试）
+  </view>
+
+  <view wx:if="{{!loading && list.length === 0}}" class="empty">
+    <view class="empty__icon">📦</view>
+    <view class="empty__text">还没有物品</view>
+  </view>
+
+  <view wx:for="{{list}}" wx:key="id" class="it {{item.offShelf ? 'it--off' : ''}}">
+    <view class="it__head">
+      <view class="it__thumb {{item.tint}}">{{item.emoji || '🎁'}}</view>
+      <view class="grow">
+        <view class="it__name">{{item.name}}</view>
+        <view class="it__stall">
+          {{item.stallName || '未分配摊位'}}
+          <text class="{{item.offShelf ? 'tag tag--grey' : 'tag tag--green'}}">{{item.statusText}}</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="quota">
+      <view class="quota__text">
+        <text>名额</text>
+        <text class="quota__num">{{item.quotaText}}</text>
+      </view>
+      <view class="quota__bar">
+        <view class="quota__fill" style="width:{{item.percent}}%"></view>
+      </view>
+    </view>
+
+    <view class="it__ops">
+      <button
+        class="op"
+        data-id="{{item.id}}"
+        data-delta="-1"
+        disabled="{{busyId === item.id}}"
+        bindtap="bumpQuota"
+      >−1</button>
+      <button
+        class="op"
+        data-id="{{item.id}}"
+        data-delta="1"
+        disabled="{{busyId === item.id}}"
+        bindtap="bumpQuota"
+      >+1</button>
+      <button
+        class="op"
+        data-id="{{item.id}}"
+        disabled="{{busyId === item.id}}"
+        bindtap="customQuota"
+      >改数量</button>
+      <button
+        class="op op--shelf"
+        data-id="{{item.id}}"
+        data-status="{{item.offShelf ? 'on_sale' : 'off_shelf'}}"
+        disabled="{{busyId === item.id}}"
+        bindtap="toggleShelf"
+      >{{item.offShelf ? '重新上架' : '下架'}}</button>
+    </view>
+  </view>
+
+  <view class="notice">
+    <text class="notice__b">加减的是「总共有多少份」。</text>
+    两种越界会被挡住：总数不能低于已被预定的份数，剩余名额不能为负。
+  </view>
+
+</view>
