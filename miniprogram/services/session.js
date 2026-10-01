@@ -118,11 +118,16 @@ export async function login() {
   return { registered: !!r.registered, user: r.user || null };
 }
 
-/** 登记学号姓名。需要先 login() 拿到 register token。 */
-export async function register(sid, name) {
+/**
+ * 登记昵称。需要先 login() 拿到 register token。
+ *
+ * 不再收学号：小程序里没法验证身份，收一个验证不了的学号只会让人以为验过了。
+ * 服务端的 sid 字段仍在（可选），传了还是会按格式校验并存下来。
+ */
+export async function register(name) {
   const r = await api.post('/api/register', {
     token: getToken(),
-    body: { sid, name },
+    body: { name },
   });
   saveSession({ token: r.token, scope: 'user', user: r.user });
   return r.user;

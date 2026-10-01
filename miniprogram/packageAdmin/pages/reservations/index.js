@@ -58,7 +58,7 @@ Page({
         code: x.code,
         codeText: groupCode(x.code),
         itemName: x.itemName || '（物品已删除）',
-        // 管理员要看完整学号，方便现场核对，所以不用给学生看的那个打码版本
+        // 学号现在是可选的（学生端已不再收集），所以这里必须能只显示昵称
         whoText: x.userSid ? `${x.userName} · 学号 ${x.userSid}` : (x.userName || '—'),
         status: x.status,
         statusText: statusText(x.status),

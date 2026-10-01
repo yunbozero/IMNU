@@ -56,6 +56,7 @@ export function createApi({
   repo, sessions, secret, signToken,
   startedAt = Date.now(), now = Date.now,
   makeCode = generateCode,
+  maxItemsPerUser = 0,          // 每个账号在本次活动内最多预定几件；0 或负数 = 不限
 }) {
   if (!repo) throw new Error('createApi 需要 repo');
   if (!signToken) throw new Error('createApi 需要 signToken');
@@ -71,10 +72,18 @@ export function createApi({
   };
 
   const asSid = (v) => (typeof v === 'string' && /^\d{6,16}$/.test(v.trim()) ? v.trim() : null);
-  const asName = (v) => {
+
+  /**
+   * 昵称。注意这里**不是**在验证真实姓名。
+   *
+   * 以前这个字段叫「真实姓名」、限 2–12 字，因为最初的设计要收学号 + 姓名来认人。
+   * 现在不用学号、也不验证身份，就不该继续假装它是真名 —— 放开到 1–16 字，
+   * 一个字也行（有人昵称就叫「猫」）。
+   */
+  const asNickname = (v) => {
     if (typeof v !== 'string') return null;
     const s = v.trim();
-    return s.length >= 2 && s.length <= 12 ? s : null;
+    return s.length >= 1 && s.length <= 16 ? s : null;
   };
 
   /* ---------------- handlers ---------------- */
@@ -146,12 +155,22 @@ export function createApi({
       if (!auth || auth.scope !== 'register') {
         return fail('unauthorized', '请先登录', 401);
       }
-      const sid = asSid(body?.sid);
-      const name = asName(body?.name);
-      if (!sid) return fail('bad_request', '请输入 6–16 位数字学号', 400);
-      if (!name) return fail('bad_request', '请输入真实姓名', 400);
 
-      const r = repo.createUser({ openid: auth.openid, sid, name, role: 'student' });
+      // 学号是**可选**的。既然不验证身份，就不该收集学号 ——
+      // 收一个验证不了的学号只会让人误以为验证过了，顺带还有个隐私负担。
+      // 但传了仍然按格式校验并存下来（数据库列和唯一索引都还在，多个 NULL 是允许的），
+      // 万一以后哪个院系想用，不用再改表。
+      const rawSid = body?.sid === undefined || body?.sid === null || body?.sid === ''
+        ? null
+        : asSid(body.sid);
+      if (body?.sid && !rawSid) {
+        return fail('bad_request', '学号格式不对：应为 6–16 位数字', 400);
+      }
+
+      const name = asNickname(body?.name);
+      if (!name) return fail('bad_request', '请填写昵称（1–16 个字）', 400);
+
+      const r = repo.createUser({ openid: auth.openid, sid: rawSid, name, role: 'student' });
       if (!r.ok) {
         return fail(r.reason, MESSAGES[r.reason] || '登记失败');
       }
@@ -159,7 +178,7 @@ export function createApi({
       repo.writeAudit({
         actorId: r.user.id, action: 'user.register',
         targetType: 'user', targetId: r.user.id,
-        detail: { sid },
+        detail: { sid: rawSid },
       });
 
       const token = signToken({ uid: r.user.id, scope: 'user' }, secret);
@@ -225,6 +244,7 @@ export function createApi({
       for (let attempt = 0; attempt < CODE_RETRY; attempt++) {
         const r = repo.tryReserve({
           eventId: event.id, itemId, userId: user.id, qty, requestId, code,
+          maxPerUser: maxItemsPerUser,
         });
 
         if (r.ok) {
@@ -237,6 +257,12 @@ export function createApi({
         }
 
         if (r.reason === 'code_taken') { code = makeCode(); continue; }
+
+        // 上限要把具体数字告诉用户，所以不能走静态文案表
+        if (r.reason === 'too_many') {
+          return fail('too_many',
+            `每个账号最多预定 ${r.limit} 件，你已经定了 ${r.current} 件。`, 200);
+        }
 
         const status = r.reason === 'not_found' ? 404 : 200;
         return fail(r.reason, MESSAGES[r.reason] || '预定失败', status);

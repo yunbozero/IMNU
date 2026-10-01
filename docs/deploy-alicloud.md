@@ -254,12 +254,23 @@ sudo systemctl restart bazaar
 
 > `SESSION_SECRET` 是 `bootstrap.sh` 自动生成的随机值，**不要动它** —— 改了所有人都会掉登录。
 
+同一个文件里还有几个可调项（都有默认值，不填也能跑）：
+
+| 变量 | 默认 | 作用 |
+| --- | --- | --- |
+| `MAX_ITEMS_PER_USER` | `3` | 每个账号在本次活动内最多预定几件。**防囤货的软上限**，`0` 表示不限 |
+| `WX_APPID` / `WX_SECRET` | 无 | 不填则登录接口直接失败 |
+| `PORT` / `DB_PATH` | `3000` / `/srv/bazaar/data/bazaar.db` | 一般不用改，改之前先看 `deploy/bazaar.service` |
+
+改完都要 `sudo systemctl restart bazaar`。上限设成 `0` 就能关掉限制 ——
+如果现场发现"帮室友带一份"的需求很普遍，把它调大比改代码快。
+
 ### ② 设立第一个超管
 
 转交要求「已经有一个超管」，而接口又拒绝直接设 owner，所以第一个超管只能由服务端设立：
 
 ```bash
-# 先让一个人在小程序里完成登记（学号 + 姓名），然后列出已登记的人
+# 先让一个人在小程序里完成登记（填个昵称即可），然后列出已登记的人
 sudo -u bazaar DB_PATH=/srv/bazaar/data/bazaar.db \
   node /srv/bazaar/app/scripts/set-owner.mjs --list
 

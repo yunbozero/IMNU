@@ -25,9 +25,9 @@
 | --- | --- |
 | `id` | 主键 |
 | `openid` | 微信 openid，**唯一** |
-| `sid` | 学号，**唯一**，可为 NULL |
-| `name` | 姓名 |
-| `role` | `student` / `volunteer` / `admin` / `owner` |
+| `sid` | 学号，**唯一**，可为 NULL。学生端已不再收集（见 docs/api.md），保留给将来可能用到的院系 |
+| `name` | 昵称（1–16 字）。注意它**不是**验证过的真实姓名 |
+| `role` | `student` / `volunteer` / `deputy` / `admin` / `owner` |
 
 ### events / stalls — 场次与摊位
 

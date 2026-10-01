@@ -23,7 +23,7 @@ const SECRET = 'integration-test-secret-16';
    测试脚手架
    ============================================================ */
 
-async function startTestServer({ makeCode, rateLimiter, seed } = {}) {
+async function startTestServer({ makeCode, rateLimiter, seed, maxItemsPerUser } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'imnu-api-'));
   const dbPath = path.join(dir, 'bazaar.db');
 
@@ -53,6 +53,7 @@ async function startTestServer({ makeCode, rateLimiter, seed } = {}) {
     makeCode,
     log: () => {},                                   // 测试时别刷屏
     rateLimiter: rateLimiter || createRateLimiter({ limit: 1000, windowMs: 10_000 }),
+    maxItemsPerUser,
   });
 
   return {
@@ -206,15 +207,77 @@ test('接口：学号被占用时拒绝登记', async () => {
   });
 });
 
-test('接口：学号格式不对时拒绝', async () => {
+test('接口：学号是可选字段 —— 传了就得格式正确，不传也应当能登记', async () => {
   await withServer({}, async (ctx) => {
-    const login = await call(ctx.base, 'POST', '/api/login', { body: { code: 'code-a' } });
-    for (const sid of ['abc', '123', '', '12345678901234567']) {
+    // 传了就必须是对的，格式不对要拒
+    for (const sid of ['abc', '123', '12345678901234567']) {
+      const login = await call(ctx.base, 'POST', '/api/login', { body: { code: `bad-${sid}` } });
       const r = await call(ctx.base, 'POST', '/api/register', {
         token: login.body.token, body: { sid, name: '王雨桐' },
       });
       assert.equal(r.status, 400, `学号 ${sid} 应当被拒`);
     }
+
+    // ★ 不传 / 传空 = 「不收学号」。这是现在的主路径：
+    //   既然不验证身份，就不该收集学号 —— 收一个验证不了的学号只会让人以为验过了。
+    const cases = [
+      { label: '不传 sid', body: { name: '猫猫' } },
+      { label: 'sid 空串', body: { sid: '', name: '猫猫' } },
+      { label: 'sid 为 null', body: { sid: null, name: '猫猫' } },
+    ];
+    for (const [i, c] of cases.entries()) {
+      const login = await call(ctx.base, 'POST', '/api/login', { body: { code: `nosid-${i}` } });
+      const r = await call(ctx.base, 'POST', '/api/register', {
+        token: login.body.token, body: c.body,
+      });
+      assert.equal(r.body.ok, true, `${c.label} 应当能登记：${JSON.stringify(r.body)}`);
+      assert.equal(r.body.user.sid, null, `${c.label} 时 sid 应当存 null`);
+      assert.equal(r.body.user.name, '猫猫');
+    }
+  });
+});
+
+test('接口：昵称放宽到 1–16 字（不再假装它是真名）', async () => {
+  await withServer({}, async (ctx) => {
+    // 一个字也可以 —— 有人昵称就叫「猫」
+    const one = await call(ctx.base, 'POST', '/api/login', { body: { code: 'nick-1' } });
+    const ok = await call(ctx.base, 'POST', '/api/register', {
+      token: one.body.token, body: { name: '猫' },
+    });
+    assert.equal(ok.body.ok, true, JSON.stringify(ok.body));
+
+    // 空 / 纯空格 / 超 16 字要拒
+    for (const [i, name] of ['', '   ', 'x'.repeat(17)].entries()) {
+      const login = await call(ctx.base, 'POST', '/api/login', { body: { code: `nick-bad-${i}` } });
+      const r = await call(ctx.base, 'POST', '/api/register', {
+        token: login.body.token, body: { name },
+      });
+      assert.equal(r.status, 400, `昵称「${name}」应当被拒`);
+    }
+  });
+});
+
+test('接口：每个账号有预定上限，且被挡住时不扣名额', async () => {
+  await withServer({ maxItemsPerUser: 1 }, async (ctx) => {
+    const { token } = await signUp(ctx, 'cap-a', null, '囤货的');
+
+    const first = await call(ctx.base, 'POST', '/api/reserve', {
+      token, body: { itemId: ctx.ids.itemId, requestId: 'cap-1' },
+    });
+    assert.equal(first.body.ok, true, JSON.stringify(first.body));
+
+    // 换一件物品也应当被上限挡住（不是靠 active_key 的一人一件）
+    const second = await call(ctx.base, 'POST', '/api/reserve', {
+      token, body: { itemId: ctx.ids.otherId, requestId: 'cap-2' },
+    });
+    assert.equal(second.body.ok, false);
+    assert.equal(second.body.error, 'too_many');
+    assert.match(second.body.message, /最多预定 1 件/, '文案要带上具体上限');
+
+    // ★ 上限是在扣减**之前**拦下的，所以另一件物品的名额不该少
+    const items = (await call(ctx.base, 'GET', '/api/items')).body.items;
+    const other = items.find((x) => x.id === ctx.ids.otherId);
+    assert.equal(other.remainingQuota, 5, '被上限挡住时不应该扣名额');
   });
 });
 

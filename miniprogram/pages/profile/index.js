@@ -14,7 +14,6 @@ Page({
     roleText: '学生',
     // 登记表单
     needRegister: false,
-    sid: '',
     name: '',
     submitting: false,
     agree: false,
@@ -41,20 +40,17 @@ Page({
     });
   },
 
-  onSidInput(e) { this.setData({ sid: e.detail.value }); },
   onNameInput(e) { this.setData({ name: e.detail.value }); },
   toggleAgree() { this.setData({ agree: !this.data.agree }); },
 
   async submitRegister() {
-    const sid = String(this.data.sid || '').trim();
     const name = String(this.data.name || '').trim();
 
-    // 前端校验只是为了少一次往返，真正的约束在服务端（唯一索引）
-    if (!/^\d{6,16}$/.test(sid)) {
-      return wx.showToast({ title: '请输入 6–16 位数字学号', icon: 'none' });
-    }
-    if (name.length < 2 || name.length > 12) {
-      return wx.showToast({ title: '请输入真实姓名', icon: 'none' });
+    // 前端校验只是为了少一次往返，真正的约束在服务端。
+    // ★ 不再收学号：既然没法在小程序里验证身份，收一个验证不了的学号
+    //   只会让人以为验过了，还多一份隐私负担。
+    if (name.length < 1 || name.length > 16) {
+      return wx.showToast({ title: '请填写 1–16 个字的昵称', icon: 'none' });
     }
     if (!this.data.agree) {
       return wx.showToast({ title: '请先勾选同意活动规则', icon: 'none' });
@@ -67,9 +63,9 @@ Page({
         const r = await session.login();
         if (r.registered) { this.refresh(); return; }
       }
-      await session.register(sid, name);
+      await session.register(name);
       wx.showToast({ title: '登记成功', icon: 'success' });
-      this.setData({ sid: '', name: '', agree: false });
+      this.setData({ name: '', agree: false });
       this.refresh();
     } catch (e) {
       wx.showToast({ title: (e && e.message) || '登记失败', icon: 'none' });
@@ -102,7 +98,7 @@ Page({
   },
 
   remindRegister() {
-    wx.showToast({ title: '请先登记学号姓名', icon: 'none' });
+    wx.showToast({ title: '请先填写昵称', icon: 'none' });
     this.setData({ needRegister: true });
   },
 

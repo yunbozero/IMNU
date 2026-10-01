@@ -243,7 +243,7 @@ export function createSqliteRepository(db) {
      * requestId 重复提交是幂等的，返回第一次的结果而不是报错——
      * 学生手抖点两次「预定」不应该产生两单，也不应该看到报错。
      */
-    tryReserve({ eventId, itemId, userId, qty = 1, requestId, code }) {
+    tryReserve({ eventId, itemId, userId, qty = 1, requestId, code, maxPerUser = null }) {
       if (!requestId) throw new Error('requestId 必填：它是防重复提交的幂等键');
       if (!code) throw new Error('code 必填：取货码由调用方生成');
       if (!Number.isInteger(qty) || qty <= 0) throw new Error('qty 必须是正整数');
@@ -255,6 +255,22 @@ export function createSqliteRepository(db) {
       }
 
       return inTransactionAbortable(db, () => {
+        // ★ 每账号上限：先数一遍再扣减。
+        //   事务用的是 BEGIN IMMEDIATE，进门就拿到写锁，所以这个数字在本次写入前
+        //   不会被别人改动 —— 计数和扣减之间没有窗口，不需要额外加锁。
+        //   数的是 reserved + redeemed：核销掉的名额同样算「已经拿过」，
+        //   否则先取货再接着定就能绕过上限。
+        if (Number.isInteger(maxPerUser) && maxPerUser > 0) {
+          const held = db.prepare(`
+            SELECT COALESCE(SUM(qty), 0) AS s FROM reservations
+             WHERE event_id = ? AND user_id = ? AND status IN ('reserved', 'redeemed')
+          `).get(eventId, userId).s;
+
+          if (held + qty > maxPerUser) {
+            return abort({ ok: false, reason: 'too_many', limit: maxPerUser, current: held });
+          }
+        }
+
         // ★ 原子扣减：条件判断和更新在同一条语句里完成。
         //   绝不允许"先查剩余、再扣减"——那样两个人同时抢最后一件就会超卖。
         const upd = db.prepare(`

@@ -148,12 +148,15 @@ export function createRequestHandler({
   now = Date.now,
   log = () => {},
   makeCode,
+  maxItemsPerUser = 0,
   rateLimiter = createRateLimiter({ limit: 10, windowMs: 10_000, now }),
 } = {}) {
   if (!repo) throw new Error('需要 repo');
   if (!secret) throw new Error('需要 SESSION_SECRET');
 
-  const api = createApi({ repo, sessions, secret, signToken, startedAt, now, makeCode });
+  const api = createApi({
+    repo, sessions, secret, signToken, startedAt, now, makeCode, maxItemsPerUser,
+  });
 
   return async function handle(req, res) {
     const started = Date.now();
@@ -314,6 +317,15 @@ export function resolveRuntime(env = {}) {
   const fakeLogin = env.DEV_FAKE_LOGIN === '1';
   const dbPath = env.DB_PATH || (fakeLogin ? DEV_DB_PATH : PROD_DB_PATH);
 
+  // 每个账号在本次活动内最多预定几件；0 = 不限。
+  // 防囤货的软上限。默认 3，义卖当天可以改环境变量临时调整（改完重启服务）。
+  const rawMax = env.MAX_ITEMS_PER_USER === undefined || env.MAX_ITEMS_PER_USER === ''
+    ? 3
+    : Number(env.MAX_ITEMS_PER_USER);
+  if (!Number.isInteger(rawMax) || rawMax < 0) {
+    throw new Error('MAX_ITEMS_PER_USER 必须是非负整数（0 表示不限）');
+  }
+
   if (fakeLogin) {
     if (env.NODE_ENV === 'production') {
       throw new Error('拒绝启动：DEV_FAKE_LOGIN=1 与 NODE_ENV=production 同时存在 —— 假登录只能在本地用。');
@@ -353,6 +365,7 @@ export function resolveRuntime(env = {}) {
     sessions,
     fakeLogin,
     warning,
+    maxItemsPerUser: rawMax,
   };
 }
 
@@ -365,12 +378,13 @@ function main() {
     process.exit(1);
   }
 
-  const { port, host, dbPath, secret, sessions, warning } = runtime;
+  const { port, host, dbPath, secret, sessions, warning, maxItemsPerUser } = runtime;
   if (warning) console.warn(warning);
 
-  startServer({ port, host, dbPath, secret, sessions }).then(async ({ server, close }) => {
+  startServer({ port, host, dbPath, secret, sessions, maxItemsPerUser }).then(async ({ server, close }) => {
     console.log(`✅ bazaar-api 已启动 http://${host}:${port}`);
     console.log(`   DB ${dbPath}`);
+    console.log(`   每账号最多预定 ${maxItemsPerUser || '不限'} 件`);
 
     const shutdown = async (sig) => {
       console.log(`收到 ${sig}，正在关闭…`);

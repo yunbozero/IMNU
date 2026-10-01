@@ -57,7 +57,8 @@ Page({
         level: quotaLevel(item),
         percent: quotaPercent(item),
         maxQty: Math.max(1, Math.min(item.remainingQuota, 5)),
-        userLabel: user ? `${user.name}（${user.sid}）` : '未登记',
+        // sid 现在是可选的（学生端已不再收集），所以必须能显示成「只有昵称」
+        userLabel: user ? (user.sid ? `${user.name}（${user.sid}）` : user.name) : '未登记',
       });
 
       await this.loadMyReservation();
@@ -94,7 +95,8 @@ Page({
     if (!session.getUser()) {
       try {
         await session.ensureSession();
-        this.setData({ userLabel: `${session.getUser().name}（${session.getUser().sid}）` });
+        const u = session.getUser();
+        this.setData({ userLabel: u.sid ? `${u.name}（${u.sid}）` : u.name });
       } catch (e) {
         return session.handleError(e);
       }

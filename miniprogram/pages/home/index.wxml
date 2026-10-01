@@ -48,8 +48,8 @@
   <view wx:if="{{!hasUser}}" class="entry entry--hint" bindtap="goProfile" hover-class="entry--hover">
     <view class="entry__icon entry__icon--sm">👤</view>
     <view class="grow">
-      <view class="entry__title entry__title--sm">还没登记学号</view>
-      <view class="entry__desc entry__desc--sm">登记后才能预定名额</view>
+      <view class="entry__title entry__title--sm">还没填写昵称</view>
+      <view class="entry__desc entry__desc--sm">填一下就能预定名额</view>
     </view>
     <view class="entry__arrow">›</view>
   </view>

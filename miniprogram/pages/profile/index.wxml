@@ -5,7 +5,6 @@
     <view class="me">
       <view class="me__avatar">🎪</view>
       <view class="me__name">{{user.name}}</view>
-      <view class="me__sid">{{user.sid}}</view>
       <view class="me__role">{{roleText}}</view>
     </view>
 
@@ -76,27 +75,15 @@
 
     <view class="card">
       <view class="field">
-        <view class="field__label">学号</view>
+        <view class="field__label">昵称</view>
         <input
           class="field__input"
-          type="number"
           maxlength="16"
-          placeholder="请输入学号"
-          value="{{sid}}"
-          bindinput="onSidInput"
-        />
-        <view class="field__tip">用于现场核对身份，请填写本人真实学号</view>
-      </view>
-
-      <view class="field">
-        <view class="field__label">姓名</view>
-        <input
-          class="field__input"
-          maxlength="12"
-          placeholder="请输入真实姓名"
+          placeholder="起个昵称，取货时报一下就行"
           value="{{name}}"
           bindinput="onNameInput"
         />
+        <view class="field__tip">只用来在取货时认出你，不需要真实姓名</view>
       </view>
 
       <view class="agree" bindtap="toggleAgree">
@@ -113,7 +100,7 @@
       >{{submitting ? '提交中…' : '完成登记'}}</button>
     </view>
 
-    <view class="footer-note">信息仅用于本次活动身份核对，活动结束后统一删除</view>
+    <view class="footer-note">只保存你的微信标识和昵称，活动结束后统一删除</view>
   </block>
 
 </view>

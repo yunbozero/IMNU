@@ -120,14 +120,19 @@ Authorization: Bearer <token>
 需要 `register` 作用域的 token。
 
 ```json
-// 请求
-{"sid": "2021123456", "name": "王雨桐"}
+// 请求 —— 昵称必填
+{"name": "猫猫"}
+// sid 可选；传了就必须是 6–16 位数字
+{"name": "猫猫", "sid": "2021123456"}
 
 // 成功 —— 同时返回一个 user token，可以直接用
 {"ok":true,"user":{...},"token":"<user token>"}
 ```
 
-学号必须 6–16 位数字，姓名 2–12 个字符。学号已被占用返回 `{ok:false,error:"sid_taken"}`。
+**昵称**必填，1–16 个字符。**学号是可选字段**：小程序里没法验证身份，
+所以学生端不再收集它 —— 收一个验证不了的学号只会让人以为验过了，还多一份隐私负担。
+传了仍然会按格式校验并存下来，被占用时返回 `{ok:false,error:"sid_taken"}`。
+不传（或传空串 / null）时 `user.sid` 为 `null`。
 
 ### `GET /api/me`
 
