@@ -109,9 +109,13 @@ function main() {
     console.log('\n接下来：');
     console.log('  1. 起后端：       DEV_FAKE_LOGIN=1 npm start');
     console.log('     （Windows PowerShell：$env:DEV_FAKE_LOGIN=\'1\'; npm start）');
-    console.log('  2. 开发者工具里用 code「dev-volunteer」登录 → 就是演示志愿者，能进核销台');
-    console.log('  3. 想当管理员：先用任意 code 登记一次，再跑');
-    console.log(`       DB_PATH=${dbPath} node scripts/set-owner.mjs --list`);
+    console.log('  2. 开发者工具里进小程序 → 填个昵称完成登记');
+    console.log('  3. 想当管理员（管理端 + 核销台都能进）：');
+    console.log('       npm run set-owner -- --list     # 找到自己那行的 openid');
+    console.log('       npm run set-owner <你的openid>');
+    console.log('');
+    console.log('  注：演示志愿者在开发者工具里用不上 —— 工具里没法指定登录 code');
+    console.log('      （wx.login 给的是随机串），它只在自动化测试里有意义。');
   } finally {
     db.close();
   }

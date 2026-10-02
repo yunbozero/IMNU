@@ -173,9 +173,11 @@ test('种子数据：能造出活动和物品，重复跑不会翻倍', () => {
     assert.equal(repo.listItems(ev.id).length, first.items);
     assert.equal(repo.listStalls(ev.id).length, first.stalls);
 
-    // 演示志愿者要能按 code 登录 —— 假登录把 code 映射成 openid:<code>
+    // 演示志愿者的 openid 必须是 openid:<code> 的形式 —— 假登录就是这么映射的。
+    // 注意它只在自动化测试里能用到：开发者工具里指定不了登录 code
+    // （wx.login 给的是随机串），工具里测管理端要靠 set-owner 提权。
     assert.ok(repo.findUserByOpenid('openid:dev-volunteer'),
-      '演示志愿者应当存在，且 openid 必须是 openid:<code> 的形式，否则凭 code 登不进去');
+      '演示志愿者应当存在，且 openid 必须是 openid:<code> 的形式');
 
     const second = seedDemoData(repo);
     assert.equal(second.skipped, true, '重复跑必须跳过');
