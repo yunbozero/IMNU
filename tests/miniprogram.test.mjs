@@ -19,6 +19,9 @@ import { ROUTES } from '../server/http.mjs';
 import { ROLES, canRedeem, canManage } from '../server/roles.mjs';
 import { ROLES_CAN_REDEEM, ROLES_CAN_MANAGE, ROLE_LABEL } from '../miniprogram/services/session.js';
 import { pickBaseUrl, API_BASE } from '../miniprogram/config.js';
+import {
+  REASONS, OTHER_KEY, REASON_MIN, REASON_MAX, composeReason,
+} from '../miniprogram/packageAdmin/utils/cancel-reason.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MP = path.join(ROOT, 'miniprogram');
@@ -373,4 +376,57 @@ test('小程序：界面角色判定必须和服务端 roles.mjs 一致', () => 
   // 显示名要覆盖全部角色 —— 漏一个就会在界面上显示成默认的「学生」
   assert.deepEqual(Object.keys(ROLE_LABEL).sort(), [...ROLES].sort(),
     `角色显示名必须覆盖服务端全部角色 [${ROLES}]，当前只有 [${Object.keys(ROLE_LABEL)}]`);
+});
+
+/* ============================================================
+   管理端取消原因（选项 + 其他手填）
+   ============================================================ */
+
+test('取消原因：预设标签必须落在后端允许的长度内', () => {
+  // 后端 asReason 要求 2–60 字。标签超了的话，管理员选完提交才被拒 ——
+  // 报错出现在提交那一刻而不是加标签那一刻，很难查。这里提前拦住。
+  assert.ok(REASONS.length >= 3, '原因太少，等于没做成选项');
+
+  for (const r of REASONS) {
+    assert.ok(r.label.length >= REASON_MIN && r.label.length <= REASON_MAX,
+      `「${r.label}」长度 ${r.label.length} 不在 ${REASON_MIN}–${REASON_MAX} 内`);
+    assert.ok(r.key && r.key !== OTHER_KEY, `key「${r.key}」不能和 OTHER_KEY 撞`);
+  }
+
+  const keys = REASONS.map((r) => r.key);
+  assert.equal(new Set(keys).size, keys.length, 'key 不能重复');
+});
+
+test('取消原因：选中预设原因就原样发出，不掺手填文字', () => {
+  // 从「其他」切回预设项时输入框里可能还留着字，不能被带进去
+  for (const r of REASONS) {
+    const v = composeReason(r.key, '这段残留文字应当被忽略');
+    assert.equal(v.ok, true);
+    assert.equal(v.reason, r.label);
+  }
+});
+
+test('取消原因：「其他」拼上前缀并去掉首尾空白', () => {
+  const v = composeReason(OTHER_KEY, '  临时有事来不了  ');
+  assert.equal(v.ok, true);
+  assert.equal(v.reason, '其他：临时有事来不了');
+  assert.ok(v.reason.length <= REASON_MAX, '拼完不能超后端的长度上限');
+});
+
+test('取消原因：「其他」空着要拒；长度按「含前缀」算', () => {
+  for (const t of ['', '   ', null, undefined]) {
+    assert.equal(composeReason(OTHER_KEY, t).ok, false, `「${t}」应当被拒`);
+  }
+
+  // 边界：前缀也占长度，所以手填上限是 REASON_MAX 减前缀长度
+  const max = REASON_MAX - '其他：'.length;
+  assert.equal(composeReason(OTHER_KEY, 'x'.repeat(max)).ok, true, `刚好 ${max} 字应当通过`);
+  assert.equal(composeReason(OTHER_KEY, 'x'.repeat(max + 1)).ok, false,
+    `超过 ${max} 字应当被拒（否则拼上前缀就超后端上限了）`);
+});
+
+test('取消原因：没选、或选了不存在的 key 都要拒', () => {
+  for (const key of ['', null, undefined, 'ghost']) {
+    assert.equal(composeReason(key).ok, false, `key「${key}」应当被拒`);
+  }
 });

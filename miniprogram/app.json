@@ -36,7 +36,8 @@
       "name": "admin",
       "pages": [
         "pages/reservations/index",
-        "pages/items/index"
+        "pages/items/index",
+        "pages/cancel/index"
       ]
     }
   ],

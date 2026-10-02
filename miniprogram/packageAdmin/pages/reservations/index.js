@@ -140,41 +140,14 @@ Page({
   },
 
   /**
-   * 取消别人的预定（deputy 及以上就能做，和服务端同一门槛）。
+   * 取消别人的预定 → 跳到确认页。
    *
-   * ★ 必须填原因：会写进操作日志，被取消的同学来问时要能查到是谁、为什么。
-   * ★ 已核销的不能这样取消 —— 服务端会提示「先撤销核销」，这里直接把它弹出来。
+   * 取消是不可逆的（名额立刻释放、东西归别人），所以不在列表上一步做完：
+   * 确认页会把取货码、物品、取货人摊开，再让管理员选原因。
    */
-  async cancelOther(e) {
+  cancelOther(e) {
     const id = e.currentTarget.dataset.id;
-    const row = this.data.all.find((x) => x.id === id);
-    if (!row) return;
-
-    const res = await new Promise((resolve) => {
-      wx.showModal({
-        title: `取消 ${row.codeText}？`,
-        editable: true,
-        placeholderText: '填一下原因，会记进操作日志',
-        success: (r) => resolve(r),
-        fail: () => resolve(null),
-      });
-    });
-    if (!res || !res.confirm) return;
-
-    const reason = String(res.content || '').trim();
-    if (reason.length < 2 || reason.length > 60) {
-      return wx.showToast({ title: '原因请填 2–60 个字', icon: 'none' });
-    }
-
-    try {
-      await api.post('/api/admin/cancel', {
-        token: session.getToken(),
-        body: { reservationId: id, reason },
-      });
-      wx.showToast({ title: '已取消，名额已释放', icon: 'success' });
-      await this.load();
-    } catch (err) {
-      session.handleError(err);
-    }
+    if (!id) return;
+    wx.navigateTo({ url: `/packageAdmin/pages/cancel/index?id=${id}` });
   },
 });

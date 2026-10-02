@@ -1,0 +1,31 @@
+/* 管理端 · 取消预定确认页。样式只在这个分包里用。 */
+
+.reasons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+  margin-top: 8rpx;
+}
+
+.reason {
+  padding: 18rpx 28rpx;
+  border-radius: 24rpx;
+  background: #F6EFEA;
+  color: var(--text);
+  font-size: 27rpx;
+  font-weight: 600;
+}
+.reason--on {
+  background: var(--brand);
+  color: #fff;
+}
+
+.reason__input {
+  margin-top: 22rpx;
+  padding: 24rpx 28rpx;
+  border-radius: 22rpx;
+  background: #F9F4F1;
+  font-size: 28rpx;
+}
+
+.confirm { margin-top: 32rpx; }

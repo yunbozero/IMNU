@@ -1,0 +1,61 @@
+<view class="page">
+
+  <view wx:if="{{error}}" class="notice notice--strong">{{error}}</view>
+
+  <block wx:if="{{row}}">
+
+    <!-- 先把这一笔摊开给管理员看清：取消是不可逆的 -->
+    <view class="codebox">
+      <view class="codebox__label">即将取消这一笔</view>
+      <view class="codebox__digits">{{row.codeText}}</view>
+    </view>
+
+    <view class="panel">
+      <view class="panel__row"><text class="panel__k">物品</text><text class="panel__v">{{row.itemName}}</text></view>
+      <view class="panel__row"><text class="panel__k">取货人</text><text class="panel__v">{{row.whoText}}</text></view>
+      <view class="panel__row"><text class="panel__k">状态</text><text class="panel__v">{{row.statusText}}</text></view>
+      <view class="panel__row"><text class="panel__k">时间</text><text class="panel__v">{{row.timeText}}</text></view>
+    </view>
+
+    <view wx:if="{{!canCancel}}" class="notice notice--strong">
+      <text class="notice__b">这一笔现在不能取消。</text>
+      只有「待取货」的预定能取消；已经取货的请先在名单里撤销核销，再回来取消。
+    </view>
+
+    <block wx:if="{{canCancel}}">
+      <view class="card">
+        <view class="card__title">取消原因（必填）</view>
+
+        <view class="reasons">
+          <view
+            wx:for="{{reasons}}"
+            wx:key="key"
+            class="reason {{picked === item.key ? 'reason--on' : ''}}"
+            data-key="{{item.key}}"
+            bindtap="pickReason"
+          >{{item.label}}</view>
+        </view>
+
+        <input
+          wx:if="{{picked === otherKey}}"
+          class="reason__input"
+          maxlength="57"
+          placeholder="写一下具体原因，会记进操作日志"
+          value="{{otherText}}"
+          bindinput="onOtherInput"
+        />
+      </view>
+
+      <view class="notice">
+        原因会记进操作日志，连同被取消的是谁 —— 同学来问时能查到。
+      </view>
+
+      <button
+        class="btn btn--danger confirm"
+        disabled="{{submitting}}"
+        bindtap="submit"
+      >{{submitting ? '取消中…' : '确认取消并释放名额'}}</button>
+    </block>
+
+  </block>
+</view>

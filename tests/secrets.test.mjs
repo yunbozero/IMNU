@@ -170,6 +170,15 @@ test('密钥扫描：.gitignore 必须挡住环境变量文件', () => {
   }
 });
 
+test('密钥扫描：开发者工具的本地配置必须挡住（每台机器不同，还可能带 AppID）', () => {
+  // 导入微信开发者工具后它会生成 project.private.config.json，
+  // 里面是本机设置（有没有勾「不校验合法域名」等）。不挡的话
+  // `git add -A` 会顺手提交，接下来每个人的设置就互相打架。
+  const ignore = fs.readFileSync(path.join(ROOT, '.gitignore'), 'utf8');
+  assert.ok(ignore.includes('project.private.config.json'),
+    '.gitignore 应当挡住 project.private.config.json');
+});
+
 test('密钥扫描：全部 git 历史里也没有密钥（含已删除的文件）', (t) => {
   // 只扫工作区是不够的：早期提交里可能有过密钥，即使后来删掉了，
   // 它在历史里依然可查 —— 而公开仓库的历史是能被翻的。
