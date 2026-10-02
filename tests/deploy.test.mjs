@@ -466,6 +466,28 @@ test('部署：内蒙古管局的额外要求记在手册里，别丢', () => {
   assert.match(doc, /与全国通用口径不同/, '要写明「不允许变更主体」与通用 FAQ 冲突');
 });
 
+test('部署：bootstrap.sh 不能冲掉 certbot 装好的 TLS 配置', () => {
+  // certbot --nginx 改的是**安装后**的 /etc/nginx/sites-available/bazaar，
+  // 而 bootstrap.sh 每次都从仓库装一份 HTTP-only 的 nginx.conf。
+  // 不加判断的话，certbot 之后再重跑一次 bootstrap.sh 就会把 443 和证书路径冲掉，
+  // 现象是「证书还在、但 https 打不开」—— 指不到真正原因。
+  const src = BOOTSTRAP();
+
+  assert.match(src, /ssl_certificate/,
+    'bootstrap.sh 必须先检查目标站点里有没有证书配置');
+  assert.match(src, /跳过安装/, '命中时要跳过安装并说清楚原因');
+
+  // 判断必须在安装之前，否则等于没判断
+  const guardAt = src.indexOf('ssl_certificate');
+  const installAt = src.indexOf('install -m 644 "$SCRIPT_DIR/nginx.conf"');
+  assert.ok(guardAt !== -1 && installAt !== -1 && guardAt < installAt,
+    '判断在前、安装在后，顺序反了等于没判断');
+
+  // 但软链和 reload 要照常做，否则站点可能没启用
+  assert.match(src, /ln -sf "\$SITE" "\/etc\/nginx\/sites-enabled\/\$SERVICE"/,
+    '无论装不装配置，都要保证站点已启用');
+});
+
 test('部署：页脚有备案号位置，且链接到工信部备案系统（法规要求）', () => {
   // 《非经营性互联网信息服务备案管理办法》第十三条：应在主页底部标明备案编号，
   // 并在备案编号下方按要求链接工信部备案管理系统网址。管局和接入商会抽查这一条。

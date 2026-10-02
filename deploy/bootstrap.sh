@@ -195,8 +195,20 @@ if [ -f "$SCRIPT_DIR/nginx.conf" ]; then
     warn "  sed -i 's/server_name YOUR_DOMAIN;/server_name 你的域名;/' deploy/nginx.conf"
     warn "  sudo bash deploy/bootstrap.sh"
   else
-    log "安装 nginx 站点配置"
-    install -m 644 "$SCRIPT_DIR/nginx.conf" "$SITE"
+    # ★ 不能覆盖 certbot 接管过的配置。
+    #   `certbot --nginx` 改的是**安装后**的那份 $SITE（加 443、加证书路径），
+    #   而本脚本每次都从仓库装一份 HTTP-only 的 nginx.conf ——
+    #   所以 certbot 之后再重跑一次本脚本，TLS 配置就被冲掉了，
+    #   现象是「证书还在、但 https 打不开」，完全指不到这里。
+    if [ -f "$SITE" ] && grep -q 'ssl_certificate' "$SITE"; then
+      warn "$SITE 已由 certbot 接管（含证书配置），跳过安装，避免冲掉 HTTPS。"
+      warn "如果确实需要让 deploy/nginx.conf 的改动生效，请手动合并，然后："
+      warn "  sudo nginx -t && sudo systemctl reload nginx"
+    else
+      log "安装 nginx 站点配置"
+      install -m 644 "$SCRIPT_DIR/nginx.conf" "$SITE"
+    fi
+
     ln -sf "$SITE" "/etc/nginx/sites-enabled/$SERVICE"
     rm -f /etc/nginx/sites-enabled/default
     nginx -t && systemctl reload nginx
