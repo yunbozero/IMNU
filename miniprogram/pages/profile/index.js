@@ -27,6 +27,25 @@ Page({
 
   onShow() {
     this.refresh();
+    this.syncRole();
+  },
+
+  /**
+   * 角色可能被管理员改过（提成志愿者、给管理权限），而客户端缓存里还是旧的 ——
+   * 不拉一次的话，管理端和核销台的入口**永远不出现**。
+   *
+   * 义卖当天尤其要紧：现场给志愿者开权限，他总不能清缓存重来。
+   *
+   * 拉失败就继续用缓存，不打扰用户 —— 网络抖动或 token 过期都会走到这里。
+   */
+  async syncRole() {
+    if (!session.getUser() || !session.getToken()) return;
+    try {
+      await session.refreshUser();
+      this.refresh();
+    } catch {
+      // 静默：用缓存里的角色继续显示
+    }
   },
 
   refresh() {

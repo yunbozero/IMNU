@@ -333,6 +333,16 @@ test('小程序：开发地址与生产地址各自形态正确，不能互相�
   assert.notEqual(pickBaseUrl({ platform: 'devtools' }), API_BASE);
 });
 
+test('小程序：「我的」页必须拉一次最新角色，否则提权后入口永远不出现', () => {
+  // 角色的真正来源是服务端，客户端缓存里那份会过期。
+  // refreshUser() 曾经定义了却没人调用 —— 结果管理员用脚本提权之后，
+  // 管理端和核销台入口一直不显示，而在开发者工具里清缓存会换成一个新身份。
+  const src = fs.readFileSync(path.join(MP, 'pages', 'profile', 'index.js'), 'utf8');
+  assert.match(src, /session\.refreshUser\(\)/,
+    '「我的」页必须调用 session.refreshUser()，否则改过的角色到不了界面');
+  assert.match(src, /onShow\s*\(\)/, '应当在 onShow 里拉，用户每次进来都会刷新');
+});
+
 test('小程序：管理端计划还在，且没丢掉合规约束和本期范围', () => {
   // 计划文档容易在后续编辑里被清空或改味，这里把它钉住几处关键决定。
   const plan = read(path.join(ROOT, 'docs', 'admin-plan.md'));
