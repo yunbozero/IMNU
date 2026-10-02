@@ -131,6 +131,18 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   created_at  INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS ix_audit_target ON audit_logs(target_type, target_id);
+
+-- ============================================================
+-- 运行期设置：管理员在界面里能改的开关
+--
+-- 只放「改了要立刻生效、而且不该需要重启服务」的东西。
+-- 环境变量里的值当默认用；表里有行就以表里的为准（见 repository.tryReserve）。
+-- ============================================================
+CREATE TABLE IF NOT EXISTS settings (
+  key        TEXT PRIMARY KEY,
+  value      TEXT NOT NULL,
+  updated_at INTEGER NOT NULL
+);
 `;
 
 /**

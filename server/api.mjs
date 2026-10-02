@@ -15,7 +15,7 @@
  *
  * 所有 `error` 都是稳定的机器可读字符串，`message` 才是给人看的中文。
  */
-import { generateCode } from './repository.mjs';
+import { generateCode, SETTING_MAX_PER_USER, pickMaxPerUser } from './repository.mjs';
 import {
   ROLE_LABEL, isRole, canManage, canRedeem,
   checkRoleChange, checkOwnerTransfer,
@@ -27,12 +27,22 @@ export const API_VERSION = '1.0.0';
 export const MAX_QTY_PER_RESERVE = 5;
 /** 取货码撞车后的重试次数。6 位数字空间很大，撞一次都算罕见。 */
 export const CODE_RETRY = 5;
+/**
+ * 「每账号最多预定几件」这个设置能填到多大。
+ * 它影响全场每一个人，所以留个上界拦住手滑（比如打成 1000）。
+ */
+export const MAX_ITEMS_PER_USER_LIMIT = 100;
 
 const ok = (body = {}) => ({ status: 200, body: { ok: true, ...body } });
 const fail = (error, message, status = 200) => ({ status, body: { ok: false, error, message } });
 
 const isStaff = (user) => !!user && canRedeem(user.role);
 const isManager = (user) => !!user && canManage(user.role);
+/**
+ * 一级管理员及以上（副主任管理员不算）。
+ * 用于「撤销核销」和「改运行期设置」—— 这两件事的影响面比改单个物品大。
+ */
+const isSeniorManager = (user) => isManager(user) && user.role !== 'deputy';
 
 /* ============================================================
    给小程序看的文案 —— 统一放在一处，前端就不用自己拼
@@ -92,6 +102,14 @@ export function createApi({
     const s = v.trim();
     return s.length >= 2 && s.length <= 60 ? s : null;
   };
+
+  /**
+   * 生效中的「每账号最多预定几件」。
+   * 规则和 repo.tryReserve 里那条是同一个函数（pickMaxPerUser），
+   * 免得「设置页显示的值」和「实际拦人的值」不一致。
+   */
+  const currentMaxPerUser = () =>
+    pickMaxPerUser(repo.getSetting(SETTING_MAX_PER_USER), maxItemsPerUser);
 
   /* ---------------- handlers ---------------- */
 
@@ -430,7 +448,7 @@ export function createApi({
     /** 撤销误核销。门槛比改物品高：只有一级管理员及以上。 */
     adminUndoRedeem({ body, user }) {
       if (!user) return fail('unauthorized', '请先登录', 401);
-      if (!isManager(user) || user.role === 'deputy') {
+      if (!isSeniorManager(user)) {
         return fail('forbidden', '撤销核销需要一级管理员及以上', 403);
       }
 
@@ -524,6 +542,66 @@ export function createApi({
         return { status: 200, raw: { contentType: 'text/csv; charset=utf-8', text: toCsv(rows) } };
       }
       return ok({ event, total: rows.length, reservations: rows });
+    },
+
+    /* ---------- 运行期设置 ---------- */
+
+    /** 读设置。返回值是**生效中**的上限，管理界面直接显示它。 */
+    adminGetSettings({ user }) {
+      if (!user) return fail('unauthorized', '请先登录', 401);
+      if (!isSeniorManager(user)) return fail('forbidden', '改设置需要一级管理员及以上', 403);
+
+      return ok({
+        maxItemsPerUser: currentMaxPerUser(),
+        // 有没有被管理员改过：没改过时界面显示「默认」，也不显示「恢复默认」按钮
+        overridden: repo.getSetting(SETTING_MAX_PER_USER) !== null,
+        defaultMaxItemsPerUser: maxItemsPerUser,
+        maxAllowed: MAX_ITEMS_PER_USER_LIMIT,
+      });
+    },
+
+    /**
+     * 改设置。`maxItemsPerUser: null` 表示恢复默认（删掉设置行）。
+     *
+     * ★ 改完**下一笔预定就生效**，不用重启服务 ——
+     *   上限是在 repo.tryReserve 的事务里现读的。
+     * ★ 调低不会取消已有的预定：已经锁定的名额照旧，只是不能再定新的。
+     */
+    adminSetSettings({ body, user }) {
+      if (!user) return fail('unauthorized', '请先登录', 401);
+      if (!isSeniorManager(user)) return fail('forbidden', '改设置需要一级管理员及以上', 403);
+
+      if (!Object.prototype.hasOwnProperty.call(body || {}, 'maxItemsPerUser')) {
+        return fail('bad_request', '没有要改的内容', 400);
+      }
+
+      const before = currentMaxPerUser();
+      const raw = body.maxItemsPerUser;
+
+      if (raw === null) {
+        repo.clearSetting(SETTING_MAX_PER_USER);
+        repo.writeAudit({
+          actorId: user.id, action: 'settings.reset',
+          targetType: 'setting', targetId: SETTING_MAX_PER_USER,
+          detail: { key: SETTING_MAX_PER_USER, from: before, to: maxItemsPerUser, via: 'admin' },
+        });
+        return ok({ maxItemsPerUser: maxItemsPerUser, overridden: false });
+      }
+
+      const n = Number(raw);
+      if (!Number.isInteger(n) || n < 0 || n > MAX_ITEMS_PER_USER_LIMIT) {
+        return fail('bad_request',
+          `上限必须是 0–${MAX_ITEMS_PER_USER_LIMIT} 的整数（0 表示不限）`, 400);
+      }
+
+      repo.setSetting(SETTING_MAX_PER_USER, n);
+      repo.writeAudit({
+        actorId: user.id, action: 'settings.update',
+        targetType: 'setting', targetId: SETTING_MAX_PER_USER,
+        detail: { key: SETTING_MAX_PER_USER, from: before, to: n, via: 'admin' },
+      });
+
+      return ok({ maxItemsPerUser: n, overridden: true });
     },
   };
 }

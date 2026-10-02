@@ -49,6 +49,8 @@ export const ROUTES = {
   'POST /api/admin/role': { handler: 'adminSetRole', auth: 'user' },
   'POST /api/admin/transfer-owner': { handler: 'adminTransferOwner', auth: 'user' },
   'GET /api/admin/reservations': { handler: 'adminReservations', auth: 'user' },
+  'GET /api/admin/settings': { handler: 'adminGetSettings', auth: 'user' },
+  'POST /api/admin/settings': { handler: 'adminSetSettings', auth: 'user' },
 };
 
 function readBody(req) {

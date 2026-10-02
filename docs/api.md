@@ -309,6 +309,33 @@ Authorization: Bearer <token>
 CSV 带 **UTF-8 BOM** —— 不加的话 Excel 打开中文是乱码，而这份文件就是拿去打印兜底名单的。
 **表里没有金额列**，有测试守着。
 
+### `GET /api/admin/settings`
+
+读运行期设置。**需要一级管理员及以上**（副主任管理员读不到）。
+
+```json
+{
+  "ok": true,
+  "maxItemsPerUser": 3,          // 生效中的值，界面直接显示它
+  "overridden": false,           // 有没有被管理员手动改过
+  "defaultMaxItemsPerUser": 3,   // 服务端配置的兜底值
+  "maxAllowed": 100
+}
+```
+
+### `POST /api/admin/settings`
+
+```json
+{"maxItemsPerUser": 5}     // 设成 5
+{"maxItemsPerUser": 0}     // 0 = 不限
+{"maxItemsPerUser": null}  // 恢复默认（删掉设置行，回落到环境变量那个值）
+```
+
+- 只接受 **0–100 的整数**；`maxAllowed` 拦住手滑（打成 1000 之后很难有人发现）。
+- ★ **改完下一笔预定就生效，不用重启服务** —— 上限是在 `tryReserve` 的事务里现读的。
+- ★ **调低不会取消已有的预定**：已经锁定的名额照旧，只是不能再定新的。
+- 改动写进 `audit_logs`（`settings.update` / `settings.reset`），记下改之前和之后的值。
+
 ### 第一个超管从哪来
 
 转交要求已有超管，接口又拒绝直接设 owner，所以第一个超管只能由服务端设立：

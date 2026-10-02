@@ -22,6 +22,27 @@
 }
 .segmented__item--on { background: var(--brand); color: #fff; }
 
+/* ---------- 每账号上限（运行期设置） ---------- */
+.cap {
+  display: flex; align-items: center; gap: 14rpx;
+  margin-top: 28rpx; padding: 24rpx 30rpx;
+  background: #fff; border-radius: 28rpx;
+  box-shadow: 0 4rpx 20rpx rgba(150, 90, 60, 0.06);
+  font-size: 27rpx;
+}
+.cap__k { color: var(--text-2); }
+.cap__v { font-weight: 700; }
+.cap__tag {
+  font-size: 20rpx; font-weight: 600;
+  padding: 2rpx 12rpx; border-radius: 12rpx;
+  background: var(--brand-soft); color: var(--brand-dark);
+}
+.cap__btn {
+  font-size: 25rpx; color: var(--brand);
+  padding: 8rpx 20rpx; border-radius: 22rpx;
+  border: 2rpx solid var(--brand-soft);
+}
+
 /* ---------- 顶部统计 ---------- */
 .admstats {
   display: flex;

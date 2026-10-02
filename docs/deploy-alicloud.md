@@ -262,8 +262,12 @@ sudo systemctl restart bazaar
 | `WX_APPID` / `WX_SECRET` | 无 | 不填则登录接口直接失败 |
 | `PORT` / `DB_PATH` | `3000` / `/srv/bazaar/data/bazaar.db` | 一般不用改，改之前先看 `deploy/bazaar.service` |
 
-改完都要 `sudo systemctl restart bazaar`。上限设成 `0` 就能关掉限制 ——
-如果现场发现"帮室友带一份"的需求很普遍，把它调大比改代码快。
+改完都要 `sudo systemctl restart bazaar`。
+
+> **`MAX_ITEMS_PER_USER` 现在只是「默认值」。** 管理员可以在小程序里改这个上限
+> （管理端 · 预定名单页顶部，一级管理员及以上），**改完下一笔预定就生效，不用重启**。
+> 一旦有人改过，数据库里的值就压过环境变量；界面上的「恢复默认」会把它删掉、回落到这里。
+> 所以**义卖当天不用为了调上限去动服务器** —— 这是个降级路径，只在设置被改坏时才需要。
 
 ### ② 设立第一个超管
 

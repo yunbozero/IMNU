@@ -26,6 +26,11 @@ Page({
     error: '',
     keyword: '',
     canUndo: false,
+    // 每账号上限（运行期设置）。只有一级管理员及以上能看能改。
+    canEditSettings: false,
+    maxItemsPerUser: 0,
+    maxText: '',
+    maxOverridden: false,
     all: [],
     list: [],
     stats: { total: 0, reserved: 0, redeemed: 0 },
@@ -68,6 +73,10 @@ Page({
           : `预定于 ${timeText(x.createdAt)}`,
       }));
 
+      // 撤销核销和改设置都是「一级管理员及以上」：deputy 能看名单、改物品名额，
+      // 但这两件事影响面更大，门槛高一级（和服务端 api.mjs 的 isSeniorManager 一致）。
+      const isSenior = me.role === 'admin' || me.role === 'owner';
+
       this.setData({
         all,
         stats: {
@@ -75,16 +84,85 @@ Page({
           reserved: all.filter((x) => x.status === 'reserved').length,
           redeemed: all.filter((x) => x.status === 'redeemed').length,
         },
-        // 撤销核销门槛更高：deputy 可以看名单、改名额，但不能撤核销
-        canUndo: me.role === 'admin' || me.role === 'owner',
+        canUndo: isSenior,
+        canEditSettings: isSenior,
       });
 
       this.applyFilter();
+
+      // 设置单独拉一次，而且失败不影响名单 ——
+      // 名单是当天的命根子，不能因为一个设置读不到就整页打不开。
+      if (isSenior) await this.loadSettings();
     } catch (e) {
       if (e && e.code === 'need_register') return session.handleError(e);
       this.setData({ error: (e && e.message) || '加载失败' });
     } finally {
       this.setData({ loading: false });
+    }
+  },
+
+  async loadSettings() {
+    try {
+      const s = await api.get('/api/admin/settings', { token: session.getToken() });
+      this.setData({
+        maxItemsPerUser: s.maxItemsPerUser,
+        maxText: s.maxItemsPerUser === 0 ? '不限' : `${s.maxItemsPerUser} 件`,
+        maxOverridden: !!s.overridden,
+      });
+    } catch {
+      // 读不到就显示成「—」，不打扰管理员
+      this.setData({ maxText: '—', maxOverridden: false });
+    }
+  },
+
+  /** 改「每账号最多预定几件」。改完下一笔预定就生效，不用重启服务。 */
+  async editMax() {
+    const res = await new Promise((resolve) => {
+      wx.showModal({
+        title: '每账号最多预定几件',
+        editable: true,
+        placeholderText: `当前 ${this.data.maxText}，填 0 表示不限`,
+        success: (r) => resolve(r),
+        fail: () => resolve(null),
+      });
+    });
+    if (!res || !res.confirm) return;
+
+    const n = Number(String(res.content || '').trim());
+    if (!Number.isInteger(n) || n < 0 || n > 100) {
+      return wx.showToast({ title: '请填 0–100 的整数', icon: 'none' });
+    }
+    return this.saveMax(n);
+  },
+
+  /** 恢复默认（删掉设置行，回落到服务端配置的值） */
+  async resetMax() {
+    const okRes = await new Promise((resolve) => {
+      wx.showModal({
+        title: '恢复默认？',
+        content: '会删掉这次手动设的上限，回落到服务端配置的默认值。',
+        success: (r) => resolve(!!r.confirm),
+        fail: () => resolve(false),
+      });
+    });
+    if (!okRes) return;
+    return this.saveMax(null);
+  },
+
+  async saveMax(value) {
+    try {
+      const r = await api.post('/api/admin/settings', {
+        token: session.getToken(),
+        body: { maxItemsPerUser: value },
+      });
+      this.setData({
+        maxItemsPerUser: r.maxItemsPerUser,
+        maxText: r.maxItemsPerUser === 0 ? '不限' : `${r.maxItemsPerUser} 件`,
+        maxOverridden: !!r.overridden,
+      });
+      wx.showToast({ title: '已生效', icon: 'success' });
+    } catch (err) {
+      session.handleError(err);
     }
   },
 

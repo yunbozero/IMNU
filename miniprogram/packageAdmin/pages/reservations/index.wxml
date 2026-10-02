@@ -1,5 +1,15 @@
 <view class="page">
 
+  <!-- 每账号上限：运行期设置，改完下一笔预定就生效。只有一级管理员及以上看得到。 -->
+  <view wx:if="{{canEditSettings}}" class="cap">
+    <text class="cap__k">每账号最多</text>
+    <text class="cap__v">{{maxText}}</text>
+    <text wx:if="{{maxOverridden}}" class="cap__tag">已改</text>
+    <view class="grow"></view>
+    <text class="cap__btn" bindtap="editMax">修改</text>
+    <text wx:if="{{maxOverridden}}" class="cap__btn" bindtap="resetMax">恢复默认</text>
+  </view>
+
   <view class="panel admstats">
     <view class="admstats__cell">
       <view class="admstats__n">{{stats.reserved}}</view>

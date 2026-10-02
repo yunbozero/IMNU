@@ -43,11 +43,34 @@ export const REPOSITORY_METHODS = [
   'bootstrapOwner',
   'transferOwnership',
   'countOwners',
+  'getSetting',
+  'setSetting',
+  'clearSetting',
   'writeAudit',
 ];
 
 const now = () => Date.now();
 const newId = (p) => `${p}_${randomUUID()}`;
+
+/**
+ * 设置表里的 key：每个账号在本次活动内最多预定几件。
+ *
+ * 值优先取自数据库 —— 管理员在界面上改完**下一笔预定就生效**，不用重启服务。
+ * 表里没有这一行时，回落到调用方传来的默认值（来自环境变量 MAX_ITEMS_PER_USER）。
+ */
+export const SETTING_MAX_PER_USER = 'maxItemsPerUser';
+
+/**
+ * 上限最终取值：**数据库里的值优先，否则用兜底值**（来自环境变量）。
+ *
+ * 存的值坏掉时（有人手改数据库）也回落到兜底，而不是变成「不限」——
+ * 但更不能把所有人的预定都堵死。抽成一个函数是因为规则只能有一处，
+ * 仓储里的判定和接口返回给管理员的当前值必须是同一个答案。
+ */
+export function pickMaxPerUser(storedValue, fallback) {
+  const n = storedValue === null || storedValue === undefined ? null : Number(storedValue);
+  return Number.isInteger(n) && n >= 0 ? n : fallback;
+}
 
 /** SQLite 唯一索引冲突 */
 function isUniqueViolation(e) {
@@ -255,19 +278,28 @@ export function createSqliteRepository(db) {
       }
 
       return inTransactionAbortable(db, () => {
-        // ★ 每账号上限：先数一遍再扣减。
+        // ★ 每账号上限：优先取数据库里的设置 —— 管理员在界面上改完，
+        //   **下一笔预定就生效**，不用重启服务。
+        //   表里没有那一行时回落到 maxPerUser（来自环境变量）。
+        //   存的值坏掉时（有人手改数据库）也回落到默认 —— 不能变成「不限」，
+        //   但更不能把所有人的预定都堵死。
+        const storedRow = db.prepare('SELECT value FROM settings WHERE key = ?')
+          .get(SETTING_MAX_PER_USER);
+        const limit = pickMaxPerUser(storedRow ? storedRow.value : null, maxPerUser);
+
+        // ★ 先数一遍再扣减。
         //   事务用的是 BEGIN IMMEDIATE，进门就拿到写锁，所以这个数字在本次写入前
         //   不会被别人改动 —— 计数和扣减之间没有窗口，不需要额外加锁。
         //   数的是 reserved + redeemed：核销掉的名额同样算「已经拿过」，
         //   否则先取货再接着定就能绕过上限。
-        if (Number.isInteger(maxPerUser) && maxPerUser > 0) {
+        if (Number.isInteger(limit) && limit > 0) {
           const held = db.prepare(`
             SELECT COALESCE(SUM(qty), 0) AS s FROM reservations
              WHERE event_id = ? AND user_id = ? AND status IN ('reserved', 'redeemed')
           `).get(eventId, userId).s;
 
-          if (held + qty > maxPerUser) {
-            return abort({ ok: false, reason: 'too_many', limit: maxPerUser, current: held });
+          if (held + qty > limit) {
+            return abort({ ok: false, reason: 'too_many', limit, current: held });
           }
         }
 
@@ -558,6 +590,28 @@ export function createSqliteRepository(db) {
 
     countOwners() {
       return db.prepare("SELECT COUNT(*) AS c FROM users WHERE role = 'owner'").get().c;
+    },
+
+    /* ---------------- 运行期设置 ---------------- */
+
+    getSetting(key) {
+      const r = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
+      return r ? r.value : null;
+    },
+
+    /** 写设置。同 key 覆盖。 */
+    setSetting(key, value) {
+      db.prepare(`
+        INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+      `).run(key, String(value), now());
+      return { ok: true };
+    },
+
+    /** 删掉设置行 —— 效果是回落到默认值（环境变量那个） */
+    clearSetting(key) {
+      db.prepare('DELETE FROM settings WHERE key = ?').run(key);
+      return { ok: true };
     },
 
     /* ---------------- 审计 ---------------- */

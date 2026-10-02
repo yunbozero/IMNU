@@ -524,3 +524,134 @@ test('管理端：取消不存在的预定返回 404', async () => {
     assert.equal(res.body.error, 'not_found');
   } finally { await ctx.close(); }
 });
+
+/* ============================================================
+   运行期设置：每账号预定上限
+   ============================================================ */
+
+/** 再放一件物品进来 —— 只有一件时「一人一件」会先把人拦住，测不出上限 */
+function addExtraItem(ctx, totalQuota = 10) {
+  return ctx.repo.createItem({
+    eventId: ctx.ids.eventId, name: '多肉小盆栽', totalQuota,
+  });
+}
+
+const getSettings = (ctx, token) => call(ctx, 'GET', '/api/admin/settings', { token });
+const setSettings = (ctx, token, maxItemsPerUser) => call(ctx, 'POST', '/api/admin/settings', {
+  token, body: { maxItemsPerUser },
+});
+
+test('设置：只有一级管理员及以上能读能改', async () => {
+  const ctx = await startTestServer();
+  try {
+    for (const code of ['code-student', 'code-vol', 'code-deputy']) {
+      assert.equal((await getSettings(ctx, ctx.tokens[code])).status, 403,
+        `${code} 不该能读设置`);
+      assert.equal((await setSettings(ctx, ctx.tokens[code], 1)).status, 403,
+        `${code} 不该能改设置`);
+    }
+    for (const code of ['code-admin', 'code-owner']) {
+      assert.equal((await getSettings(ctx, ctx.tokens[code])).body.ok, true,
+        `${code} 应当能读设置`);
+    }
+  } finally { await ctx.close(); }
+});
+
+test('设置：上限必须是 0–100 的整数', async () => {
+  const ctx = await startTestServer();
+  try {
+    for (const bad of [-1, 1.5, 101, 'abc', undefined]) {
+      const r = await setSettings(ctx, ctx.tokens['code-admin'], bad);
+      assert.equal(r.status, 400, `上限「${bad}」应当被拒`);
+    }
+    // 边界值要能过：0 = 不限，100 = 允许的最大值
+    for (const good of [0, 100]) {
+      const r = await setSettings(ctx, ctx.tokens['code-admin'], good);
+      assert.equal(r.body.ok, true, `上限 ${good} 应当能设`);
+    }
+  } finally { await ctx.close(); }
+});
+
+test('设置：★ 改完下一笔预定就生效（不用重启服务）', async () => {
+  const ctx = await startTestServer();
+  try {
+    const extra = addExtraItem(ctx);
+    const t = ctx.tokens['code-student'];
+
+    // 测试服务器没传上限 → 默认不限。先定一件。
+    const a = await call(ctx, 'POST', '/api/reserve', {
+      token: t, body: { itemId: ctx.ids.itemId, requestId: 'set-1' },
+    });
+    assert.equal(a.body.ok, true, JSON.stringify(a.body));
+
+    // 管理员把上限改成 1：已经拿了 1 件，下一件必须被拦住
+    assert.equal((await setSettings(ctx, ctx.tokens['code-admin'], 1)).body.ok, true);
+
+    const b = await call(ctx, 'POST', '/api/reserve', {
+      token: t, body: { itemId: extra.id, requestId: 'set-2' },
+    });
+    assert.equal(b.body.ok, false, '改完应当立刻拦住下一笔');
+    assert.equal(b.body.error, 'too_many');
+
+    // 放宽到 3：立刻又能定
+    assert.equal((await setSettings(ctx, ctx.tokens['code-admin'], 3)).body.ok, true);
+
+    const c = await call(ctx, 'POST', '/api/reserve', {
+      token: t, body: { itemId: extra.id, requestId: 'set-3' },
+    });
+    assert.equal(c.body.ok, true, `放宽后应当立刻能定：${JSON.stringify(c.body)}`);
+  } finally { await ctx.close(); }
+});
+
+test('设置：调低上限不会取消已有的预定', async () => {
+  const ctx = await startTestServer();
+  try {
+    const extra = addExtraItem(ctx);
+    const t = ctx.tokens['code-student'];
+
+    await call(ctx, 'POST', '/api/reserve', {
+      token: t, body: { itemId: ctx.ids.itemId, requestId: 'low-1' },
+    });
+    await call(ctx, 'POST', '/api/reserve', {
+      token: t, body: { itemId: extra.id, requestId: 'low-2' },
+    });
+
+    // 压到 1 件
+    await setSettings(ctx, ctx.tokens['code-admin'], 1);
+
+    const mine = (await call(ctx, 'GET', '/api/reservations', { token: t }))
+      .body.reservations.filter((x) => x.status === 'reserved');
+    assert.equal(mine.length, 2, '调低上限不该动别人已经锁定的名额');
+  } finally { await ctx.close(); }
+});
+
+test('设置：能恢复默认，且改动进操作日志', async () => {
+  const ctx = await startTestServer();
+  try {
+    const admin = ctx.tokens['code-admin'];
+
+    const before = (await getSettings(ctx, admin)).body;
+    assert.equal(before.overridden, false, '一开始应当是默认值，没有被改过');
+    assert.equal(before.maxItemsPerUser, before.defaultMaxItemsPerUser);
+
+    await setSettings(ctx, admin, 7);
+
+    const mid = (await getSettings(ctx, admin)).body;
+    assert.equal(mid.maxItemsPerUser, 7);
+    assert.equal(mid.overridden, true);
+
+    const detail = auditDetail(ctx, 'settings.update');
+    assert.equal(detail.from, before.maxItemsPerUser, '日志要记下改之前的值');
+    assert.equal(detail.to, 7);
+    assert.equal(detail.key, 'maxItemsPerUser');
+
+    // 传 null = 恢复默认
+    const reset = await setSettings(ctx, admin, null);
+    assert.equal(reset.body.ok, true);
+    assert.equal(reset.body.overridden, false);
+
+    const after = (await getSettings(ctx, admin)).body;
+    assert.equal(after.maxItemsPerUser, after.defaultMaxItemsPerUser, '应当回到兜底值');
+    assert.equal(after.overridden, false);
+  } finally { await ctx.close(); }
+});
