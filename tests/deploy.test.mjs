@@ -24,6 +24,21 @@ const NGINX = () => read(path.join(DEPLOY, 'nginx.conf'));
 const BOOTSTRAP = () => read(path.join(DEPLOY, 'bootstrap.sh'));
 const DEPLOY_SH = () => read(path.join(DEPLOY, 'deploy.sh'));
 
+/**
+ * 找出某个命令**真正被执行**的位置（行首是命令）。
+ *
+ * ★ 为什么不能用 indexOf 直接找字符串：注释和 warn 文案里提到同一条命令时
+ *   也会被算进去。今天已经踩了三次 ——
+ *   「连 fetch 都做不了」这句注释让 `git fetch` 的定位失效、
+ *   warn 里写的 `systemctl restart` 看起来像真的在重启、
+ *   warn 里写的首页安装命令排到了测试前面。
+ *   凡是判断「顺序」的地方，都必须锚在行首。
+ */
+function cmdAt(src, command) {
+  const m = new RegExp(`^[ \\t]*(?:if[ \\t]+![ \\t]+)?${command}`, 'm').exec(src);
+  return m ? m.index : -1;
+}
+
 /** 从 systemd 单元里取一个 Environment= 的值 */
 function envOf(unit, key) {
   const m = new RegExp(`^Environment=${key}=(.+)$`, 'm').exec(unit);
@@ -338,8 +353,8 @@ test('部署：发布脚本也要更新首页（只拉代码的话线上永远�
     'deploy.sh 必须把首页重装到 WWW_DIR，否则改了文案线上不会变');
 
   // 而且要排在测试闸门之后：测试没过就不该动线上文件
-  const testAt = sh.indexOf('node tests/all.mjs');
-  const installAt = sh.indexOf('$WWW_DIR/index.html');
+  const testAt = cmdAt(sh, 'node tests/all\\.mjs');
+  const installAt = cmdAt(sh, 'install -m 644 "\\$SCRIPT_DIR/www/index\\.html" "\\$WWW_DIR/index\\.html"');
   assert.ok(testAt !== -1, 'deploy.sh 里找不到测试闸门');
   assert.ok(installAt !== -1, 'deploy.sh 里找不到首页安装步骤');
   assert.ok(testAt < installAt,
@@ -361,8 +376,12 @@ test('部署：发布脚本要先放行 git safe.directory（否则第二次发�
     'deploy.sh 必须自己加 safe.directory 例外，不能指望手上有个人去敲那条命令');
 
   const safeAt = sh.indexOf('safe.directory');
-  const fetchAt = sh.indexOf('git fetch');
-  assert.ok(fetchAt !== -1, 'deploy.sh 里找不到 git fetch');
+  // ★ 别写死 'git fetch'：现在那行是 `if ! git -c http.lowSpeed* fetch …`
+  //   （见下面那条测试），按字面量找会漏。
+  //   这里认「行首可能是 if !，然后是 git，这一行里有 fetch」——
+  //   必须锚在行首，否则注释里那句「连 fetch 都做不了」会被误当成命令。
+  const fetchAt = sh.search(/^[ \t]*(?:if[ \t]+![ \t]+)?git\b[^\n]*\bfetch\b/m);
+  assert.ok(fetchAt !== -1, 'deploy.sh 里找不到 git fetch 命令');
   assert.ok(safeAt < fetchAt,
     'safe.directory 必须在任何 git 操作之前设置，否则第一次 git 调用就会挂');
 });
@@ -740,8 +759,10 @@ test('部署：bootstrap.sh 不动代码目录的写权限、只开数据目录'
 
 test('部署：发布脚本先跑测试、后重启（顺序不能反）', () => {
   const src = DEPLOY_SH();
-  const testAt = src.indexOf('node tests/all.mjs');
-  const restartAt = src.indexOf('systemctl restart');
+  // 同样锚在行首：warn 文案里出现过 systemctl restart，
+  // 用 indexOf 会把它当成真的重启，顺序断言就假红了
+  const testAt = cmdAt(src, 'node tests/all\\.mjs');
+  const restartAt = cmdAt(src, 'systemctl restart');
 
   assert.ok(testAt > 0, 'deploy.sh 里应当跑测试');
   assert.ok(restartAt > 0, 'deploy.sh 里应当重启服务');
@@ -776,6 +797,65 @@ test('部署：手册明确说了不要买什么', () => {
   for (const naive of ['云数据库', 'SSL 证书']) {
     assert.ok(doc.includes(naive), `手册里应当明确提醒不要买${naive}`);
   }
+});
+
+test('部署：★ git fetch 绝不能无限等待（服务器连不上 github 时不能卡死）', () => {
+  // 真实踩到：服务器上 `git fetch` 卡住不动，什么输出都没有。
+  // 原因是 git 的默认行为在脚本里全是「无限等待」：
+  //   · 弹用户名/密码提示 —— 没人能回答；
+  //   · 首次连 SSH 问「是否信任主机指纹」—— 同样没人能回答；
+  //   · 传输卡死时不放弃。
+  // 三种都表现为「发布卡住了」，而且分不清是网络、认证还是真挂了。
+  const d = DEPLOY_SH();
+
+  assert.match(d, /GIT_TERMINAL_PROMPT=0/,
+    '必须禁止 git 交互式索要密码 —— 脚本里没人能回答，会永远停住');
+  assert.match(d, /BatchMode=yes/,
+    'SSH 要 BatchMode —— 否则首次连接的「信任主机指纹」提示会无限等待');
+  assert.match(d, /ConnectTimeout=\d+/, 'SSH 连接要有超时');
+  assert.match(d, /ServerAliveInterval=\d+/,
+    'SSH 传输中途卡死也要能放弃，光有 ConnectTimeout 管不到');
+  assert.match(d, /http\.lowSpeedTime=\d+/,
+    'HTTPS 传输卡死要有低速超时（这个参数管不到 SSH，所以两个都要有）');
+  assert.match(d, /StrictHostKeyChecking=accept-new/,
+    '要能非交互地接受新主机指纹，否则第一次部署必卡');
+
+  // 失败必须**中止**，不能继续 reset 到一个陈旧的 origin/main
+  assert.match(d, /if ! git [^\n]*fetch[^\n]*; then/, 'fetch 失败要显式判断');
+  assert.match(d, /die "取不到代码/, '失败要 die，而不是继续往下走');
+  // 而且要给出可执行的下一步
+  assert.match(d, /ssh\.github\.com:443/,
+    '要提示换成 SSH over 443 的写法 —— 换个主机名常常就通了');
+  assert.match(d, /Codeup|Gitee/,
+    '两个都不通时要说「换国内镜像」这条路，不能只给一次性的绕法');
+  assert.match(d, /133919|Failed to connect to github\.com/,
+    '把真实见过的报错写进去，用户搜的时候能对上');
+  // root 跑 git 时要用 bootstrap 给 bazaar 生成的那把 deploy key，
+  // 否则 SSH 去翻 /root/.ssh，报 Permission denied，看不出钥匙其实在别处
+  assert.match(d, /id_ed25519/, '要用 deploy key 那把钥匙');
+  assert.match(d, /IdentitiesOnly=yes/,
+    '指定了钥匙还要加 IdentitiesOnly，否则 ssh 会先试别的钥匙再被拒');
+  // ★ 「之前能拉、现在不行」几乎都是代理掉了，而这里有个极隐蔽的坑
+  assert.match(d, /sudo -E|http\.proxy/,
+    '要说清「sudo 会清掉环境变量」这个坑，并给出 sudo -E / git 配代理两条做法');
+  assert.match(d, /sudo env \| grep -i proxy/,
+    '要给出「root 到底有没有代理」的一行检查');
+});
+
+test('部署：手册写明了「服务器连不上 github」的症状和三条出路', () => {
+  const doc = read(DOC);
+  assert.match(doc, /Failed to connect to github\.com port 443/,
+    '要把真实报错写进手册，搜得到');
+  assert.match(doc, /ssh\.github\.com/, '要给出 SSH over 443 的测法和换法');
+  assert.match(doc, /Codeup|Gitee/, '要有长期方案（国内镜像）');
+  assert.match(doc, /git archive/, '要有今天就能用的应急办法');
+  // 应急办法跳过测试闸门 —— 这个必须写明，否则等于教人绕过质量门
+  assert.match(doc, /跳过了测试闸门/, '应急办法的代价要说清楚');
+  // 「之前没问题」这种情况的答案：代理掉了，而且 sudo 会吃掉代理变量
+  assert.match(doc, /sudo.*默认会清掉环境变量/,
+    '要点破「我明明挂着代理，git 还是连不上」的原因');
+  assert.match(doc, /sudo -E/, '要给出保留环境变量的跑法');
+  assert.match(doc, /ls-remote origin main/, '要给出「配完先单独验一次」的命令');
 });
 
 test('部署：手册要说清「怎么给人开权限」（界面里没有任命角色的入口）', () => {

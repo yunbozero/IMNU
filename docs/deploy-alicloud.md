@@ -204,6 +204,112 @@ sudo -u bazaar git clone https://<token>@github.com/<你>/IMNU.git /srv/bazaar/a
 
 > ⚠️ token 会明文留在 `.git/config` 里。要用这条路，记得给 token 只勾 `repo` 读权限，并且**换人时记得吊销**。
 
+### ⚠️ 服务器连不上 github.com（国内 ECS 很常见，实际踩过）
+
+症状：
+
+```
+fatal: unable to access 'https://github.com/yunbozero/IMNU.git/':
+Failed to connect to github.com port 443 after 133919 ms: Could not connect to server
+```
+
+**等了两分钟才失败 = TCP 连接根本建不起来**。不是认证问题、不是仓库权限、
+更不是代码问题。
+
+### ★ 先查代理 —— 如果「之前一直能拉」，几乎就是这个
+
+国内 ECS 直连 github.com 基本不通，能拉通常是**挂了代理**。所以「昨天还好好的，
+今天不行了」最可能就是代理掉了。这里有一个非常隐蔽的坑：
+
+> **`sudo` 默认会清掉环境变量。**
+> 你在自己 shell 里 `export https_proxy=...`，然后 `sudo bash deploy/deploy.sh` ——
+> **那个变量传不进脚本**，因为 `deploy.sh` 是以 root 跑 `git` 的。
+> 于是现象就是「我明明挂着代理，git 还是连不上」。
+
+先确认 root 到底有没有代理：
+
+```bash
+sudo env | grep -i proxy                       # root 的环境里有没有
+sudo git config --global --get http.proxy      # 或者配在 git 里（与 shell 无关）
+```
+
+两种干净的做法（选一个，别只在交互 shell 里 export）：
+
+```bash
+# ① 保留环境变量 —— 适合临时用
+sudo -E bash /srv/bazaar/app/deploy/deploy.sh
+
+# ② 直接配到 root 的 git 里 —— 推荐，换终端、重连 SSH 都还在
+sudo git config --global http.proxy http://127.0.0.1:<你的代理端口>
+sudo git config --global https.proxy http://127.0.0.1:<你的代理端口>
+```
+
+配完**先单独验一次，再发布**：
+
+```bash
+sudo git -C /srv/bazaar/app ls-remote origin main
+```
+
+> 代理服务本身要能开机自启、断了自动重连，否则每次重启服务器都会重演这一幕。
+
+### 没有代理时的三条出路
+
+```bash
+curl -sS -m 8 -o /dev/null -w 'github       -> %{http_code}\n' https://github.com
+timeout 8 bash -c 'cat < /dev/null > /dev/tcp/ssh.github.com/443' \
+  && echo 'ssh.github.com:443 通' || echo 'ssh.github.com:443 也不通'
+```
+
+`ssh.github.com` 和 `github.com` 是**不同的主机名**，前者常常能通 ——
+所以第二条的结果比第一条更关键。
+
+**① 能通 `ssh.github.com:443`** → 换成 SSH over 443，最省事：
+
+```bash
+cd /srv/bazaar/app
+sudo git remote set-url origin ssh://git@ssh.github.com:443/<你>/IMNU.git
+```
+
+还需要一把只读 deploy key（见上面 ②，`bootstrap.sh` 会生成到
+`/srv/bazaar/.ssh/id_ed25519`）。**`deploy.sh` 会自动用这把钥匙** ——
+发布脚本是以 root 跑的，不显式指定的话 SSH 会去翻 `/root/.ssh`，那里没有钥匙，
+报错是 `Permission denied (publickey)`，完全看不出「钥匙其实有，
+只是挂在另一个账号的家目录下」。
+
+**② 两个都不通** → 换国内能连的镜像，长期就这么用：
+
+- **阿里云 Codeup**（和 ECS 同一朵云，最快最稳，推荐）
+- **Gitee**（建一个私有镜像仓库）
+
+把代码推一份过去，然后：
+
+```bash
+sudo git remote set-url origin <镜像地址>
+```
+
+之后服务器从镜像拉，你往两个远端推（或给 GitHub 配 webhook 自动同步）。
+
+**③ 应急（今天就要发）** → 不拉代码，从本机把当前提交打包送上去：
+
+```bash
+# 本地
+git archive --format=tar.gz -o imnu.tar.gz HEAD
+scp imnu.tar.gz root@<服务器IP>:/tmp/
+
+# 服务器
+cd /srv/bazaar/app
+sudo tar xzf /tmp/imnu.tar.gz
+sudo chown -R bazaar:bazaar /srv/bazaar/app
+# ★ 这条路**跳过了测试闸门和首页安装**，两件事必须手工补：
+node tests/all.mjs                                            # 测试自己先跑过
+sudo install -m 644 deploy/www/index.html /srv/bazaar/www/index.html
+sudo systemctl restart bazaar
+curl -s http://127.0.0.1:3000/api/health
+```
+
+> `deploy.sh` 现在给 `git fetch` 加了超时并且禁止交互，所以**不会再卡两分钟**：
+> 最多二十来秒就会带着上面这几条提示失败，并明确说明「线上没有被动过」。
+
 ### 之后每次发布
 
 本地 `git push`，然后在服务器上：
