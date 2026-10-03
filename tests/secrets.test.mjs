@@ -65,12 +65,33 @@ const TEXT_EXT = new Set([
 ]);
 const SKIP_DIRS = new Set(['.git', 'node_modules', 'tmp', 'dist', 'coverage']);
 
+/**
+ * 本机文件：被 .gitignore 挡住，永远进不了仓库，所以不该扫。
+ *
+ * ★ 为什么必须显式排除：遍历文件系统**不看 .gitignore**。
+ *   而 AppID 这类东西必须存在本地某处 —— 正确做法就是放在
+ *   project.private.config.json 里（官方推荐，已被 gitignore 挡住）。
+ *   如果不排除，开发者一按正确做法填上 AppID，本地测试就永远红，
+ *   而 deploy.sh 是「测试不过就不发布」，于是**部署被一个假警报卡死**。
+ *   这个坑已经真实发生过一次。
+ *
+ * 有测试保证这张表里的每一条都确实被 .gitignore 挡住 ——
+ * 不能借这个跳过机制漏掉能提交的文件。
+ */
+export function isLocalOnlyFile(name) {
+  if (name === 'project.private.config.json') return true;
+  if (name === '.env.example') return false;   // 这是要进仓库的模板
+  return name === '.env' || name.startsWith('.env.');
+}
+
 export function walk(dir) {
   const out = [];
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
     if (e.isDirectory()) {
       if (SKIP_DIRS.has(e.name)) continue;
       out.push(...walk(path.join(dir, e.name)));
+    } else if (isLocalOnlyFile(e.name)) {
+      continue;
     } else if (TEXT_EXT.has(path.extname(e.name).toLowerCase())) {
       out.push(path.join(dir, e.name));
     }
@@ -202,4 +223,22 @@ test('密钥扫描：全部 git 历史里也没有密钥（含已删除的文件
 
   assert.deepEqual(problems, [],
     'git 历史里发现疑似密钥：\n' + problems.map((p) => '  · ' + p).join('\n'));
+});
+
+test('密钥扫描：跳过的本机文件必须真被 .gitignore 挡住（不能变成后门）', () => {
+  // 跳过机制存在的原因是「遍历不看 .gitignore」，所以必须自己保证
+  // 跳过的这些确实进不了仓库。否则它可以被用来悄悄漏掉能提交的文件。
+  assert.equal(isLocalOnlyFile('.env'), true);
+  assert.equal(isLocalOnlyFile('.env.local'), true);
+  assert.equal(isLocalOnlyFile('project.private.config.json'), true);
+
+  // 反过来：这些不该被跳过
+  assert.equal(isLocalOnlyFile('.env.example'), false, '模板是要进仓库的，不能跳过');
+  assert.equal(isLocalOnlyFile('config.js'), false);
+  assert.equal(isLocalOnlyFile('app.json'), false);
+
+  const ignore = fs.readFileSync(path.join(ROOT, '.gitignore'), 'utf8');
+  assert.ok(ignore.includes('project.private.config.json'),
+    '.gitignore 必须挡住 project.private.config.json，否则不该跳过它');
+  assert.ok(ignore.includes('.env'), '.gitignore 必须挡住 .env，否则不该跳过它');
 });
