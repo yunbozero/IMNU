@@ -17,6 +17,8 @@ Page({
     name: '',
     submitting: false,
     agree: false,
+    // 登记失败的原因。★ 不只弹 toast —— 见 submitRegister 里的说明
+    regError: '',
   },
 
   onLoad(query) {
@@ -59,8 +61,8 @@ Page({
     });
   },
 
-  onNameInput(e) { this.setData({ name: e.detail.value }); },
-  toggleAgree() { this.setData({ agree: !this.data.agree }); },
+  onNameInput(e) { this.setData({ name: e.detail.value, regError: '' }); },
+  toggleAgree() { this.setData({ agree: !this.data.agree, regError: '' }); },
 
   async submitRegister() {
     const name = String(this.data.name || '').trim();
@@ -69,13 +71,13 @@ Page({
     // ★ 不再收学号：既然没法在小程序里验证身份，收一个验证不了的学号
     //   只会让人以为验过了，还多一份隐私负担。
     if (name.length < 1 || name.length > 16) {
-      return wx.showToast({ title: '请填写 1–16 个字的昵称', icon: 'none' });
+      return this.failRegister('请填写 1–16 个字的昵称');
     }
     if (!this.data.agree) {
-      return wx.showToast({ title: '请先勾选同意活动规则', icon: 'none' });
+      return this.failRegister('请先勾选同意活动规则');
     }
 
-    this.setData({ submitting: true });
+    this.setData({ submitting: true, regError: '' });
     try {
       // 需要 register 作用域的 token。手上没有就先登录一次。
       if (session.getScope() !== 'register') {
@@ -91,13 +93,29 @@ Page({
       }
       await session.register(name);
       wx.showToast({ title: '登记成功', icon: 'success' });
-      this.setData({ name: '', agree: false });
+      this.setData({ name: '', agree: false, regError: '' });
       this.refresh();
     } catch (e) {
-      wx.showToast({ title: (e && e.message) || '登记失败', icon: 'none' });
+      this.failRegister((e && e.message) || '登记失败', e && e.code);
     } finally {
       this.setData({ submitting: false });
     }
+  },
+
+  /**
+   * 登记失败：**留在屏幕上**，而不是只弹一下 toast。
+   *
+   * ★ toast 一两秒就没了，而登记失败是用户必须看懂的信息。真机上出问题时，
+   *   人往往截不到那一下，只能在「点了没反应」和「报错了」之间猜 ——
+   *   结果就是「昵称提交不了」这种没法查的描述。
+   *
+   * 后面括起来的是错误码：`network`（请求没发出去/没回来）和 `unauthorized`（401）
+   * 的排查方向完全不同，把它显示出来能省一整轮来回。
+   */
+  failRegister(message, code) {
+    const text = code ? `${message}（${code}）` : message;
+    this.setData({ regError: text });
+    wx.showToast({ title: message, icon: 'none' });
   },
 
   goMyReservations() {

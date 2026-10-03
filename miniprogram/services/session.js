@@ -100,11 +100,43 @@ export function resetCache() {
 }
 
 /**
+ * 微信登录最多等这么久。
+ *
+ * ★ 为什么必须有超时：`wx.login` 的 **fail 回调在个别情况下根本不会触发**
+ *   （微信会话状态坏了、真机调试的通道卡住）。Promise 于是永远不 settle，
+ *   上层一直 await 下去 —— 界面停在「提交中…」，按钮一直是禁用的，
+ *   **既没有报错，也没有重试入口**。用户能说的只有「点了没反应」，
+ *   而这类静默挂起比报错难查得多。
+ *
+ *   `api.post` 自己带 10 秒超时（见 services/api.js 的 REQUEST_TIMEOUT），
+ *   但 `wx.login` 是微信的原生 API，没有超时参数，只能在这儿自己兜。
+ */
+export const LOGIN_TIMEOUT_MS = 15000;
+
+/** 给 promise 加超时。到点就 reject，不再等它自己回来。 */
+function withTimeout(promise, ms, onTimeout) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(onTimeout()), ms);
+    promise.then(
+      (v) => { clearTimeout(timer); resolve(v); },
+      (e) => { clearTimeout(timer); reject(e); },
+    );
+  });
+}
+
+/**
  * 走一遍 wx.login → /api/login。
  * 该登记还是已登记都能调，返回 { registered, user }。
+ *
+ * `timeoutMs` 只为测试而暴露 —— 生产用默认值。不然测这条得真等 15 秒。
  */
-export async function login() {
-  const res = await platform().login();
+export async function login({ timeoutMs = LOGIN_TIMEOUT_MS } = {}) {
+  const res = await withTimeout(
+    platform().login(),
+    timeoutMs,
+    // 这句话要能照着做：「退出小程序重进」是用户唯一有效的自救动作
+    () => new api.ApiError('login_timeout', '微信登录没有响应，请退出小程序重进'),
+  );
   if (!res || !res.code) throw new api.ApiError('login_failed', '微信登录失败');
 
   const r = await api.post('/api/login', { body: { code: res.code } });

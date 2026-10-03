@@ -93,6 +93,12 @@
         </view>
       </view>
 
+      <!-- 登记失败的原因留在这里，不随 toast 一起消失。
+           真机上出问题时用户截得到这一行，比复述「点了没反应」有用得多。 -->
+      <view wx:if="{{regError}}" class="notice notice--strong reg-error">
+        <text class="notice__b">登记没成功：</text>{{regError}}
+      </view>
+
       <button
         class="btn {{submitting ? 'btn--disabled' : ''}}"
         disabled="{{submitting}}"

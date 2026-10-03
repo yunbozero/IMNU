@@ -804,6 +804,48 @@ test('登记：提交按钮的每条出口都要给用户一句话', () => {
     '这一支不能是「refresh 完就 return」');
 });
 
+test('登录：★ wx.login 不响应时要超时，不能永远挂着（症状是「点了没反应」）', async () => {
+  const platform = await import('../miniprogram/services/platform.js');
+  const session = await import('../miniprogram/services/session.js');
+
+  // 模拟「wx.login 的回调永远不来」。真机上真的会这样（微信会话状态坏了、
+  // 真机调试通道卡住），而原来这里会一直 await 下去 —— 界面停在「提交中…」，
+  // 按钮一直禁用，没有报错也没有重试入口。用户只会说「点了没反应」。
+  platform.setPlatform({ login: () => new Promise(() => {}) });
+  try {
+    const t0 = Date.now();
+    await assert.rejects(
+      () => session.login({ timeoutMs: 40 }),
+      (e) => e && e.code === 'login_timeout' && /退出小程序/.test(e.message),
+      '要超时并给出「照着做就行」的说法',
+    );
+    assert.ok(Date.now() - t0 < 3000, '要按注入的超时返回，不能真等 15 秒');
+  } finally {
+    platform.resetPlatform(platform.originalPlatform);
+    session.resetCache();
+  }
+});
+
+test('登录：wx.login 正常时不该被超时误伤', async () => {
+  const platform = await import('../miniprogram/services/platform.js');
+  const session = await import('../miniprogram/services/session.js');
+
+  platform.setPlatform({ login: () => Promise.resolve({ code: 'fake-code' }) });
+  try {
+    // 后面的 /api/login 在 Node 里必然发不出去（没有 wx.request），
+    // 那条路会以「网络失败」结束 —— 关键是**不能**被判成登录超时。
+    // 超时给得很宽松，免得机器慢的时候抢在前面，把这条测成假红。
+    await assert.rejects(
+      () => session.login({ timeoutMs: 5000 }),
+      (e) => e && e.code !== 'login_timeout',
+      '有 code 的时候不该判成登录超时',
+    );
+  } finally {
+    platform.resetPlatform(platform.originalPlatform);
+    session.resetCache();
+  }
+});
+
 /* ============================================================
    物品照片
    ============================================================ */
