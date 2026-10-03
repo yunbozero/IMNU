@@ -27,8 +27,7 @@
       "root": "packageCats",
       "name": "cats",
       "pages": [
-        "pages/detail/index",
-        "pages/adoption/index"
+        "pages/detail/index"
       ]
     },
     {

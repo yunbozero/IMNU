@@ -31,8 +31,4 @@ Page({
       url: `/packageCats/pages/detail/index?id=${e.currentTarget.dataset.id}`,
     });
   },
-
-  goAdoption() {
-    wx.navigateTo({ url: '/packageCats/pages/adoption/index' });
-  },
 });

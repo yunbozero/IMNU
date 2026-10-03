@@ -36,7 +36,7 @@ miniprogram/
   services/session.js              登录、登记、token
   pages/                           主包：首页 / 猫猫图鉴 / 我的
   packageBazaar/                   分包：义卖全部页面
-  packageCats/                     分包：图鉴详情与送养
+  packageCats/                     分包：图鉴详情
 ```
 
 **两条微信的硬性规则，已经变成断言：**

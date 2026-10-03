@@ -44,13 +44,4 @@
     </view>
   </view>
 
-  <view class="entry entry--staff" bindtap="goAdoption" hover-class="entry--hover">
-    <view class="entry__icon">🏠</view>
-    <view class="grow">
-      <view class="entry__title">送养信息</view>
-      <view class="entry__desc">查看近期送养动态</view>
-    </view>
-    <view class="entry__arrow">›</view>
-  </view>
-
 </view>
