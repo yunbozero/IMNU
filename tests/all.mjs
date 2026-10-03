@@ -19,6 +19,7 @@ import './backup.test.mjs';
 import './deploy.test.mjs';
 import './dev-runtime.test.mjs';
 import './encoding.test.mjs';
+import './init-event.test.mjs';
 import './invariants.test.mjs';
 import './lan.test.mjs';
 import './longimage.test.mjs';

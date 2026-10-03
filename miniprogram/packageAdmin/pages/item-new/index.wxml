@@ -1,0 +1,102 @@
+<view class="page">
+
+  <view wx:if="{{error}}" class="notice notice--strong" bindtap="load">
+    <text class="notice__b">打不开：</text>{{error}}（点一下重试）
+  </view>
+
+  <block wx:if="{{!error}}">
+
+    <view class="card">
+      <view class="card__title">新加一件物品</view>
+
+      <view class="field">
+        <view class="field__k">名称</view>
+        <input
+          class="field__input"
+          maxlength="{{nameMax}}"
+          placeholder="比如：手作黄油曲奇"
+          value="{{name}}"
+          bindinput="onName"
+        />
+      </view>
+
+      <view class="field">
+        <view class="field__k">图标</view>
+        <view class="row">
+          <view class="preview {{tint}}">{{emoji || '🎁'}}</view>
+          <input
+            class="field__input grow"
+            maxlength="2"
+            placeholder="一个 emoji，或一两个字"
+            value="{{emoji}}"
+            bindinput="onEmoji"
+          />
+        </view>
+        <view class="chips">
+          <view
+            wx:for="{{emojis}}"
+            wx:key="*this"
+            class="chip"
+            data-emoji="{{item}}"
+            bindtap="pickEmoji"
+          >{{item}}</view>
+        </view>
+      </view>
+
+      <view class="field">
+        <view class="field__k">底色</view>
+        <view class="chips">
+          <view
+            wx:for="{{tints}}"
+            wx:key="key"
+            class="swatch {{item.key}} {{tint === item.key ? 'swatch--on' : ''}}"
+            data-key="{{item.key}}"
+            bindtap="pickTint"
+          >{{item.label}}</view>
+        </view>
+      </view>
+
+      <view class="field">
+        <view class="field__k">名额</view>
+        <input
+          class="field__input"
+          type="number"
+          placeholder="总共有多少份"
+          value="{{totalQuota}}"
+          bindinput="onQuota"
+        />
+      </view>
+
+      <view class="field">
+        <view class="field__k">简介（可不填）</view>
+        <textarea
+          class="field__area"
+          maxlength="{{descMax}}"
+          placeholder="比如：独立包装，一盒六块"
+          value="{{description}}"
+          bindinput="onDesc"
+        />
+      </view>
+
+      <view class="field field--last">
+        <view class="field__k">摊位</view>
+        <picker mode="selector" range="{{stallNames}}" value="{{stallIndex}}" bindchange="onStall">
+          <view class="field__pick">{{stallNames[stallIndex]}}</view>
+        </picker>
+      </view>
+    </view>
+
+    <view class="notice">
+      <text class="notice__b">保存后这件物品立刻在售，学生马上就能预定。</text>
+      想先藏着就别建；建完想撤，回「物品名额」把它下架。
+    </view>
+
+    <button
+      class="btn save"
+      disabled="{{submitting}}"
+      bindtap="submit"
+    >{{submitting ? '保存中…' : '保存并上架'}}</button>
+
+  </block>
+
+</view>

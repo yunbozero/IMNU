@@ -73,6 +73,11 @@ Page({
     return this.patch(id, { quotaDelta: Number(delta) });
   },
 
+  /** 去新建物品页。建完它自己会退回来，本页 onShow 会重新拉一次。 */
+  goNew() {
+    wx.navigateTo({ url: '/packageAdmin/pages/item-new/index' });
+  },
+
   toggleShelf(e) {
     const { id, status } = e.currentTarget.dataset;
     return this.patch(id, { status });

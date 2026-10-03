@@ -145,3 +145,18 @@ npm run set-owner <你的openid>       # 提成超管
 - `DEV_FAKE_LOGIN=1` —— 任何 code 都能登录。生产有两道锁 + 测试挡着。
 - `npm run seed` —— 往库里塞演示数据。同样拒绝在 `NODE_ENV=production`
   或 `/srv/bazaar` 路径上运行。
+
+## 8. 想用「真实形状」的数据试，而不是演示数据
+
+`npm run seed` 给的是写死的演示物品。要按自己写的配置建数据，用初始化脚本
+（它就是线上建活动用的那个，本地一样能跑）：
+
+```bash
+npm run init-event -- deploy/event-config.example.json            # 只看计划，不写库
+DB_PATH=tmp/bazaar-dev.db npm run init-event -- deploy/event-config.example.json --yes
+```
+
+它是**可以重复运行**的（活动/摊位/物品按名字查重），所以往配置里追加几行再跑一次
+就是「补物品」。默认目标是线上库路径，本地跑**一定要带 `DB_PATH=`** ——
+屏幕第一行会把目标库打出来，跑之前先看一眼。
+

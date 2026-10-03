@@ -91,6 +91,29 @@ export function describeRepositoryContract(label, makeRepo) {
   });
 
   /* ============================================================
+     场次
+     ============================================================ */
+
+  t('listEvents 能看到全部场次，包括草稿和已结束的', () => {
+    const { repo, cleanup } = makeRepo();
+    try {
+      const live = repo.createEvent({ name: '在售的', status: 'on_sale' });
+      const draft = repo.createEvent({ name: '还没开始的', status: 'draft' });
+      const old = repo.createEvent({ name: '上学期办过的', status: 'ended' });
+
+      const ids = repo.listEvents().map((e) => e.id);
+      for (const ev of [live, draft, old]) {
+        assert.ok(ids.includes(ev.id), `listEvents 应当包含「${ev.name}」`);
+      }
+
+      // getActiveEvent 只认在售的那一个 —— 这两者的差别正是 listEvents 存在的理由
+      assert.equal(repo.getActiveEvent().id, live.id);
+      assert.ok(!repo.listEvents().every((e) => e.status === 'on_sale'),
+        'listEvents 不该像 getActiveEvent 那样过滤状态');
+    } finally { cleanup && cleanup(); }
+  });
+
+  /* ============================================================
      预定：防超卖
      ============================================================ */
 

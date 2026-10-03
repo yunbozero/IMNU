@@ -4,6 +4,10 @@
     <text class="notice__b">打不开：</text>{{error}}（点一下重试）
   </view>
 
+  <!-- 加东西是这一页最主要的动作（义卖当天最常见的就是「这个也拿来卖」），
+       所以放在最上面，而不是藏进某个角落。 -->
+  <button wx:if="{{!error}}" class="btn newbtn" bindtap="goNew">＋ 新建物品</button>
+
   <view wx:if="{{!loading && list.length === 0}}" class="empty">
     <view class="empty__icon">📦</view>
     <view class="empty__text">还没有物品</view>

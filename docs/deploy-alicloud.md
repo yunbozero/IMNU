@@ -367,6 +367,41 @@ const PROD_BASE = 'https://neishidemao.cn';
 
 ---
 
+## 5.7 建活动、摊位和物品（真机预览之前必须做）
+
+**不做这一步，小程序打开就是「活动还没开始」** —— 线上库是空的，而且管理端界面
+只能**改**物品、**新建**物品，活动和摊位没有任何界面入口。
+
+```bash
+# 1. 写一份配置，放到仓库外面（deploy.sh 会 git reset --hard，放仓库里会被冲掉）
+sudo nano /srv/bazaar/event.json          # 照抄 deploy/event-config.example.json 改
+
+# 2. 先只看计划 —— 不带 --yes 时一个字节都不写，连库文件都不会建
+sudo -u bazaar DB_PATH=/srv/bazaar/data/bazaar.db \
+  node /srv/bazaar/app/scripts/init-event.mjs /srv/bazaar/event.json
+
+# 3. 计划没问题再真的写
+sudo -u bazaar DB_PATH=/srv/bazaar/data/bazaar.db \
+  node /srv/bazaar/app/scripts/init-event.mjs /srv/bazaar/event.json --yes
+```
+
+几个要知道的点：
+
+- **必须用 `sudo -u bazaar`**。用 root 跑会写出 root 属主的 `-wal` / `-shm` 文件，
+  服务（`bazaar`）之后写不进去，症状是「核销时好时坏」，报错完全指不到权限上。
+- **可以重复运行**：活动/摊位/物品按名字查重，已有的跳过。所以义卖当天要补几件，
+  就在 `items` 里追加几行再跑一次 `--yes`。
+- **活动时间写北京时间**（`"startsAt": "2026-04-18 09:00"`）。脚本内部按 `+08:00` 解析 ——
+  服务器多半是 UTC，直接 `new Date(...)` 会让首页那行差 8 小时。
+- 脚本会**提醒但不拦**「库里已经有别的在售活动」。首页只认最新建的那个，
+  所以真出现这种情况要处理掉旧的那个（改 `events` 表的 `status`）。
+- 加物品之后**不用重启服务**，小程序下拉刷新就能看到。
+
+> 后面日常加物品用管理端界面（「我的」→ 管理端 → 物品名额 → ＋新建物品）就够了，
+> 不必每次上服务器。这个脚本只在**开新活动**和**批量录入**时才需要。
+
+---
+
 ## 6. 验收清单
 
 | 检查 | 命令 | 期望 |

@@ -9,6 +9,7 @@
     "start": "node server/http.mjs",
     "set-owner": "node scripts/set-owner.mjs",
     "seed": "node scripts/seed-dev.mjs",
+    "init-event": "node scripts/init-event.mjs",
     "serve": "node scripts/serve.mjs",
     "longimage": "node scripts/longimage.mjs"
   }

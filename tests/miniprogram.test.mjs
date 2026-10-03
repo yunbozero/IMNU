@@ -17,7 +17,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ROUTES } from '../server/http.mjs';
 import { ROLES, canRedeem, canManage } from '../server/roles.mjs';
+import {
+  ITEM_NAME_MAX, ITEM_DESC_MAX, ITEM_QUOTA_MAX, ITEM_EMOJI_MAX, ITEM_TINTS,
+} from '../server/api.mjs';
 import { ROLES_CAN_REDEEM, ROLES_CAN_MANAGE, ROLE_LABEL } from '../miniprogram/services/session.js';
+import * as itemForm from '../miniprogram/packageAdmin/utils/item-form.js';
 import { pickBaseUrl, API_BASE } from '../miniprogram/config.js';
 import {
   REASONS, OTHER_KEY, REASON_MIN, REASON_MAX, composeReason,
@@ -149,7 +153,7 @@ test('小程序：调用的每个接口都在后端路由表里', () => {
 
   const used = new Map();   // path -> 出现的位置
   for (const file of jsFiles()) {
-    for (const [, apiPath] of read(file).matchAll(/['"](\/api\/[a-z0-9-]+)['"]/g)) {
+    for (const [, apiPath] of read(file).matchAll(/['"](\/api\/[a-z0-9/-]+)['"]/g)) {
       if (!used.has(apiPath)) used.set(apiPath, []);
       used.get(apiPath).push(path.relative(MP, file));
     }
@@ -178,7 +182,7 @@ test('小程序：每个接口调用的 HTTP 方法也要对得上', () => {
   const problems = [];
   for (const file of jsFiles()) {
     const src = read(file);
-    for (const [, fn, apiPath] of src.matchAll(/\bapi\.(get|post)\s*\(\s*['"](\/api\/[a-z0-9-]+)['"]/g)) {
+    for (const [, fn, apiPath] of src.matchAll(/\bapi\.(get|post)\s*\(\s*['"](\/api\/[a-z0-9/-]+)['"]/g)) {
       const method = fn === 'get' ? 'GET' : 'POST';
       const allowed = methods.get(apiPath);
       if (allowed && !allowed.has(method)) {
@@ -440,3 +444,152 @@ test('取消原因：没选、或选了不存在的 key 都要拒', () => {
     assert.equal(composeReason(key).ok, false, `key「${key}」应当被拒`);
   }
 });
+
+/* ============================================================
+   管理端新建物品
+   ============================================================ */
+
+const STALLS = [
+  { id: 'st_1', name: '一号摊位 · 手作烘焙', loc: '图书馆前广场东侧' },
+  { id: 'st_2', name: '二号摊位 · 闲置好物' },
+];
+
+test('新建物品：界面的字数/名额上限必须和服务端一模一样', () => {
+  // 这两份是小程序和服务端各写一遍的副本（小程序 import 不了服务端代码）。
+  // 界面放宽 → 用户填到点提交才被拒，报错还说不清是哪一项。
+  assert.equal(itemForm.NAME_MAX, ITEM_NAME_MAX, '物品名上限两边不一致');
+  assert.equal(itemForm.DESC_MAX, ITEM_DESC_MAX, '简介上限两边不一致');
+  assert.equal(itemForm.QUOTA_MAX, ITEM_QUOTA_MAX, '名额上限两边不一致');
+  assert.equal(itemForm.EMOJI_MAX, ITEM_EMOJI_MAX, '图标上限两边不一致');
+});
+
+test('新建物品：可选底色要和服务端一致，而且 app.wxss 里真有那些类', () => {
+  assert.deepEqual(itemForm.TINTS.map((t) => t.key), ITEM_TINTS,
+    '配色列表和服务端对不上 —— 发过去会被 400，或者渲染成一个没有底色的白块');
+
+  const wxss = read(path.join(MP, 'app.wxss'));
+  for (const key of ITEM_TINTS) {
+    assert.match(wxss, new RegExp(`\\.${key}\\s*\\{`), `app.wxss 里没有 .${key} 这个类`);
+  }
+
+  // 反向也要对：app.wxss 里的 .t-* 不能多出来 —— 多出来的都是没人用的死样式
+  const inWxss = [...wxss.matchAll(/^\.(t-[a-z]+)\s*\{/gm)].map((m) => m[1]).sort();
+  assert.deepEqual(inWxss, [...ITEM_TINTS].sort(),
+    `app.wxss 里的底色类 [${inWxss}] 和服务端的 ITEM_TINTS 对不上`);
+});
+
+test('新建物品：本地的表单校验要拦在提交之前', () => {
+  const good = itemForm.buildCreateBody({
+    name: '  手作黄油曲奇  ',
+    description: '  独立包装，一盒六块  ',
+    emoji: '🍪',
+    tint: 't-blue',
+    totalQuota: ' 12 ',
+    stallIndex: 1,
+  }, STALLS);
+
+  assert.equal(good.ok, true, JSON.stringify(good));
+  assert.deepEqual(good.body, {
+    name: '手作黄油曲奇',            // 首尾空白要去掉
+    description: '独立包装，一盒六块',
+    emoji: '🍪',
+    tint: 't-blue',
+    totalQuota: 12,                 // 输入框给的是字符串，要转成数字
+    stallId: 'st_1',
+  });
+
+  const bad = [
+    [{ totalQuota: 1 }, /名称/],
+    [{ name: '   ', totalQuota: 1 }, /名称/],
+    [{ name: 'x'.repeat(ITEM_NAME_MAX + 1), totalQuota: 1 }, /名称/],
+    [{ name: 'x' }, /正整数/],
+    [{ name: 'x', totalQuota: '' }, /正整数/],
+    [{ name: 'x', totalQuota: 'abc' }, /正整数/],
+    [{ name: 'x', totalQuota: 0 }, /正整数/],
+    [{ name: 'x', totalQuota: 1.5 }, /正整数/],
+    [{ name: 'x', totalQuota: ITEM_QUOTA_MAX + 1 }, /最多/],
+    [{ name: 'x', totalQuota: 1, emoji: 'x'.repeat(ITEM_EMOJI_MAX + 1) }, /图标/],
+    [{ name: 'x', totalQuota: 1, description: 'x'.repeat(ITEM_DESC_MAX + 1) }, /简介/],
+  ];
+  for (const [form, re] of bad) {
+    const r = itemForm.buildCreateBody(form, STALLS);
+    assert.equal(r.ok, false, `${JSON.stringify(form)} 应当被拦下`);
+    assert.match(r.error, re, `「${r.error}」没指出是哪一项不对`);
+  }
+});
+
+test('新建物品：一个 emoji 不该被当成两个字拒掉', () => {
+  // '🍪'.length 是 2（代理对）。拿 length 当上限的话，一个字都填不了。
+  const r = itemForm.buildCreateBody({ name: '曲奇', totalQuota: 1, emoji: '🍪' }, STALLS);
+  assert.equal(r.ok, true, '按码点数算的话，一个 emoji 只占一个字');
+  assert.equal(r.body.emoji, '🍪');
+
+  // 但两个字就是两个字
+  assert.equal(itemForm.buildCreateBody(
+    { name: '曲奇', totalQuota: 1, emoji: '曲奇' }, STALLS).ok, true);
+  assert.equal(itemForm.buildCreateBody(
+    { name: '曲奇', totalQuota: 1, emoji: '曲奇饼' }, STALLS).ok, false);
+});
+
+test('新建物品：摊位选择器的下标换算', () => {
+  // 下标 0 固定是「不指定摊位」，所以选中项要减 1 才是 stalls 的下标
+  assert.deepEqual(itemForm.stallOptions(STALLS), [
+    itemForm.NO_STALL_TEXT,
+    '一号摊位 · 手作烘焙（图书馆前广场东侧）',
+    '二号摊位 · 闲置好物',
+  ]);
+
+  assert.equal(itemForm.stallIdAt(STALLS, 0), null, '0 是不指定摊位');
+  assert.equal(itemForm.stallIdAt(STALLS, '1'), 'st_1');
+  assert.equal(itemForm.stallIdAt(STALLS, 2), 'st_2');
+  assert.equal(itemForm.stallIdAt(STALLS, 99), null, '越界不能崩');
+  assert.equal(itemForm.stallIdAt([], 1), null, '一个摊位都没有时也不能崩');
+
+  // 没选摊位时 stallId 是 null —— 服务端认这个值，不会当成非法 id
+  const r = itemForm.buildCreateBody({ name: '曲奇', totalQuota: 1, stallIndex: 0 }, STALLS);
+  assert.equal(r.ok, true);
+  assert.equal(r.body.stallId, null);
+});
+
+test('新建物品：页面注册了，而且从物品名额页进得去', () => {
+  const cfg = appJson();
+  const admin = cfg.subPackages.find((s) => s.root === 'packageAdmin');
+  assert.ok(admin, 'packageAdmin 分包不见了');
+  assert.ok(admin.pages.includes('pages/item-new/index'),
+    '新建物品页没注册进 app.json，开发者工具会直接报错');
+
+  for (const f of ['index.js', 'index.wxml', 'index.wxss', 'index.json']) {
+    assert.ok(exists(path.join(MP, 'packageAdmin/pages/item-new', f)), `缺 ${f}`);
+  }
+
+  // 光有页面没用，得有人到得了 —— 入口必须在物品名额页上
+  const itemsWxml = read(path.join(MP, 'packageAdmin/pages/items/index.wxml'));
+  assert.match(itemsWxml, /bindtap="goNew"/, '物品名额页上找不到新建入口');
+  assert.match(itemsWxml, /新建物品/);
+
+  // 入口跳的地址必须真的存在（写错了只在真机上点一下才会发现）
+  const itemsJs = read(path.join(MP, 'packageAdmin/pages/items/index.js'));
+  const m = itemsJs.match(/navigateTo\(\{\s*url:\s*['"]([^'"]+)['"]/);
+  assert.ok(m, '物品名额页里找不到 navigateTo');
+
+  const target = m[1].replace(/^\//, '').replace(/\/index$/, '');
+  const all = [
+    ...cfg.pages,
+    ...cfg.subPackages.flatMap((sp) => sp.pages.map((p) => `${sp.root}/${p}`)),
+  ].map((p) => p.replace(/\/index$/, ''));
+
+  assert.ok(all.includes(target), `跳到了不存在的页面：${m[1]}\n已声明：${all.join(', ')}`);
+});
+
+test('新建物品：提交时打的是服务端真正有的那个接口', () => {
+  const js = read(path.join(MP, 'packageAdmin/pages/item-new/index.js'));
+  assert.match(js, /api\.post\(\s*'\/api\/admin\/item\/create'/, '接口路径写错了');
+
+  // ★ 「新建」和「改」是两个不同的接口，别把 create 混进改物品那条路上
+  assert.ok(!/api\.post\(\s*'\/api\/admin\/item'/.test(js),
+    '新建物品不该复用改物品的接口 —— 那个要求带 itemId');
+
+  // 权限判定不能只写在界面上，但界面上也必须有（不然学生点进去是一片空白表单）
+  assert.match(js, /session\.isManager\(\)/, '页面要先自己判一次权限');
+});
+

@@ -13,6 +13,9 @@ import { startServer } from '../server/http.mjs';
 import { openMigrated } from '../server/db.mjs';
 import { createSqliteRepository } from '../server/repository.mjs';
 import { createFakeSessionProvider } from '../server/auth.mjs';
+import {
+  ITEM_NAME_MAX, ITEM_DESC_MAX, ITEM_QUOTA_MAX, ITEM_EMOJI_MAX, ITEM_TINTS,
+} from '../server/api.mjs';
 
 const SECRET = 'admin-test-secret-16chars';
 
@@ -74,7 +77,7 @@ async function startTestServer() {
   }
 
   return {
-    ...srv, dir, base, tokens, ids: { eventId: ev.id, itemId: item.id, people: PEOPLE },
+    ...srv, dir, base, tokens, ids: { eventId: ev.id, itemId: item.id, stallId: stall.id, people: PEOPLE },
     async close() { await srv.close(); fs.rmSync(dir, { recursive: true, force: true }); },
   };
 }
@@ -106,6 +109,7 @@ test('管理端：学生和志愿者一律进不来', async () => {
   try {
     const attempts = [
       ['POST', '/api/admin/item', { itemId: ctx.ids.itemId, quotaDelta: 1 }],
+      ['POST', '/api/admin/item/create', { name: '偷偷加的', totalQuota: 1 }],
       ['POST', '/api/admin/undo-redeem', { reservationId: 'x' }],
       ['POST', '/api/admin/role', { userId: ctx.ids.people['code-student'].id, role: 'admin' }],
       ['POST', '/api/admin/transfer-owner', { userId: ctx.ids.people['code-student'].id }],
@@ -182,6 +186,152 @@ test('管理端：改物品的入参错误要明确拒绝', async () => {
       const r = await call(ctx, 'POST', '/api/admin/item', { token: t, body: c.body });
       assert.equal(r.status, c.expect, `${JSON.stringify(c.body)} 应当 ${c.expect}，实际 ${r.status}`);
     }
+  } finally { await ctx.close(); }
+});
+
+/* ============================================================
+   新建物品（管理端）
+   ============================================================ */
+
+/** 一条合法的新建请求。每个用例在它上面只改一处。 */
+function newItemBody(over = {}) {
+  return {
+    name: '手写书签', description: '手写小楷，可自选句子',
+    emoji: '🔖', tint: 't-pink', totalQuota: 20,
+    ...over,
+  };
+}
+
+test('管理端：二级管理员可以新建物品，名额从满的开始', async () => {
+  const ctx = await startTestServer();
+  try {
+    const r = await call(ctx, 'POST', '/api/admin/item/create', {
+      token: ctx.tokens['code-deputy'],
+      body: newItemBody({ stallId: ctx.ids.stallId }),
+    });
+    assert.equal(r.body.ok, true, JSON.stringify(r.body));
+
+    const it = r.body.item;
+    assert.equal(it.name, '手写书签');
+    assert.equal(it.totalQuota, 20);
+    assert.equal(it.remainingQuota, 20, '新建的物品名额应当是满的');
+    assert.equal(it.status, 'on_sale', '建出来就该是在售的');
+    assert.equal(it.stallId, ctx.ids.stallId);
+    assert.equal(it.eventId, ctx.ids.eventId, '必须挂在当前活动下');
+
+    // ★ 建完学生那头要立刻看得见、定得到 —— 这才是这个接口存在的意义
+    const list = (await call(ctx, 'GET', '/api/items')).body.items;
+    const mine = list.find((x) => x.id === it.id);
+    assert.ok(mine, '新建的物品应当出现在学生看到的列表里');
+    assert.equal(mine.stallName, '一号摊位');
+
+    const res = await call(ctx, 'POST', '/api/reserve', {
+      token: ctx.tokens['code-student'],
+      body: { itemId: it.id, requestId: 'new-1' },
+    });
+    assert.equal(res.body.ok, true, JSON.stringify(res.body));
+
+    const detail = auditDetail(ctx, 'item.create');
+    assert.equal(detail.name, '手写书签');
+    assert.equal(detail.totalQuota, 20);
+    assert.equal(detail.via, 'admin');
+  } finally { await ctx.close(); }
+});
+
+test('管理端：新建物品的入参错误要明确拒绝，且不留半成品', async () => {
+  const ctx = await startTestServer();
+  try {
+    const t = ctx.tokens['code-deputy'];
+    const cases = [
+      [{ name: undefined }, 400],
+      [{ name: '' }, 400],
+      [{ name: '   ' }, 400],
+      [{ name: 'x'.repeat(ITEM_NAME_MAX + 1) }, 400],
+      [{ totalQuota: undefined }, 400],
+      [{ totalQuota: 0 }, 400],
+      [{ totalQuota: -1 }, 400],
+      [{ totalQuota: 1.5 }, 400],
+      [{ totalQuota: ITEM_QUOTA_MAX + 1 }, 400],
+      [{ totalQuota: 'abc' }, 400],
+      // 不是数量的东西不能被 Number() 悄悄变成合法值：Number(true) 是 1
+      [{ totalQuota: true }, 400],
+      [{ totalQuota: [] }, 400],
+      [{ tint: 't-乱写' }, 400],
+      [{ emoji: 'x'.repeat(ITEM_EMOJI_MAX + 1) }, 400],
+      [{ description: 'x'.repeat(ITEM_DESC_MAX + 1) }, 400],
+      [{ stallId: 'st_不存在' }, 400],
+    ];
+    for (const [over, expect] of cases) {
+      const r = await call(ctx, 'POST', '/api/admin/item/create', {
+        token: t, body: newItemBody(over),
+      });
+      assert.equal(r.status, expect,
+        `${JSON.stringify(over)} 应当 ${expect}，实际 ${r.status}：${JSON.stringify(r.body)}`);
+    }
+
+    assert.equal((await call(ctx, 'GET', '/api/items')).body.items.length, 1,
+      '参数被拒时不能留下半成品');
+  } finally { await ctx.close(); }
+});
+
+test('管理端：新建物品的边界值要能过', async () => {
+  const ctx = await startTestServer();
+  try {
+    const t = ctx.tokens['code-deputy'];
+    const okCases = [
+      { name: 'x', totalQuota: 1 },                                     // 最短名字、最少名额
+      { name: '名'.repeat(ITEM_NAME_MAX), totalQuota: ITEM_QUOTA_MAX }, // 最长名字、最多名额
+      { name: '没填图标的', totalQuota: 5, emoji: '', tint: '', description: '' },
+      { name: '一个 emoji 的', totalQuota: 5, emoji: '🍪' },
+      { name: '两个字图标的', totalQuota: 5, emoji: '曲奇' },
+      { name: '名额写成字符串的', totalQuota: '7' },   // 输入框给的就是字符串
+    ];
+    for (const body of okCases) {
+      const r = await call(ctx, 'POST', '/api/admin/item/create', { token: t, body });
+      assert.equal(r.body.ok, true,
+        `${JSON.stringify(body)} 应当能建：${JSON.stringify(r.body)}`);
+    }
+
+    const list = (await call(ctx, 'GET', '/api/items')).body.items;
+    // '🍪'.length 是 2 —— 拿 length 当上限的话一个 emoji 就会被当成两个字拒掉
+    assert.equal(list.find((x) => x.name === '一个 emoji 的').emoji, '🍪');
+    // 不填配色要给个默认色，而不是留空让小程序渲染成白块
+    assert.ok(ITEM_TINTS.includes(list.find((x) => x.name === '没填图标的').tint));
+    assert.equal(list.find((x) => x.name === '没填图标的').emoji, null);
+    assert.equal(list.find((x) => x.name === '名额写成字符串的').totalQuota, 7,
+      '数字字符串要收 —— 界面输入框给的就是字符串');
+  } finally { await ctx.close(); }
+});
+
+test('管理端：不能把物品挂到别的活动的摊位上', async () => {
+  const ctx = await startTestServer();
+  try {
+    // 另起一个**草稿**活动 —— 不能建成 on_sale，否则 getActiveEvent 会改用新的那个，
+    // 于是这个摊位反而变成"当前活动的摊位"，测不到要测的东西
+    const other = ctx.repo.createEvent({ name: '别的活动', status: 'draft' });
+    const otherStall = ctx.repo.createStall({ eventId: other.id, name: '二号摊位' });
+
+    const r = await call(ctx, 'POST', '/api/admin/item/create', {
+      token: ctx.tokens['code-deputy'],
+      body: newItemBody({ stallId: otherStall.id }),
+    });
+    assert.equal(r.status, 400, '摊位不属于当前活动时必须拒绝');
+    assert.match(r.body.message, /摊位/);
+  } finally { await ctx.close(); }
+});
+
+test('管理端：没有在售活动时不能新建物品', async () => {
+  const ctx = await startTestServer();
+  try {
+    ctx.db.prepare("UPDATE events SET status = 'ended'").run();
+
+    const r = await call(ctx, 'POST', '/api/admin/item/create', {
+      token: ctx.tokens['code-deputy'],
+      body: newItemBody(),
+    });
+    assert.equal(r.body.ok, false);
+    assert.equal(r.body.error, 'no_active_event');
+    assert.match(r.body.message, /init-event/, '要告诉他去哪儿把活动建起来');
   } finally { await ctx.close(); }
 });
 

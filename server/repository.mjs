@@ -22,6 +22,7 @@ import { randomUUID } from 'node:crypto';
 export const REPOSITORY_METHODS = [
   'createEvent',
   'getActiveEvent',
+  'listEvents',
   'createStall',
   'listStalls',
   'createItem',
@@ -114,6 +115,10 @@ const mapStall = (r) => (r ? {
   id: r.id, eventId: r.event_id, name: r.name, loc: r.loc, createdAt: r.created_at,
 } : null);
 
+const mapEvent = (r) => (r ? {
+  id: r.id, name: r.name, startsAt: r.starts_at, endsAt: r.ends_at, status: r.status,
+} : null);
+
 /**
  * 用事务包住一段写操作。
  * BEGIN IMMEDIATE 立刻拿写锁，避免多个连接同时读后升级写锁造成的死锁。
@@ -179,10 +184,19 @@ export function createSqliteRepository(db) {
         SELECT * FROM events WHERE status = 'on_sale'
          ORDER BY created_at DESC LIMIT 1
       `).get();
-      return r ? {
-        id: r.id, name: r.name, startsAt: r.starts_at,
-        endsAt: r.ends_at, status: r.status,
-      } : null;
+      return mapEvent(r);
+    },
+
+    /**
+     * 全部场次，最新创建的在前。
+     *
+     * 为什么需要它：`getActiveEvent` 只认 on_sale 的那一个，草稿和已结束的
+     * 场次它一律看不见。而初始化脚本要靠「这个活动是不是已经建过了」来决定
+     * 新建还是复用 —— 只看得见 on_sale 的话，一个草稿状态的同名活动会被
+     * 再建一遍，变成两个活动。
+     */
+    listEvents() {
+      return db.prepare('SELECT * FROM events ORDER BY created_at DESC').all().map(mapEvent);
     },
 
     createStall({ eventId, name, loc = null }) {

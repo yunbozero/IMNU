@@ -1,0 +1,49 @@
+{
+  "_说明": [
+    "scripts/init-event.mjs 的配置示例。复制一份改成自己的内容再用。",
+    "先不带 --yes 跑一次看计划，确认无误再加 --yes 真正写库。",
+    "可以重复运行：活动/摊位/物品都按名字查重，已存在的跳过。",
+    "所以「再补几件物品」= 在 items 里追加几行，然后重跑。",
+    "线上要放在仓库外面（deploy 会 git reset --hard，仓库里的改动会被冲掉），",
+    "例如 /srv/bazaar/event.json，然后：",
+    "  sudo -u bazaar DB_PATH=/srv/bazaar/data/bazaar.db node /srv/bazaar/app/scripts/init-event.mjs /srv/bazaar/event.json --yes"
+  ],
+
+  "event": {
+    "name": "檐下猫小记 · 闲置物品登记",
+    "startsAt": "2026-04-18 09:00",
+    "endsAt": "2026-04-18 17:00"
+  },
+
+  "stalls": [
+    { "name": "一号摊位 · 手作烘焙", "loc": "图书馆前广场东侧" },
+    { "name": "二号摊位 · 闲置好物", "loc": "图书馆前广场西侧" }
+  ],
+
+  "items": [
+    {
+      "stall": "一号摊位 · 手作烘焙",
+      "name": "手作黄油曲奇",
+      "description": "独立包装，一盒六块",
+      "emoji": "🍪",
+      "tint": "t-yellow",
+      "totalQuota": 12
+    },
+    {
+      "stall": "一号摊位 · 手作烘焙",
+      "name": "多肉小盆栽",
+      "description": "随机品种，带小陶盆",
+      "emoji": "🪴",
+      "tint": "t-green",
+      "totalQuota": 8
+    },
+    {
+      "stall": "二号摊位 · 闲置好物",
+      "name": "旧教材《高等数学》",
+      "description": "上册，有笔记",
+      "emoji": "📚",
+      "tint": "t-blue",
+      "totalQuota": 5
+    }
+  ]
+}

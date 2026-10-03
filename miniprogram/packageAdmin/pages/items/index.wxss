@@ -1,5 +1,7 @@
 /* 管理端 · 物品名额。样式只在这个分包里用。 */
 
+.newbtn { margin-top: 26rpx; }
+
 .it {
   background: #fff; border-radius: 28rpx;
   padding: 26rpx 30rpx; margin-top: 22rpx;

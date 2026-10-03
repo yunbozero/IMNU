@@ -33,6 +33,31 @@ export const CODE_RETRY = 5;
  */
 export const MAX_ITEMS_PER_USER_LIMIT = 100;
 
+/**
+ * 新建物品时的字数/数量上限。
+ *
+ * ★ 这几个数字小程序那边也有一份（packageAdmin/utils/item-form.js），
+ *   由 tests/miniprogram.test.mjs 逐个比对 —— 两边不一致的话，
+ *   界面会先把人放过去再被服务端拒掉，报错出在提交那一刻，很难查。
+ */
+export const ITEM_NAME_MAX = 20;
+export const ITEM_DESC_MAX = 40;
+/** 单个物品的名额上限。义卖的量级是几十件，9999 纯粹是拦「多打了一位」。 */
+export const ITEM_QUOTA_MAX = 9999;
+/**
+ * 图标最多几个字。
+ * 按**码点**数而不是 JS 的 length：'🍪'.length 是 2（代理对），
+ * 拿 length 当上限的话一个 emoji 就把两个字的位置占满了。
+ */
+export const ITEM_EMOJI_MAX = 2;
+
+/**
+ * 物品图标可用的底色。
+ * ★ 必须和 miniprogram/app.wxss 里的 .t-* 类一一对应，否则小程序会渲染成
+ *   没有底色的白块 —— 不报错，只是难看，所以交给测试守着。
+ */
+export const ITEM_TINTS = ['t-pink', 't-green', 't-blue', 't-yellow', 't-purple', 't-orange'];
+
 const ok = (body = {}) => ({ status: 200, body: { ok: true, ...body } });
 const fail = (error, message, status = 200) => ({ status, body: { ok: false, error, message } });
 
@@ -101,6 +126,22 @@ export function createApi({
     if (typeof v !== 'string') return null;
     const s = v.trim();
     return s.length >= 2 && s.length <= 60 ? s : null;
+  };
+
+  /** 物品名。列表里一件一行，太长会折行把页面撑乱。 */
+  const asItemName = (v) => {
+    if (typeof v !== 'string') return null;
+    const s = v.trim();
+    return s.length >= 1 && s.length <= ITEM_NAME_MAX ? s : null;
+  };
+
+  /** 可选的短文本（简介 / 图标）：没填就是 null，填了超长才报错。 */
+  const asOptionalText = (v, max) => {
+    if (v === undefined || v === null || v === '') return { ok: true, value: null };
+    if (typeof v !== 'string') return { ok: false };
+    const s = v.trim();
+    if ([...s].length > max) return { ok: false };
+    return { ok: true, value: s || null };
   };
 
   /**
@@ -443,6 +484,82 @@ export function createApi({
       });
 
       return ok({ item: r.item });
+    },
+
+    /**
+     * 新建物品。
+     *
+     * 为什么要有：义卖当天现场「这东西也拿来卖」是常态，而在此之前
+     * 往库里加物品的唯一办法是登上服务器跑脚本 —— 组织者是没有 SSH 的。
+     *
+     * 门槛和改物品一致（deputy 及以上）：这是同一类「维护物品清单」的动作，
+     * 分两档只会让志愿者在当天找不到人开权限。
+     *
+     * ★ 物品一律建成在售。想先藏着就别建；建完想撤就下架（改物品那条路）。
+     *   多一个「草稿」状态意味着多一种「为什么学生看不到」的排查成本。
+     */
+    adminCreateItem({ body, user }) {
+      if (!user) return fail('unauthorized', '请先登录', 401);
+      if (!isManager(user)) return fail('forbidden', '你没有管理权限', 403);
+
+      // 物品必须挂在某个场次下。没有在售场次时建出来的物品谁也看不见，
+      // 与其让它变成一个查不到的孤儿，不如告诉管理员先去把活动开起来。
+      const event = repo.getActiveEvent();
+      if (!event) {
+        return fail('no_active_event', '还没有在售的活动，先跑 scripts/init-event.mjs 把活动建起来');
+      }
+
+      const name = asItemName(body?.name);
+      if (!name) return fail('bad_request', `物品名要填 1–${ITEM_NAME_MAX} 个字`, 400);
+
+      // 数字或数字字符串都收（界面那边输入框给的是字符串）。
+      // ★ 不用裸 Number(v)：Number(true) 是 1、Number([]) 是 0，
+      //   会把明显不是数量的东西悄悄变成一个合法值。
+      const rawQuota = typeof body?.totalQuota === 'string'
+        ? Number(body.totalQuota.trim())
+        : body?.totalQuota;
+      if (!Number.isInteger(rawQuota) || rawQuota < 1 || rawQuota > ITEM_QUOTA_MAX) {
+        return fail('bad_request', `名额要是 1–${ITEM_QUOTA_MAX} 的整数`, 400);
+      }
+
+      const desc = asOptionalText(body?.description, ITEM_DESC_MAX);
+      if (!desc.ok) return fail('bad_request', `简介最多 ${ITEM_DESC_MAX} 个字`, 400);
+
+      const emoji = asOptionalText(body?.emoji, ITEM_EMOJI_MAX);
+      if (!emoji.ok) return fail('bad_request', `图标最多 ${ITEM_EMOJI_MAX} 个字（一个 emoji 算一个）`, 400);
+
+      const tint = body?.tint === undefined || body?.tint === null || body?.tint === ''
+        ? ITEM_TINTS[0]
+        : body.tint;
+      if (!ITEM_TINTS.includes(tint)) {
+        return fail('bad_request', `配色只能是 ${ITEM_TINTS.join(' / ')}`, 400);
+      }
+
+      // ★ 摊位必须在**本次活动的**摊位里。
+      //   不校验的话，一个乱填的 id 会让物品的 stall_id 指向别的场次甚至不存在的行，
+      //   症状是「管理端看着有摊位、学生那头显示未分配」，而且删活动时会撞外键。
+      let stallId = null;
+      if (body?.stallId !== undefined && body?.stallId !== null && body?.stallId !== '') {
+        stallId = asId(body.stallId);
+        if (!stallId) return fail('bad_request', '摊位 id 不合法', 400);
+        if (!repo.listStalls(event.id).some((s) => s.id === stallId)) {
+          return fail('bad_request', '这个摊位不属于当前活动', 400);
+        }
+      }
+
+      const item = repo.createItem({
+        eventId: event.id, stallId,
+        name, description: desc.value, emoji: emoji.value, tint,
+        totalQuota: rawQuota, status: 'on_sale',
+      });
+
+      repo.writeAudit({
+        actorId: user.id, action: 'item.create',
+        targetType: 'item', targetId: item.id,
+        detail: { name, totalQuota: rawQuota, stallId, via: 'admin' },
+      });
+
+      return ok({ item });
     },
 
     /** 撤销误核销。门槛比改物品高：只有一级管理员及以上。 */
