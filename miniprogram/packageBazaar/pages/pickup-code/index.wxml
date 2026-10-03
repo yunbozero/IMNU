@@ -40,8 +40,8 @@
     </view>
 
     <view wx:if="{{reservation.status === 'reserved'}}" class="notice notice--strong">
-      <text class="notice__b">你还没有付款。</text>
-      本小程序只锁定名额，不收任何费用。请于活动当天到摊位现场付款取货。
+      <text class="notice__b">本小程序只锁定名额。</text>
+      请于活动当天到对应摊位，出示这个码领取物品。
     </view>
 
     <view class="notice">

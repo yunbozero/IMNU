@@ -199,8 +199,23 @@ test('小程序：每个接口调用的 HTTP 方法也要对得上', () => {
    ============================================================ */
 
 test('小程序：界面里不出现任何交易或金额用语', () => {
-  const FORBIDDEN = ['价格', '金额', '下单', '订单', '购买', '购物车', '结算',
-                     '库存', '发货', '收货', '支付', '售价'];
+  // ★ 这份清单在审核前被补全过一次。原来只有「价格/金额/下单…」这些电商词，
+  //   结果**漏了「付款」「收款」「费用」「商品」「出售」**——
+  //   而个人主体小程序最不能沾的就是支付收款类表述，
+  //   其中「核销前请先确认已收款」这种句子，读起来就像这个小程序在管钱。
+  //
+  //   ★ 还有一个教训：**关键词筛查不认否定**。
+  //   「本小程序不收款、不收取任何费用」本意是撇清，但每个字都在往界面里塞风险词
+  //   （网站备案备注就是这么被拒的）。所以正确的做法不是「声明自己不做」，
+  //   而是**根本不提这件事** —— 留下「只登记名额」这类正面陈述就够了。
+  const FORBIDDEN = [
+    '价格', '金额', '下单', '订单', '购买', '购物车', '结算',
+    '库存', '发货', '收货', '支付', '售价',
+    // 支付收款类（补）
+    '付款', '收款', '收费', '收取', '费用', '交易', '变现',
+    // 交易对象 / 动作（补）
+    '出售', '销售', '商品', '免费',
+  ];
   const problems = [];
 
   for (const file of allSourceFiles()) {
@@ -214,16 +229,131 @@ test('小程序：界面里不出现任何交易或金额用语', () => {
     if (m) problems.push(`${rel} 出现金额：${JSON.stringify(m[0])}`);
   }
 
-  assert.deepEqual(problems, [], '\n' + problems.join('\n'));
+  assert.deepEqual(problems, [],
+    '界面文案里出现了交易/金额用语。★ **否定句也算** —— '
+    + '「不收费」「不出售商品」照样会命中关键词筛查，正确做法是根本不提：\n'
+    + problems.join('\n'));
 });
 
-test('小程序：关键页面都带「仅登记名额、不收费」的声明', () => {
+test('小程序：关键页面都要有「只登记名额」的正面声明', () => {
+  // 声明必须是**正面陈述**（只登记名额），不能写成「不收费、不出售商品」——
+  // 后者把风险词全引进来了，而且筛查不认否定。见上一条测试的说明。
   for (const f of ['pages/home/index.wxml', 'pages/profile/index.wxml',
                    'packageBazaar/pages/items/index.wxml',
                    'packageBazaar/pages/detail/index.wxml']) {
     const src = read(path.join(MP, f));
     assert.match(src, /(只|仅)(登记|锁定)[^。]{0,8}名额/, `${f} 缺少合规声明`);
   }
+});
+
+/* ============================================================
+   ★ 类目一致性：界面文案不许出现公益/慈善/交易性质的词
+   ============================================================ */
+
+/**
+ * 从源码里取出**用户能看到**的文本。
+ *
+ * · WXML：去掉 `<!-- -->` 注释，剩下的都算（文本节点 + 属性值如 placeholder）
+ * · JS：只取**字符串字面量**（toast / modal 的文案都在里面）；
+ *   这样注释里怎么写都不影响 —— 内部文档里叫「义卖」是合理的，界面文案不行。
+ * · app.json：整份都算，但 `description` / `note_*` 是写给开发者看的，不算界面。
+ */
+function visibleTextOf(file, src) {
+  if (file.endsWith('.wxml')) return src.replace(/<!--[\s\S]*?-->/g, '');
+
+  if (file.endsWith('.js')) {
+    const out = [];
+    for (const m of src.matchAll(/'([^'\\]*(?:\\.[^'\\]*)*)'|"([^"\\]*(?:\\.[^"\\]*)*)"/g)) {
+      out.push(m[1] === undefined ? m[2] : m[1]);
+    }
+    return out.join('\n');
+  }
+
+  if (path.basename(file) === 'app.json') {
+    try {
+      const j = JSON.parse(src);
+      delete j.description;
+      for (const k of Object.keys(j)) if (k.startsWith('note_')) delete j[k];
+      return JSON.stringify(j);
+    } catch { return src; }
+  }
+
+  return src;
+}
+
+test('合规守卫自测：界面文本的提取方式抓得住改错、也放得过注释', () => {
+  const hit = (rel, src) => ['义卖', '救助'].filter((w) => visibleTextOf(rel, src).includes(w));
+
+  // WXML：文本节点算，注释不算
+  assert.deepEqual(hit('a.wxml', '<view>逛义卖</view>'), ['义卖']);
+  assert.deepEqual(hit('a.wxml', '<!-- 主入口：义卖 -->\n<view>逛活动</view>'), [],
+    'WXML 注释里提一下不该算');
+  assert.deepEqual(hit('a.wxml', '<input placeholder="搜索义卖物品" />'), ['义卖'],
+    '属性值（placeholder）也算界面');
+
+  // JS：字符串算，注释不算
+  assert.deepEqual(hit('a.js', "wx.showToast({ title: '义卖' })"), ['义卖'],
+    'toast 文案是用户看得见的');
+  assert.deepEqual(hit('a.js', '// 义卖当天最常用\nconst a = 1;'), [],
+    'JS 注释里提一下不该算 —— 内部文档叫「义卖」是合理的');
+  assert.deepEqual(hit('a.js', 'const url = "https://x.cn/a";'), [],
+    'URL 里的双斜杠不该被当成注释，把后半行吞掉');
+
+  // app.json 的 description / note_* 是给开发者看的
+  const appJson = JSON.stringify({ description: '义卖', note_1: '义卖', window: { navigationBarTitleText: '盛师猫猫' } });
+  assert.deepEqual(hit('app.json', appJson), [], 'app.json 的说明字段不算界面');
+  assert.deepEqual(hit('app.json', JSON.stringify({ tabBar: { list: [{ text: '义卖' }] } })),
+    ['义卖'], 'tabBar 的文字是真会显示的');
+});
+
+test('小程序：界面文案不出现「义卖 / 救助 / 公益 / 慈善」这类词', () => {
+  // ★ 为什么必须有这一条：注册的**类目是「工具 > 预约/报名」「工具 > 信息查询」**，
+  //   而「义卖」把小程序指向商品交易 / 公益慈善 —— 两者都不在「工具」类目里，
+  //   个人主体也不能涉及公益慈善类内容。
+  //   风险不是「违禁词」三个字，而是**「实际内容与所选类目不符」**，
+  //   这是最常见的驳回理由之一。网站名称当初就是因为「救助」被拒的。
+  //
+  //   小程序名称是「盛师猫猫」，界面标题也必须是它 —— 名称、简介、类目、内容
+  //   四者要一致，审核就是拿这四样对。
+  const WORDS = ['义卖', '公益', '慈善', '救助', '捐赠', '募捐', '捐款', '商城'];
+  const problems = [];
+
+  for (const file of allSourceFiles()) {
+    // .wxss 里没有用户可见的文字（只有注释和样式），跳过
+    if (!/\.(wxml|js|json)$/.test(file)) continue;
+
+    const rel = path.relative(MP, file).replace(/\\/g, '/');
+    const text = visibleTextOf(file, read(file));
+    for (const w of WORDS) {
+      if (text.includes(w)) problems.push(`${rel} 的界面文案里有「${w}」`);
+    }
+  }
+
+  assert.deepEqual(problems, [],
+    '界面上出现了公益/慈善/交易性质的词，和「工具」类目对不上：\n'
+    + problems.join('\n')
+    + '\n（代码注释里可以用这些词，界面文案不行。内部叫法见 docs/admin-plan.md）');
+});
+
+test('小程序：界面里的应用名必须是注册名称', () => {
+  // 注册名称是「盛师猫猫」。名称、简介、类目、实际内容四者要一致 ——
+  // 界面标题写着别的名字，直接判「名称与实际功能不符」。
+  const NAME = '盛师猫猫';
+
+  // app.json 里标题嵌在 window 下面；页面自己的 json 是顶层的
+  const appJson = JSON.parse(read(path.join(MP, 'app.json')));
+  assert.equal(appJson.window.navigationBarTitleText, NAME,
+    `app.json 的窗口标题应当是注册名称「${NAME}」`);
+
+  const homeJson = JSON.parse(read(path.join(MP, 'pages', 'home', 'index.json')));
+  assert.equal(homeJson.navigationBarTitleText, NAME,
+    `首页的导航栏标题应当是注册名称「${NAME}」`);
+
+  const home = read(path.join(MP, 'pages', 'home', 'index.wxml'));
+  assert.match(home, new RegExp(`hero__title">${NAME}<`),
+    '首页大标题应当是注册名称 —— 那是审核第一眼看的地方');
+  // 也不能留着一个已经不存在的旧名字
+  assert.ok(!/IMNU/.test(home), '首页不该再出现旧的名字');
 });
 
 /* ============================================================

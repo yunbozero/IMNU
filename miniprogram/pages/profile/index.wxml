@@ -16,7 +16,7 @@
       </view>
       <view class="entry entry--small" bindtap="goItems" hover-class="entry--hover">
         <view class="entry__icon entry__icon--sm">🎁</view>
-        <view class="entry__title entry__title--sm">逛义卖</view>
+        <view class="entry__title entry__title--sm">逛活动</view>
         <view class="entry__desc entry__desc--sm">看看还有什么</view>
       </view>
     </view>
@@ -61,8 +61,8 @@
 
     <view class="card">
       <view class="card__title">活动规则</view>
-      <view class="rule"><text class="rule__k">预定免费：</text>小程序只登记名额，不出售商品、不收取任何费用。</view>
-      <view class="rule"><text class="rule__k">现场取货：</text>活动当天到对应摊位，出示取货码并付款后取走物品。</view>
+      <view class="rule"><text class="rule__k">只登记名额：</text>小程序只登记预定名额，不占用其他同学的机会。</view>
+      <view class="rule"><text class="rule__k">现场取货：</text>活动当天到对应摊位，出示取货码领取物品。</view>
       <view class="rule"><text class="rule__k">一人一份：</text>同一件物品每人限预定一次。</view>
       <view class="rule"><text class="rule__k rule__k--ok">及时取消：</text>无法到场请提前取消，把名额让给其他同学。</view>
     </view>
@@ -79,8 +79,8 @@
     </view>
 
     <view class="notice notice--strong">
-      <text class="notice__b">本小程序仅登记预定名额</text>，不出售商品、不收取任何费用。
-      预定成功后，请于义卖当天凭取货码到摊位现场付款取货。
+      <text class="notice__b">本小程序仅登记预定名额。</text>
+      预定成功后，请于活动当天凭取货码到对应摊位领取。
     </view>
 
     <view class="card">

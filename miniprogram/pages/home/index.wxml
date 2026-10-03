@@ -2,7 +2,7 @@
 
   <view class="hero">
     <view class="hero__mark">🎪</view>
-    <view class="hero__title">IMNU 校园义卖</view>
+    <view class="hero__title">盛师猫猫</view>
     <view class="hero__sub">{{eventText}}</view>
   </view>
 
@@ -11,11 +11,11 @@
     <text>（点一下重试）</text>
   </view>
 
-  <!-- 主入口：义卖 -->
+  <!-- 主入口：闲置物品登记（列表页） -->
   <view class="entry entry--primary" bindtap="goItems" hover-class="entry--hover">
     <view class="entry__icon">🎁</view>
     <view class="grow">
-      <view class="entry__title">逛义卖</view>
+      <view class="entry__title">逛活动</view>
       <view class="entry__desc">{{bazaarDesc}}</view>
     </view>
     <view class="entry__arrow">›</view>
@@ -55,8 +55,8 @@
   </view>
 
   <view class="notice">
-    <text class="notice__b">本小程序只登记预定名额，不收款、不做线上交易。</text>
-    请于义卖当天凭取货码到摊位现场付款取货。
+    <text class="notice__b">本小程序只登记预定名额。</text>
+    预定成功后，请于活动当天凭取货码到对应摊位领取。
   </view>
 
 </view>

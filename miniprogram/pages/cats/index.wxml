@@ -2,7 +2,7 @@
 
   <view class="cats-hero">
     <view class="cats-hero__avatar">🐾</view>
-    <view class="cats-hero__title">IMNU 猫咪图鉴</view>
+    <view class="cats-hero__title">盛师猫猫 · 猫咪图鉴</view>
     <view class="cats-hero__sub">关爱校园里的每一条小生命</view>
   </view>
 
@@ -48,7 +48,7 @@
     <view class="entry__icon">🏠</view>
     <view class="grow">
       <view class="entry__title">送养信息</view>
-      <view class="entry__desc">查看近期救助与送养动态</view>
+      <view class="entry__desc">查看近期送养动态</view>
     </view>
     <view class="entry__arrow">›</view>
   </view>

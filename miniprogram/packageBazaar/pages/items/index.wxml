@@ -4,7 +4,7 @@
     <text class="search__icon">🔍</text>
     <input
       class="search__input"
-      placeholder="搜索义卖物品"
+      placeholder="搜索物品"
       confirm-type="search"
       bindinput="onSearch"
     />
@@ -75,8 +75,8 @@
   </view>
 
   <view class="notice">
-    <text class="notice__b">预定免费，只锁定名额。</text>
-    请于活动当天凭取货码到摊位现场付款取货。
+    <text class="notice__b">只锁定名额，不占用别人的机会。</text>
+    预定成功后，请于活动当天凭取货码到摊位领取。
   </view>
 
 </view>

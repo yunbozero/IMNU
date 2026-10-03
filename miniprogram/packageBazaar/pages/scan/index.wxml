@@ -7,7 +7,7 @@
       <view class="desk__icon">🏪</view>
       <view class="grow">
         <view class="desk__title">核销台</view>
-        <view class="desk__sub">核销前请先确认已收款</view>
+        <view class="desk__sub">核销前请先确认是本人</view>
       </view>
       <view class="desk__count">
         <view class="desk__num">{{doneCount}}</view>

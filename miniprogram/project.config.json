@@ -1,5 +1,5 @@
 {
-  "description": "IMNU 校园义卖 · 微信开发者工具项目配置。appid 故意留成占位符：你自己的 AppID 请写在 project.private.config.json（已被 .gitignore 挡住，且优先级更高），不要改这里 —— 真实 AppID 提交上去会撞上 tests/secrets.test.mjs，而 deploy.sh 是「测试不过就不发布」的。",
+  "description": "盛师猫猫 · 微信开发者工具项目配置。appid 故意留成占位符：你自己的 AppID 请写在 project.private.config.json（已被 .gitignore 挡住，且优先级更高），不要改这里 —— 真实 AppID 提交上去会撞上 tests/secrets.test.mjs，而 deploy.sh 是「测试不过就不发布」的。",
   "appid": "touristappid",
   "projectname": "imnu-bazaar",
   "compileType": "miniprogram",
@@ -45,7 +45,7 @@
           "scene": null
         },
         {
-          "name": "义卖物品列表",
+          "name": "物品列表",
           "pathName": "packageBazaar/pages/items/index",
           "query": "",
           "scene": null

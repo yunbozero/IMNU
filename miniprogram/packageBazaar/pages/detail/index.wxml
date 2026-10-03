@@ -31,7 +31,7 @@
     <view class="panel">
       <view class="panel__row"><text class="panel__k">所属摊位</text><text class="panel__v">{{stall.name || '—'}}</text></view>
       <view class="panel__row"><text class="panel__k">摊位位置</text><text class="panel__v">{{stall.loc || '—'}}</text></view>
-      <view class="panel__row"><text class="panel__k">取货方式</text><text class="panel__v">凭取货码现场付款取货</text></view>
+      <view class="panel__row"><text class="panel__k">取货方式</text><text class="panel__v">凭取货码到摊位领取</text></view>
     </view>
 
     <view class="card" wx:if="{{item.description}}">
@@ -40,8 +40,8 @@
     </view>
 
     <view class="notice">
-      <text class="notice__b">预定免费，仅锁定名额。</text>
-      本小程序不收款，请于义卖当天凭取货码到摊位现场付款取货。
+      <text class="notice__b">只锁定名额，不占用别人的机会。</text>
+      预定成功后，请于活动当天凭取货码到对应摊位领取物品。
     </view>
   </block>
 
