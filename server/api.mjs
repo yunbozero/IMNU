@@ -100,6 +100,7 @@ export function createApi({
   makeCode = generateCode,
   maxItemsPerUser = 0,          // 每个账号在本次活动内最多预定几件；0 或负数 = 不限
   imageDir = PROD_IMAGE_DIR,    // 物品照片存在哪
+  wxConfigured = true,          // 服务端配了小程序密钥没有（只用于健康检查和报错文案）
 }) {
   if (!repo) throw new Error('createApi 需要 repo');
   if (!signToken) throw new Error('createApi 需要 signToken');
@@ -185,6 +186,12 @@ export function createApi({
         version: API_VERSION,
         uptimeMs: now() - startedAt,
         serverTime: now(),
+        // ★ 有没有配小程序密钥。只报真假，不报任何密钥内容。
+        //
+        //   为什么值得对外说：没配的话**每个人**都登录不了，而客户端只能显示
+        //   「微信登录失败」—— 看起来像网络问题或代码 bug，排查方向全错。
+        //   一条 curl 就能分清「服务器没配好」和「网络/域名不通」。
+        wxConfigured,
       });
     },
 
@@ -224,6 +231,15 @@ export function createApi({
       try {
         session = await sessions.exchange(code);
       } catch (e) {
+        // ★ 「服务端没配 AppID/AppSecret」和「code 无效」在客户端看起来一模一样，
+        //   但排查方向完全相反：前者要去服务器填配置，后者只是正常的过期 code。
+        //   这里把前者显式区分出来 —— 但**不把微信的原始报错透给前端**，
+        //   那里面可能带着 appid。
+        const notConfigured = !wxConfigured || /未配置 WX_APPID/.test(String(e && e.message));
+        if (notConfigured) {
+          return fail('wx_not_configured',
+            '服务端还没配置小程序密钥，请联系管理员', 401);
+        }
         return fail('login_failed', '微信登录失败，请重试', 401);
       }
 

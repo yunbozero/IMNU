@@ -53,7 +53,9 @@
 - `ProtectSystem=strict` 下服务只能写 `ReadWritePaths` 里的目录 —— 漏了照片目录会报
   `EROFS`，而本地没有 systemd 加固，**怎么测都正常**。
 - 照片目录必须是 **755**（nginx 的 worker 是 `www-data`，不是 `bazaar`）。
-- 小程序后台要加 **downloadFile 合法域名** —— 不加的话模拟器正常、真机全空白。
+- 真机上图片不显示时**先查 HTTPS 和服务器通不通** —— `<image>` 组件的 src
+  **不受**服务器域名白名单限制（白名单管的是 `wx.request` 那几个 API），
+  不要往「加 downloadFile 合法域名」的方向查。
 
 ### 线上数据从哪来：`scripts/init-event.mjs`
 

@@ -90,6 +90,53 @@ test('运行时：线上配置正常走真 provider，且 fakeLogin 为假', () 
   assert.equal(rt.dbPath, '/srv/bazaar/data/bazaar.db');
   assert.equal(typeof rt.sessions.exchange, 'function');
   assert.equal(rt.warning, null, '线上配置不该有任何警告');
+  assert.equal(rt.wxConfigured, true, '给了 WX_APPID / WX_SECRET 就该算「已配置」');
+});
+
+test('运行时：★ 没配小程序密钥时要能一眼看出来（而不是所有人登录失败）', async () => {
+  // 这是「昵称提交不了」最容易被误判成网络问题的一种原因：
+  // 服务端没填 AppID/AppSecret → 每个人登录都失败 → 客户端只能显示
+  // 「微信登录失败」，看起来像网络或代码 bug，排查方向全错。
+  // 所以：health 里报一个真假值，登录失败也单独给一个 error code。
+  const rt = resolveRuntime({ SESSION_SECRET: 'x'.repeat(20) });
+  assert.equal(rt.wxConfigured, false, '没给密钥就该报 false');
+  assert.match(rt.warning, /WX_APPID/, '启动时也要警告');
+
+  // 假登录模式下「能用」，因为没有一步真的走微信
+  assert.equal(resolveRuntime({ DEV_FAKE_LOGIN: '1' }).wxConfigured, true);
+
+  // 真的打一次接口：health 说没配，login 给出可区分的错误码
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'imnu-nocfg-'));
+  const srv = await startServer({
+    port: 0,
+    dbPath: path.join(dir, 'b.db'),
+    secret: 'x'.repeat(20),
+    sessions: rt.sessions,
+    wxConfigured: rt.wxConfigured,
+    log: () => {},
+  });
+  try {
+    const base = `http://127.0.0.1:${srv.port}`;
+
+    const health = await (await fetch(base + '/api/health')).json();
+    assert.equal(health.wxConfigured, false, 'health 必须报出来，否则只能上服务器看日志');
+
+    const login = await fetch(base + '/api/login', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ code: 'whatever' }),
+    });
+    const body = await login.json();
+    assert.equal(body.ok, false);
+    assert.equal(body.error, 'wx_not_configured',
+      '要能和「code 无效」区分开 —— 两者的排查方向完全相反');
+    assert.match(body.message, /密钥|联系管理员/);
+    // 不能把微信的原始报错透出去（可能带 appid）
+    assert.ok(!/appid/i.test(body.message), '不要把内部细节透给前端');
+  } finally {
+    await srv.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('运行时：单元文件必须写死 NODE_ENV=production —— 否则第一道锁是空的', () => {

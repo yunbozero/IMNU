@@ -213,13 +213,15 @@ export function createRequestHandler({
   makeCode,
   maxItemsPerUser = 0,
   imageDir = PROD_IMAGE_DIR,
+  wxConfigured = true,
   rateLimiter = createRateLimiter({ limit: 10, windowMs: 10_000, now }),
 } = {}) {
   if (!repo) throw new Error('需要 repo');
   if (!secret) throw new Error('需要 SESSION_SECRET');
 
   const api = createApi({
-    repo, sessions, secret, signToken, startedAt, now, makeCode, maxItemsPerUser, imageDir,
+    repo, sessions, secret, signToken, startedAt, now, makeCode, maxItemsPerUser,
+    imageDir, wxConfigured,
   });
 
   return async function handle(req, res) {
@@ -417,6 +419,10 @@ export function resolveRuntime(env = {}) {
   let sessions;
   let warning = null;
 
+  // 服务端配了小程序密钥没有。本地假登录也算「能用」—— 它根本不走微信。
+  // 只用于 /api/health 和登录失败的文案区分，不参与鉴权。
+  const wxConfigured = fakeLogin || !!(env.WX_APPID && env.WX_SECRET);
+
   if (fakeLogin) {
     sessions = createFakeSessionProvider();
     warning = '[!] 已启用本地假登录（DEV_FAKE_LOGIN=1）：任何 code 都能登录。线上绝不可用。';
@@ -439,6 +445,7 @@ export function resolveRuntime(env = {}) {
     secret,
     sessions,
     fakeLogin,
+    wxConfigured,
     warning,
     maxItemsPerUser: rawMax,
   };
@@ -453,26 +460,28 @@ function main() {
     process.exit(1);
   }
 
-  const { port, host, dbPath, imageDir, secret, sessions, warning, maxItemsPerUser } = runtime;
+  const { port, host, dbPath, imageDir, secret, sessions, warning, maxItemsPerUser, wxConfigured } = runtime;
   if (warning) console.warn(warning);
 
-  startServer({ port, host, dbPath, imageDir, secret, sessions, maxItemsPerUser }).then(async ({ server, close }) => {
-    console.log(`✅ bazaar-api 已启动 http://${host}:${port}`);
-    console.log(`   DB ${dbPath}`);
-    console.log(`   物品照片 ${imageDir}`);
-    console.log(`   每账号最多预定 ${maxItemsPerUser || '不限'} 件`);
+  startServer({ port, host, dbPath, imageDir, secret, sessions, maxItemsPerUser, wxConfigured })
+    .then(async ({ server, close }) => {
+      console.log(`✅ bazaar-api 已启动 http://${host}:${port}`);
+      console.log(`   DB ${dbPath}`);
+      console.log(`   物品照片 ${imageDir}`);
+      console.log(`   小程序密钥 ${wxConfigured ? '已配置' : '未配置 —— 登录会失败，见 docs/deploy-alicloud.md 5.5①'}`);
+      console.log(`   每账号最多预定 ${maxItemsPerUser || '不限'} 件`);
 
-    const shutdown = async (sig) => {
-      console.log(`收到 ${sig}，正在关闭…`);
-      await close();
-      process.exit(0);
-    };
-    process.on('SIGTERM', () => shutdown('SIGTERM'));
-    process.on('SIGINT', () => shutdown('SIGINT'));
-  }).catch((e) => {
-    console.error('[x] 启动失败：', e.message);
-    process.exit(1);
-  });
+      const shutdown = async (sig) => {
+        console.log(`收到 ${sig}，正在关闭…`);
+        await close();
+        process.exit(0);
+      };
+      process.on('SIGTERM', () => shutdown('SIGTERM'));
+      process.on('SIGINT', () => shutdown('SIGINT'));
+    }).catch((e) => {
+      console.error('[x] 启动失败：', e.message);
+      process.exit(1);
+    });
 }
 
 if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {

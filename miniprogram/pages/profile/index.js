@@ -80,7 +80,14 @@ Page({
       // 需要 register 作用域的 token。手上没有就先登录一次。
       if (session.getScope() !== 'register') {
         const r = await session.login();
-        if (r.registered) { this.refresh(); return; }
+        if (r.registered) {
+          // ★ 这里以前是**静默 return**：账号其实早就存在（退出登录之后又想来登记、
+          //   或者换了个调试会话、本地缓存被清了），用户点「完成登记」屏幕毫无反应，
+          //   看起来就是「昵称提交不了」。任何出口都必须说一句话。
+          wx.showToast({ title: '这个微信号已经登记过了', icon: 'none' });
+          this.refresh();
+          return;
+        }
       }
       await session.register(name);
       wx.showToast({ title: '登记成功', icon: 'success' });

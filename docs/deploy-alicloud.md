@@ -404,19 +404,21 @@ sudo -u bazaar DB_PATH=/srv/bazaar/data/bazaar.db \
 
 照片存在 `/srv/bazaar/images/`，**nginx 直接发文件**（不走 Node）。
 
-**升级到「有照片功能」这一版时，除了 `deploy.sh` 还要做两件事：**
+升级到「有照片功能」这一版，`deploy.sh` 会自己把照片目录补上（`install -d`，幂等）。
+发布完确认一下权限就够：
 
-1. **小程序后台加一条域名**：开发管理 → 开发设置 → 服务器域名 → **「downloadFile 合法域名」**
-   加 `https://neishidemao.cn`（和 request 合法域名同一个域名，一行的事）。
-   > 不加会怎样：图片在**开发者工具里正常显示**（因为勾了「不校验合法域名」），
-   > **一到真机就全是空白**，控制台报 `downloadFile:fail url not in domain list`。
-   > 这一条只有真机能验出来。
-2. **确认照片目录的权限**是 `755`、属主 `bazaar`：
-   ```bash
-   ls -ld /srv/bazaar/images
-   # 期望：drwxr-xr-x … bazaar bazaar … /srv/bazaar/images
-   ```
-   `deploy.sh` 会自己 `install -d` 补上（幂等），所以正常发布一遍就够了。
+```bash
+ls -ld /srv/bazaar/images
+# 期望：drwxr-xr-x … bazaar bazaar … /srv/bazaar/images
+```
+
+> ⚠️ **不要**为了照片去配「downloadFile 合法域名」。
+> `<image>` 组件的 `src` **不受服务器域名白名单限制**（白名单管的是 `wx.request` /
+> `wx.uploadFile` / `wx.downloadFile` / `wx.connectSocket` 这几个 **API**，
+> `<image>` 是个**组件**）。这条本项目一次都没用到 `wx.downloadFile`。
+> 官方 [image 组件文档](https://developers.weixin.qq.com/miniprogram/dev/component/image.html)
+> 里也没有白名单这一项。真机上图片不显示，先查**是不是 HTTPS**（微信不接受 http 图片）
+> 和服务器通不通，而不是去加域名 —— 加错了方向会白折腾。
 
 几个要知道的点：
 
@@ -447,7 +449,9 @@ sudo -u bazaar DB_PATH=/srv/bazaar/data/bazaar.db \
 | **备份可用** | `sudo systemctl start bazaar-backup && sudo -u bazaar node /srv/bazaar/app/server/backup.mjs list` | 列表里有今天的一份 |
 | 端口没裸奔 | 阿里云安全组只放 22 / 80 / 443 | 3000 不对外 |
 
-**最后一步**：去微信公众平台 → 开发管理 → 开发设置 → 服务器域名，把 `https://你的域名` 加进 **request 合法域名**（以及 **downloadFile 合法域名**，物品照片要用）。这一步不做，小程序发不出请求 / 图片显示不出来。
+**最后一步**：去微信公众平台 → 开发管理 → 开发设置 → 服务器域名，把 `https://你的域名` 加进 **request 合法域名**。这一步不做，小程序发不出请求。
+
+> 只管 `request` 就够。物品照片走的是 `<image>` 组件，**不受这个白名单限制**（见 §5.7）。
 
 ### 为什么根路径必须有一个页面
 

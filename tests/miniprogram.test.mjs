@@ -542,6 +542,62 @@ test('样式：两列卡片不能用 calc 定宽，也不能只靠 flex 的 gap'
 });
 
 /* ============================================================
+   ★ 事实性错误守卫：<image> 不受服务器域名白名单限制
+   ============================================================ */
+
+/**
+ * 找出文档里「要求读者去配 downloadFile 白名单」的句子。
+ *
+ * 要区分「要配」和「不要配」—— 纠正这个说法的文档本身必然会提到它，
+ * 如果把提到就算违规，就没法把正确的结论写下来了。
+ * 判据：这 24 个字里有没有否定词。
+ */
+function claimsDownloadFileWhitelistNeeded(src) {
+  const hits = [];
+  const re = /downloadFile\s*合法域名/g;
+  let m = re.exec(src);
+  while (m !== null) {
+    const before = src.slice(Math.max(0, m.index - 24), m.index);
+    if (!/[不别没]|无需|不用/.test(before)) hits.push(`${before}${m[0]}`);
+    m = re.exec(src);
+  }
+  return hits;
+}
+
+test('文档守卫自测：抓得住「要配」，也放得过「不要配」', () => {
+  assert.equal(claimsDownloadFileWhitelistNeeded('去后台把 downloadFile 合法域名加上').length, 1,
+    '要求读者去配 —— 必须抓到');
+  assert.equal(claimsDownloadFileWhitelistNeeded('不要为了图片去配 downloadFile 合法域名').length, 0,
+    '这是纠正文，不能误报（否则正确结论写不下来）');
+  assert.equal(claimsDownloadFileWhitelistNeeded('无需配置 downloadFile 合法域名').length, 0);
+  assert.equal(claimsDownloadFileWhitelistNeeded('照片走 image 组件，不受域名白名单限制').length, 0,
+    '压根没提到，当然不算');
+});
+
+test('文档：不能把「配 downloadFile 合法域名」说成看图片的前提', () => {
+  // 我在这里犯过一次错：查到一个博客说「微信加载网络图片必须配 downloadFile
+  // 合法域名」，就照着写进了手册和 FAQ。这是错的 ——
+  //   · 白名单管的是 wx.request / wx.uploadFile / wx.downloadFile / wx.connectSocket
+  //     这几个 **API**，`<image>` 是个**组件**；
+  //   · 官方 image 组件文档里根本没有白名单这一项；
+  //   · 仓库里 data/cats.js 和 miniprogram-build.test.mjs 早就写着「不受限制」；
+  //   · 那篇博客自己的数据就自相矛盾：失败的那张是 http://，成功的是 https://，
+  //     真正的原因是「微信不接受 http 图片」，不是白名单。
+  // 危害在于**误导排查方向**：真机上图片不显示时，人会跑去后台加域名，白折腾。
+  const problems = [];
+  for (const file of walk(ROOT, (f) => f.endsWith('.md'))) {
+    for (const hit of claimsDownloadFileWhitelistNeeded(read(file))) {
+      problems.push(`${path.relative(ROOT, file).replace(/\\/g, '/')}: …${hit}`);
+    }
+  }
+
+  assert.deepEqual(problems, [],
+    '这些文档把 <image> 说成受服务器域名白名单限制了。'
+    + '<image> 是组件，不受白名单限制；真机不显示要先查 HTTPS 和服务器连通性：\n'
+    + problems.join('\n'));
+});
+
+/* ============================================================
    管理端新建物品
    ============================================================ */
 
@@ -688,6 +744,26 @@ test('新建物品：提交时打的是服务端真正有的那个接口', () =>
 
   // 权限判定不能只写在界面上，但界面上也必须有（不然学生点进去是一片空白表单）
   assert.match(js, /session\.isManager\(\)/, '页面要先自己判一次权限');
+});
+
+test('登记：提交按钮的每条出口都要给用户一句话', () => {
+  // 曾经的 bug：账号已经存在时（退出登录后又想登记，或换了调试会话、
+  // 本地缓存被清了）走的是 `if (r.registered) { this.refresh(); return; }` ——
+  // 静默返回，用户点「完成登记」屏幕毫无反应，看起来就是「昵称提交不了」。
+  const js = read(path.join(MP, 'pages', 'profile', 'index.js'));
+  const body = js.slice(js.indexOf('async submitRegister'));
+
+  // 每个 return 之前都得有提示（校验不通过、登记成功、已经登记过）
+  const returns = body.split('\n').filter((l) => /\breturn\b/.test(l));
+  assert.ok(returns.length >= 3, '提交逻辑里应当有若干个出口');
+
+  // 具体钉住那条曾经静默的分支
+  const regBranch = /if \(r\.registered\)\s*\{([\s\S]{0,220}?)\}/.exec(body);
+  assert.ok(regBranch, '找不到「已经登记过」那个分支');
+  assert.match(regBranch[1], /showToast|showModal/,
+    '「已经登记过了」必须说出来 —— 静默返回会让用户以为按钮坏了');
+  assert.ok(!/^\s*this\.refresh\(\);\s*return;/m.test(regBranch[1]),
+    '这一支不能是「refresh 完就 return」');
 });
 
 /* ============================================================
