@@ -30,7 +30,8 @@ const repo = createSqliteRepository(db);
 
 try {
   if (process.argv.includes('--list') || !openid) {
-    const rows = db.prepare('SELECT id, openid, sid, name, role FROM users ORDER BY created_at').all();
+    // 走数据层而不是在这里写 SQL —— 脚本里的 SQL 是将来换云开发时最容易漏改的一批
+    const rows = repo.listUsers();
     if (!rows.length) {
       console.log('还没有任何已登记的用户。先在小程序里登记一次，再回来跑这个脚本。');
     } else {

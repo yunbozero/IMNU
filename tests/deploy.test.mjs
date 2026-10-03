@@ -778,6 +778,25 @@ test('部署：手册明确说了不要买什么', () => {
   }
 });
 
+test('部署：手册要说清「怎么给人开权限」（界面里没有任命角色的入口）', () => {
+  // 小程序里**没有任命角色的界面**（接口早就有，界面一直没做），
+  // 而 set-owner.mjs 只在「一个超管都没有」时生效一次。
+  // 义卖当天给志愿者开核销权限只能靠脚本 —— 这件事必须写在手册里，
+  // 否则现场会卡在「怎么给志愿者权限」上，而这恰恰是最要紧的一步。
+  const doc = read(DOC);
+
+  assert.match(doc, /set-role\.mjs/, '手册要提到 set-role.mjs');
+  for (const role of ['volunteer', 'deputy', 'admin']) {
+    assert.ok(doc.includes(role), `手册要列出 ${role} 这个角色`);
+  }
+  assert.match(doc, /没有任命角色的界面/, '要写明界面里没有这个入口，免得有人一直找');
+  // ★ 最容易搞混的一点：两个库、两种 openid
+  assert.match(doc, /开发者工具里的 openid 和手机上的不是一回事/,
+    '要提醒「手机上那个账号」和开发者工具里那个假身份不是同一个');
+  assert.match(doc, /重新进一次「我的」页/,
+    '改完要提醒他重进「我的」页 —— 角色是每次显示时拉的');
+});
+
 test('部署：手册给出了倒排时间线', () => {
   const doc = read(DOC);
   assert.match(doc, /T[−-]21\s*天/, '缺少倒排时间线');

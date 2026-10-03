@@ -35,4 +35,5 @@ import './qrcode.test.mjs';
 import './repository.test.mjs';
 import './roles.test.mjs';
 import './secrets.test.mjs';
+import './set-role.test.mjs';
 import './shell.test.mjs';

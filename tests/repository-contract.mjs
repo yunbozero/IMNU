@@ -90,6 +90,25 @@ export function describeRepositoryContract(label, makeRepo) {
     } finally { cleanup && cleanup(); }
   });
 
+  t('listUsers 能看到全部账号（服务端脚本靠它按昵称找人）', () => {
+    const { repo, cleanup } = makeRepo();
+    try {
+      const a = person(repo, 1);
+      const b = person(repo, 2);
+
+      const list = repo.listUsers();
+      const ids = list.map((u) => u.id);
+      assert.ok(ids.includes(a.id) && ids.includes(b.id), 'listUsers 应当包含已登记的人');
+
+      // 返回的是 mapUser 之后的对象：字段名是驼峰，不是数据库列名
+      const one = list.find((u) => u.id === a.id);
+      assert.equal(one.name, '同学1');
+      assert.equal(one.role, 'student');
+      assert.ok(!('created_at' in one), '不该把数据库列名漏出去');
+      assert.ok('createdAt' in one, '应当是 mapUser 之后的形状');
+    } finally { cleanup && cleanup(); }
+  });
+
   /* ============================================================
      场次
      ============================================================ */

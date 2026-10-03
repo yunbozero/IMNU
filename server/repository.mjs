@@ -29,6 +29,7 @@ export const REPOSITORY_METHODS = [
   'createUser',
   'findUserByOpenid',
   'findUserById',
+  'listUsers',
   'listItems',
   'getItem',
   'tryReserve',
@@ -251,6 +252,17 @@ export function createSqliteRepository(db) {
 
     findUserById(id) {
       return mapUser(db.prepare('SELECT * FROM users WHERE id = ?').get(id));
+    },
+
+    /**
+     * 全部已登记的账号，按登记先后。
+     *
+     * 给服务端脚本用（set-owner / set-role 都要按昵称找出「手机上那个账号」
+     * 是哪一个）。以前这些脚本直接在这里写 SQL，绕过了数据层 ——
+     * 将来换云开发时，散落在脚本里的 SQL 是最容易漏改的一批。
+     */
+    listUsers() {
+      return db.prepare('SELECT * FROM users ORDER BY created_at').all().map(mapUser);
     },
 
     /* ---------------- 物品 ---------------- */
