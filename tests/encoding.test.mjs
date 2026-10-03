@@ -13,6 +13,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isLocalOnlyFile } from './secrets.test.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -36,8 +37,7 @@ function walk(dir) {
   return out;
 }
 
-test('编码：所有文本文件都是合法的 UTF-8', () => {
-  const files = walk(ROOT);
+test('编码：所有文本文件都是合法的 UTF-8', () => {  const files = walk(ROOT);
   assert.ok(files.length > 80, `只扫到 ${files.length} 个文件，遍历逻辑可能有问题`);
 
   const decoder = new TextDecoder('utf-8', { fatal: true });
@@ -85,4 +85,35 @@ test('编码：中文注释确实还能读通（不是一堆乱码）', () => {
     const text = fs.readFileSync(p, 'utf8');
     assert.match(text, /[\u4e00-\u9fa5]{2,}/, `${rel} 里找不到连续中文，可能被写坏了`);
   }
+});
+
+test('编码：换行必须是 LF（CRLF 会混进 diff，Linux 上还会出怪问题）', () => {
+  // 起因：我用 PowerShell 的 `[System.IO.File]::WriteAllLines` 删了几行，
+  // 它在 Windows 上默认写 CRLF，于是整个文件的行尾全变了。
+  // git 当时只给了一句 warning（`.gitattributes` 会在下次接触时转回 LF），
+  // 很容易划过去 —— 但工作区里那份就是 CRLF，后续 diff 全是噪音。
+  //
+  // `.gitattributes` 写的是 `* text=auto eol=lf`，只有 Windows 专用的
+  // .ps1/.bat/.cmd 例外。这里按同一条规则查。
+  const CRLF_OK = /\.(ps1|bat|cmd)$/i;
+
+  const bad = [];
+  for (const f of walk(ROOT)) {
+    if (CRLF_OK.test(f)) continue;
+    // ★ 跳过「只属于本机、永远不会提交」的文件。
+    //   微信开发者工具生成的 project.private.config.json 就是 CRLF ——
+    //   它不是仓库的一部分，拿仓库的规矩去要求它只会让测试常红。
+    //   （哪些文件算本机文件、以及它们必须真被 .gitignore 挡住，
+    //   由 tests/secrets.test.mjs 负责，这里直接复用同一个判断。）
+    if (isLocalOnlyFile(path.basename(f))) continue;
+
+    if (fs.readFileSync(f).includes(Buffer.from('\r\n'))) {
+      bad.push(path.relative(ROOT, f).replace(/\\/g, '/'));
+    }
+  }
+
+  assert.deepEqual(bad, [],
+    '以下文件用了 CRLF 换行（应当是 LF）。'
+    + '常见原因：用 PowerShell 的 Set-Content / WriteAllLines 重写了文件 —— '
+    + '要用编辑器改，或者写完转一次：\n' + bad.map((b) => '  · ' + b).join('\n'));
 });
