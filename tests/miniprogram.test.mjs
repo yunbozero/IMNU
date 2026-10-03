@@ -846,6 +846,28 @@ test('登录：wx.login 正常时不该被超时误伤', async () => {
   }
 });
 
+test('退出登录：文案不能说「退出后要重新登记」（那是假的）', () => {
+  // 退出只清本机的 token 和缓存，服务端的账号还在 —— openid 一登录就把它找回来。
+  // 照着旧文案理解，用户会以为「退出 = 换个昵称重新登记」，点完发现还是老账号，
+  // 白折腾一轮（真实发生过）。
+  const js = read(path.join(MP, 'pages', 'profile', 'index.js'));
+  const modal = /onLogout\(\)[\s\S]{0,900}?\n  \},/m.exec(js);
+  assert.ok(modal, '找不到 onLogout');
+
+  // 只看弹窗**真正显示的那句话**。注释里会引用旧文案当反面教材，
+  // 拿整段去匹配会把解释本身测红（我已经这样栽过一次）。
+  const copy = /content:\s*'([^']*)'/.exec(modal[0]);
+  assert.ok(copy, '找不到 showModal 的 content');
+  const text = copy[1];
+
+  assert.ok(!/退出后需要重新登记/.test(text),
+    '不能再说「退出后需要重新登记」—— 账号不会因为退出而消失');
+  assert.match(text, /自动登录/,
+    '要说清「再次进入会自动登录」，否则用户会以为退出等于换账号');
+  assert.match(modal[0], /clearSession|removeStorage/,
+    '退出要真的清掉本机会话');
+});
+
 /* ============================================================
    物品照片
    ============================================================ */
