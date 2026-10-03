@@ -251,12 +251,30 @@ sudo bash /srv/bazaar/app/deploy/deploy.sh
 sudo nano /etc/bazaar/env
 ```
 
+**nano 的存盘按键**（屏幕底部的 `^O` 里的 `^` 是 **Ctrl** 键，不是先按 shift+6）：
+
+| 想干什么 | 按键 |
+| --- | --- |
+| 保存 | `Ctrl+O` → 底部出现 `File Name to Write: /etc/bazaar/env` → **回车** |
+| 保存并退出 | `Ctrl+X` → 问 `Save modified buffer?` → 按 **`Y`** → **回车** |
+| 不保存退出 | `Ctrl+X` → 按 `N` |
+
+> ⚠️ **不要按 `Ctrl+S`。** 在终端里 `Ctrl+S` 是「暂停输出」（XOFF），
+> 屏幕会像死了一样毫无反应，你会以为 nano 卡了。
+> 真按了就按 **`Ctrl+Q`** 恢复。这个坑对用惯图形编辑器的人特别常见。
+
 填上小程序后台「开发管理 → 开发设置」里的 **AppID** 和 **AppSecret**：
 
 ```
 WX_APPID=wx..........          ← 必须和 miniprogram/project.private.config.json 里那个一致
 WX_SECRET=...................  ← AppSecret
 ```
+
+**格式要求**（`EnvironmentFile` 不是 shell，它比 shell 更死板）：
+
+- **等号两边不要有空格**：`WX_APPID = wx...` 会被当成一个叫 `WX_APPID ` 的变量，等于没填
+- **值不要加引号**：引号会连同内容一起当值
+- 一行一项，行首不要有 `#`（那是注释掉）
 
 > **AppSecret 只在公众平台显示一次**，没记下来就要在同一个页面点「重置」
 > （重置后旧的立即失效）。它**不要提交进 git、不要贴进聊天窗口、不要写进命令行** ——
@@ -269,18 +287,31 @@ WX_SECRET=...................  ← AppSecret
 sudo systemctl restart bazaar
 ```
 
-**怎么确认填对了**（这三条都不需要看到密钥本身）：
+**怎么确认填对了**（这几条都不需要看到密钥本身）：
 
 ```bash
-# 1. 启动警告应该消失（没填时会打「未配置 WX_APPID / WX_SECRET」）
-sudo journalctl -u bazaar -n 30 --no-pager | grep 密钥
+# 0. 权限要对：bazaar 账号得读得到，别人读不到
+ls -l /etc/bazaar/env
+#   期望：-rw-r----- 1 root bazaar …
+#   ★ 这里有个**静默失败**：systemd 里写的是 EnvironmentFile=-/etc/bazaar/env，
+#     开头那个 - 表示「读不到也不报错」。所以权限一旦变成 600 且属主是 root，
+#     文件内容就完全没进到服务里，而服务照常启动、不报任何错 ——
+#     症状和「压根没填」一模一样。修：
+#     sudo chmod 640 /etc/bazaar/env && sudo chown root:bazaar /etc/bazaar/env
 
-# 2. 看哪几项是空的 —— 只打印「已填 / 空」，不打印值
-sudo awk -F= '/^WX_APPID=|^WX_SECRET=/{print $1, (length($2)>0 ? "已填" : "空")}' /etc/bazaar/env
+# 1. 值填进去了没有。AppID 固定 18 位（wx + 16 位），AppSecret 固定 32 位；
+#    长度不对说明等号边上多了空格、或者把引号也一起粘进去了
+sudo awk -F= '/^(WX_APPID|WX_SECRET)=/{printf "%s 长度=%d\n", $1, length($2)}' /etc/bazaar/env
+
+# 2. 启动警告应该消失（没填时会打「未配置 WX_APPID / WX_SECRET」）
+sudo journalctl -u bazaar -n 30 --no-pager | grep 密钥
 
 # 3. 部署过带诊断的版本之后，健康检查会直接说
 curl -s https://你的域名/api/health      # {"ok":true,...,"wxConfigured":true}
 ```
+
+> 第 2 条如果**警告还在**，只有两种可能：文件没存到你以为的那个路径
+> （`Ctrl+O` 时底部会显示完整路径，对一下），或者第 0 条的权限被改坏了。
 
 > `SESSION_SECRET` 是 `bootstrap.sh` 自动生成的随机值，**不要动它** —— 改了所有人都会掉登录。
 
