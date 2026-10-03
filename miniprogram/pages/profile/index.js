@@ -137,6 +137,16 @@ Page({
     wx.navigateTo({ url: '/packageAdmin/pages/items/index' });
   },
 
+  /**
+   * 活动与摊位。入口对副主任管理员就开 —— 那一页里再分一次：
+   * 副主任能建摊位，只有一级管理员能看到建/结束活动的部分。
+   * （和服务端的门槛一一对应：摊位 deputy+、活动 admin+）
+   */
+  goAdminEvent() {
+    if (!this.data.isManager) return;
+    wx.navigateTo({ url: '/packageAdmin/pages/event/index' });
+  },
+
   goItems() {
     wx.navigateTo({ url: '/packageBazaar/pages/items/index' });
   },

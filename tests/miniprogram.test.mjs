@@ -16,11 +16,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ROUTES } from '../server/http.mjs';
-import { ROLES, canRedeem, canManage } from '../server/roles.mjs';
+import { ROLES, canRedeem, canManage, canAdminister } from '../server/roles.mjs';
 import {
   ITEM_NAME_MAX, ITEM_DESC_MAX, ITEM_QUOTA_MAX, ITEM_EMOJI_MAX, ITEM_TINTS,
 } from '../server/api.mjs';
-import { ROLES_CAN_REDEEM, ROLES_CAN_MANAGE, ROLE_LABEL } from '../miniprogram/services/session.js';
+import { ROLES_CAN_REDEEM, ROLES_CAN_MANAGE, ROLES_CAN_ADMINISTER, ROLE_LABEL } from '../miniprogram/services/session.js';
 import * as itemForm from '../miniprogram/packageAdmin/utils/item-form.js';
 import { pickBaseUrl, API_BASE } from '../miniprogram/config.js';
 import {
@@ -376,15 +376,22 @@ test('小程序：界面角色判定必须和服务端 roles.mjs 一致', () => 
   // 这里用服务端的谓词反推应有列表，而不是再抄一遍。
   const expectedRedeem = ROLES.filter(canRedeem).sort();
   const expectedManage = ROLES.filter(canManage).sort();
+  const expectedAdminister = ROLES.filter(canAdminister).sort();
 
   assert.deepEqual([...ROLES_CAN_REDEEM].sort(), expectedRedeem,
     `能核销的角色应当是 [${expectedRedeem}]，界面写的是 [${ROLES_CAN_REDEEM}]`);
   assert.deepEqual([...ROLES_CAN_MANAGE].sort(), expectedManage,
     `能管理的角色应当是 [${expectedManage}]，界面写的是 [${ROLES_CAN_MANAGE}]`);
+  assert.deepEqual([...ROLES_CAN_ADMINISTER].sort(), expectedAdminister,
+    `能管「影响全场」那类事的角色应当是 [${expectedAdminister}]，`
+    + `界面写的是 [${ROLES_CAN_ADMINISTER}]`);
 
   // 管理门槛必须严格高于核销门槛，否则会出现「能进管理端却进不了核销台」
   for (const r of ROLES_CAN_MANAGE) {
     assert.ok(ROLES_CAN_REDEEM.includes(r), `能管理的角色 ${r} 必须也能核销`);
+  }
+  for (const r of ROLES_CAN_ADMINISTER) {
+    assert.ok(ROLES_CAN_MANAGE.includes(r), `能管活动的角色 ${r} 必须也能进管理端`);
   }
 
   // 显示名要覆盖全部角色 —— 漏一个就会在界面上显示成默认的「学生」
@@ -633,6 +640,105 @@ test('照片：每张图都要有失败回退，列表图还要懒加载', () =>
         `${f} 的列表图缺 lazy-load —— 首屏会同时下载几十张照片`);
     }
   }
+});
+
+/* ============================================================
+   ★ 管理端活动与摊位
+   ============================================================ */
+
+test('小程序：页面里不许手写角色名（判定要收在 session.js 里）', () => {
+  // reservations 页原来自已写了一份 `role === 'admin' || role === 'owner'` ——
+  // 服务端改规则时那份不会跟着动，而且没有测试盯着。
+  // 现在判定统一收在 session.js，由上面的漂移测试比对。
+  const problems = [];
+  for (const file of jsFiles()) {
+    const rel = path.relative(MP, file).replace(/\\/g, '/');
+    // session.js 是那些列表的定义处，当然可以出现角色名
+    if (rel === 'services/session.js') continue;
+
+    // 只抓「和角色字符串做相等比较」的写法；文案里出现「管理员」不算
+    for (const m of read(file).matchAll(
+      /['"](student|volunteer|deputy|admin|owner)['"]\s*(?:===|!==|==|!=)/g)) {
+      problems.push(`${rel}: ${m[0]}`);
+    }
+  }
+
+  assert.deepEqual(problems, [],
+    '这些地方在手写角色判定 —— 改用 session.js 的 isStaff / isManager / isSeniorManager：\n'
+    + problems.join('\n'));
+});
+
+test('活动页：结构齐全，入口进得去，门槛分两级', () => {
+  const cfg = appJson();
+  const admin = cfg.subPackages.find((s) => s.root === 'packageAdmin');
+  assert.ok(admin.pages.includes('pages/event/index'), '活动页要注册在 packageAdmin 里');
+
+  for (const f of ['index.js', 'index.wxml', 'index.wxss', 'index.json']) {
+    assert.ok(exists(path.join(MP, 'packageAdmin/pages/event', f)), `缺 ${f}`);
+  }
+
+  // 入口：物品名额那个入口旁边
+  const wxml = read(path.join(MP, 'pages/profile/index.wxml'));
+  assert.match(wxml, /bindtap="goAdminEvent"/, '「我的」页要有入口，否则这页进不去');
+  assert.match(wxml, /活动与摊位/);
+
+  const js = read(path.join(MP, 'pages/profile/index.js'));
+  const m = js.match(/goAdminEvent\(\)[\s\S]{0,220}?navigateTo\(\{\s*url:\s*['"]([^'"]+)['"]/);
+  assert.ok(m, '找不到 goAdminEvent 的跳转');
+  const target = m[1].replace(/^\//, '').replace(/\/index$/, '');
+  const all = [
+    ...cfg.pages,
+    ...cfg.subPackages.flatMap((sp) => sp.pages.map((p) => `${sp.root}/${p}`)),
+  ].map((p) => p.replace(/\/index$/, ''));
+  assert.ok(all.includes(target), `跳到了不存在的页面：${m[1]}`);
+
+  // ★ 同一页里两种门槛：摊位 deputy+、活动 admin+
+  const page = read(path.join(MP, 'packageAdmin/pages/event/index.js'));
+  assert.match(page, /session\.isManager\(\)/, '摊位部分用 isManager');
+  assert.match(page, /session\.isSeniorManager\(\)/, '活动部分用 isSeniorManager');
+  const pageWxml = read(path.join(MP, 'packageAdmin/pages/event/index.wxml'));
+  assert.match(pageWxml, /wx:if="\{\{canAdminister\}\}"/, '建活动那块要按 canAdminister 显示');
+  assert.match(pageWxml, /wx:if="\{\{canManage\}\}"/, '建摊位那块要按 canManage 显示');
+});
+
+test('活动页：时间不自己算，拼字符串交给服务端', () => {
+  const page = read(path.join(MP, 'packageAdmin/pages/event/index.js'));
+
+  // ★ 客户端 new Date(...) 是按**手机时区**解释的，看着对，存进库就未必。
+  //   所以用 date / time 两个 picker 拿字符串，拼起来发过去。
+  assert.match(page, /mode="date"|buildTime/, '要用 picker 拿日期');
+  assert.match(page, /`\$\{date\} \$\{time\}`/, '要拼成 "YYYY-MM-DD HH:MM" 交给服务端解析');
+
+  // 页面上不许拿 Date 去算要存的时间戳
+  assert.ok(!/Date\.now\(\)/.test(page), '不要自己算时间戳');
+  assert.ok(!/getTime\(\)/.test(page), '不要自己算时间戳');
+
+  const wxml = read(path.join(MP, 'packageAdmin/pages/event/index.wxml'));
+  assert.match(wxml, /<picker mode="date"/, '日期用日期选择器');
+  assert.match(wxml, /<picker mode="time"/, '时间用时间选择器');
+});
+
+test('活动页：★ 建新的在售活动前要先问「把旧的结束掉吗」', () => {
+  // 两个在售并存的话，首页只显示最新的那个、管理端却看着有两个 ——
+  // 排查起来很费劲。所以宁可多问一句，也别静默地让两个并存。
+  const page = read(path.join(MP, 'packageAdmin/pages/event/index.js'));
+
+  const submit = /async submitEvent\([\s\S]*?\n  \},/.exec(page);
+  assert.ok(submit, '找不到 submitEvent');
+  assert.match(submit[0], /showModal/, '建在售活动前要弹确认');
+  assert.match(submit[0], /endPrevious/, '确认之后要带上 endPrevious，让服务端把它结束掉');
+  // 确认框里要说清后果
+  assert.match(submit[0], /结束掉|看不到/, '要告诉用户旧的会被结束、学生看不到了');
+});
+
+test('活动页：结束活动要留日志、要能收尾（以前只能改数据库）', () => {
+  const page = read(path.join(MP, 'packageAdmin/pages/event/index.js'));
+  assert.match(page, /api\/admin\/event\/status/, '要有改状态的调用');
+  assert.match(page, /toggleStatus/, '要有开始/结束的入口');
+
+  const wxml = read(path.join(MP, 'packageAdmin/pages/event/index.wxml'));
+  assert.match(wxml, /bindtap="toggleStatus"/);
+  assert.match(wxml, /{{item\.action}}/, '按钮文案要跟着状态走（开始 / 结束）');
 });
 
 /* ============================================================

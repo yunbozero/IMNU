@@ -1,0 +1,58 @@
+/* 管理端 · 活动与摊位。样式只在这个分包里用。 */
+
+.field { margin-top: 24rpx; }
+.field__k { font-size: 25rpx; color: var(--text-2); margin-bottom: 12rpx; }
+
+.field__input {
+  padding: 22rpx 26rpx;
+  border-radius: 22rpx;
+  background: #F9F4F1;
+  font-size: 29rpx;
+}
+
+/* picker 里没法直接套 input 的样式，给个长得一样的壳 */
+.field__pick {
+  padding: 22rpx 26rpx;
+  border-radius: 22rpx;
+  background: #F9F4F1;
+  font-size: 28rpx;
+}
+
+/* 日期 + 时间两个 picker 并排。gap 无法在老 iOS 上用，所以用 margin */
+.row picker { flex: 1; min-width: 0; }
+.row picker + picker { margin-left: 16rpx; }
+
+.ev {
+  padding: 20rpx 0;
+  border-bottom: 1rpx solid rgba(43, 33, 25, 0.06);
+}
+.ev:last-child { border-bottom: 0; }
+.ev--dim { opacity: 0.72; }
+.ev--none { color: var(--text-2); font-size: 26rpx; line-height: 1.6; }
+.ev__name { font-size: 30rpx; font-weight: 700; }
+.ev__time { font-size: 24rpx; color: var(--text-3); margin-top: 8rpx; }
+
+.stall {
+  padding: 18rpx 0;
+  border-bottom: 1rpx solid rgba(43, 33, 25, 0.06);
+}
+.stall:last-child { border-bottom: 0; }
+.stall__name { font-size: 28rpx; font-weight: 600; }
+.stall__loc { font-size: 23rpx; color: var(--text-3); margin-top: 4rpx; }
+
+.hint { font-size: 24rpx; color: var(--text-3); line-height: 1.6; margin-top: 8rpx; }
+
+.ops { display: flex; margin-top: 28rpx; }
+.ops .btn { flex: 1; }
+.ops .btn + .btn { margin-left: 16rpx; }
+.add { margin-top: 26rpx; }
+
+/* 小号按钮：和物品名额页那些 .op 长得一样，但那个类在另一个页面的 wxss 里 */
+.op {
+  margin: 16rpx 0 0; padding: 0 30rpx; line-height: 2.3;
+  font-size: 26rpx; font-weight: 600;
+  background: #F6EFEA; color: var(--text);
+  border: 0; border-radius: 22rpx;
+}
+.op::after { border: 0; }
+.op--danger { background: #fff; color: var(--danger); border: 3rpx solid #F2D8D3; }

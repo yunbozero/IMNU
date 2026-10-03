@@ -23,6 +23,7 @@ export const REPOSITORY_METHODS = [
   'createEvent',
   'getActiveEvent',
   'listEvents',
+  'updateEventStatus',
   'createStall',
   'listStalls',
   'createItem',
@@ -198,6 +199,25 @@ export function createSqliteRepository(db) {
      */
     listEvents() {
       return db.prepare('SELECT * FROM events ORDER BY created_at DESC').all().map(mapEvent);
+    },
+
+    /**
+     * 改场次状态：draft / on_sale / ended。
+     *
+     * 义卖结束之后要能把场次收尾 —— 不然它会一直挂着「在售」，
+     * 而 `getActiveEvent` 只认最新的在售场次，下次办活动就会互相打架。
+     *
+     * ★ 这里**不检查「同时只能有一个在售」**。那是业务不变量，
+     *   由接口层在调用前判断（它需要先读一遍当前在售的是谁，
+     *   才给得出「先把「X」结束掉吗」这种话）。数据层只负责写。
+     */
+    updateEventStatus(eventId, status) {
+      if (!['draft', 'on_sale', 'ended'].includes(status)) {
+        throw new Error(`未知的场次状态：${status}`);
+      }
+      const upd = db.prepare('UPDATE events SET status = ? WHERE id = ?').run(status, eventId);
+      if (upd.changes !== 1) return { ok: false, reason: 'not_found' };
+      return { ok: true, event: repo.listEvents().find((e) => e.id === eventId) };
     },
 
     createStall({ eventId, name, loc = null }) {

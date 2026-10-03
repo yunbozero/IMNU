@@ -37,3 +37,4 @@ import './roles.test.mjs';
 import './secrets.test.mjs';
 import './set-role.test.mjs';
 import './shell.test.mjs';
+import './time.test.mjs';

@@ -1,0 +1,157 @@
+<view class="page">
+
+  <view wx:if="{{error}}" class="notice notice--strong" bindtap="load">
+    <text class="notice__b">打不开：</text>{{error}}（点一下重试）
+  </view>
+
+  <block wx:if="{{!error}}">
+
+    <!-- ---------- 现在在售的 ---------- -->
+    <view class="card">
+      <view class="card__title">现在在售</view>
+
+      <view wx:if="{{active}}" class="ev">
+        <view class="ev__name">{{active.name}}</view>
+        <view class="ev__time">{{active.rangeText}}</view>
+      </view>
+      <view wx:else class="ev ev--none">
+        还没有在售的活动。下面建一个，学生就能看到物品列表了。
+      </view>
+    </view>
+
+    <!-- ---------- 摊位 ---------- -->
+    <view class="card">
+      <view class="card__title">摊位（{{stalls.length}}）</view>
+
+      <view wx:if="{{stalls.length === 0}}" class="hint">
+        还没有摊位。物品可以不挂摊位，但挂上之后学生能按摊位筛。
+      </view>
+      <view wx:for="{{stalls}}" wx:key="id" class="stall">
+        <view class="stall__name">{{item.name}}</view>
+        <view wx:if="{{item.loc}}" class="stall__loc">{{item.loc}}</view>
+      </view>
+
+      <block wx:if="{{canManage}}">
+        <view class="field">
+          <view class="field__k">新摊位名</view>
+          <input
+            class="field__input"
+            maxlength="30"
+            placeholder="比如：三号摊位 · 手作烘焙"
+            value="{{stallName}}"
+            bindinput="onStallName"
+          />
+        </view>
+        <view class="field">
+          <view class="field__k">位置（可不填）</view>
+          <input
+            class="field__input"
+            maxlength="40"
+            placeholder="比如：图书馆前广场北侧"
+            value="{{stallLoc}}"
+            bindinput="onStallLoc"
+          />
+        </view>
+        <button
+          class="btn add"
+          disabled="{{busyStall}}"
+          bindtap="submitStall"
+        >{{busyStall ? '添加中…' : '添加摊位'}}</button>
+      </block>
+
+      <view wx:else class="hint">建摊位要副主任管理员及以上。</view>
+    </view>
+
+    <!-- ---------- 新建活动：只有一级管理员及以上 ---------- -->
+    <view wx:if="{{canAdminister}}" class="card">
+      <view class="card__title">新建活动</view>
+
+      <view class="field">
+        <view class="field__k">活动名</view>
+        <input
+          class="field__input"
+          maxlength="40"
+          placeholder="比如：檐下猫小记 · 闲置物品登记"
+          value="{{name}}"
+          bindinput="onName"
+        />
+      </view>
+
+      <view class="field">
+        <view class="field__k">开始时间（可不填）</view>
+        <view class="row">
+          <picker mode="date" value="{{startDate}}" bindchange="onStartDate">
+            <view class="field__pick">{{startDate || '选日期'}}</view>
+          </picker>
+          <picker mode="time" value="{{startTime}}" bindchange="onStartTime">
+            <view class="field__pick">{{startTime}}</view>
+          </picker>
+        </view>
+      </view>
+
+      <view class="field">
+        <view class="field__k">结束时间（可不填）</view>
+        <view class="row">
+          <picker mode="date" value="{{endDate}}" bindchange="onEndDate">
+            <view class="field__pick">{{endDate || '选日期'}}</view>
+          </picker>
+          <picker mode="time" value="{{endTime}}" bindchange="onEndTime">
+            <view class="field__pick">{{endTime}}</view>
+          </picker>
+        </view>
+      </view>
+
+      <view class="notice">
+        <text class="notice__b">时间按北京时间存。</text>
+        首页会显示成「9:00–17:00」，所以这里填的就是学生看到的时间。
+      </view>
+
+      <view class="ops">
+        <button
+          class="btn btn--ghost"
+          disabled="{{submitting}}"
+          data-draft="true"
+          bindtap="submitEvent"
+        >存为草稿</button>
+        <button
+          class="btn"
+          disabled="{{submitting}}"
+          data-draft="false"
+          bindtap="submitEvent"
+        >{{submitting ? '保存中…' : '保存并开始'}}</button>
+      </view>
+    </view>
+
+    <!-- ---------- 全部活动 ---------- -->
+    <block wx:if="{{canAdminister}}">
+      <view class="card">
+        <view class="card__title">全部活动</view>
+
+        <view wx:if="{{events.length === 0}}" class="hint">还没有活动。</view>
+        <view wx:for="{{events}}" wx:key="id" class="ev {{item.active ? '' : 'ev--dim'}}">
+          <view class="row row--between">
+            <view class="ev__name">{{item.name}}</view>
+            <text class="{{item.statusClass}}">{{item.statusText}}</text>
+          </view>
+          <view class="ev__time">{{item.rangeText}}</view>
+          <button
+            wx:if="{{item.action}}"
+            class="op {{item.action === '结束' ? 'op--danger' : ''}}"
+            data-id="{{item.id}}"
+            data-status="{{item.status}}"
+            data-name="{{item.name}}"
+            bindtap="toggleStatus"
+          >{{item.action}}</button>
+        </view>
+      </view>
+
+      <view class="notice">
+        <text class="notice__b">同时只能有一个「在售」活动。</text>
+        首页只认最新的那个，所以两个在售并存的话，
+        学生看到的是新的、而这里看着有两个 —— 要换活动请先把旧的结束掉。
+      </view>
+    </block>
+
+  </block>
+
+</view>

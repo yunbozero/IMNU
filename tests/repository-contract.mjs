@@ -132,6 +132,30 @@ export function describeRepositoryContract(label, makeRepo) {
     } finally { cleanup && cleanup(); }
   });
 
+  t('updateEventStatus 能把场次收尾（不然它会一直挂着「在售」）', () => {
+    const { repo, cleanup } = makeRepo();
+    try {
+      const ev = repo.createEvent({ name: '义卖', status: 'on_sale' });
+      assert.equal(repo.getActiveEvent().id, ev.id, '前提：它现在是在售的');
+
+      const r = repo.updateEventStatus(ev.id, 'ended');
+      assert.equal(r.ok, true);
+      assert.equal(r.event.status, 'ended');
+      assert.equal(repo.getActiveEvent(), null, '结束之后就不该再是在售场次');
+
+      // 还能再开回来
+      assert.equal(repo.updateEventStatus(ev.id, 'on_sale').ok, true);
+      assert.equal(repo.getActiveEvent().id, ev.id);
+
+      // 不存在的场次不能默默当成功
+      assert.equal(repo.updateEventStatus('ev_不存在', 'ended').ok, false);
+      assert.equal(repo.updateEventStatus('ev_不存在', 'ended').reason, 'not_found');
+
+      // 乱写的状态要直接抛错，而不是写进库
+      assert.throws(() => repo.updateEventStatus(ev.id, '乱七八糟'), /未知的场次状态/);
+    } finally { cleanup && cleanup(); }
+  });
+
   /* ============================================================
      预定：防超卖
      ============================================================ */

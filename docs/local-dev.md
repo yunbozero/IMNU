@@ -159,12 +159,16 @@ npm run set-owner <你的openid>       # 提成超管
 ## 8. 想用「真实形状」的数据试，而不是演示数据
 
 `npm run seed` 给的是写死的演示物品。要按自己写的配置建数据，用初始化脚本
-（它就是线上建活动用的那个，本地一样能跑）：
+（它就是线上批量录入用的那个，本地一样能跑）：
 
 ```bash
 npm run init-event -- deploy/event-config.example.json            # 只看计划，不写库
 DB_PATH=tmp/bazaar-dev.db npm run init-event -- deploy/event-config.example.json --yes
 ```
+
+> **也可以完全不用脚本**：在模拟器里把自己提成超管（`npm run set-owner`），
+> 然后在「我的」→ 管理端 → **活动与摊位** 里建活动、加摊位，
+> 再去「物品名额」加物品 —— 和线上组织者做的是同一套操作。
 
 它是**可以重复运行**的（活动/摊位/物品按名字查重），所以往配置里追加几行再跑一次
 就是「补物品」。默认目标是线上库路径，本地跑**一定要带 `DB_PATH=`** ——

@@ -37,16 +37,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { openMigrated, PROD_DB_PATH } from '../server/db.mjs';
 import { createSqliteRepository } from '../server/repository.mjs';
-import { ITEM_NAME_MAX, ITEM_DESC_MAX, ITEM_QUOTA_MAX, ITEM_EMOJI_MAX, ITEM_TINTS } from '../server/api.mjs';
+import {
+  ITEM_NAME_MAX, ITEM_DESC_MAX, ITEM_QUOTA_MAX, ITEM_EMOJI_MAX, ITEM_TINTS,
+  // ★ 场次和摊位这几个上限和「新建活动/摊位」接口用的是同一份 ——
+  //   各写一份的话，界面上建得出来的东西脚本却说不行（或反过来）。
+  EVENT_STATUSES, EVENT_NAME_MAX, STALL_NAME_MAX, STALL_LOC_MAX,
+} from '../server/api.mjs';
+import { parseEventTime, checkRange } from '../server/time.mjs';
 import { validateImage, imageProblemText, saveImage, PROD_IMAGE_DIR } from '../server/images.mjs';
-
-/** 场次状态。和 server/db.mjs 里注释写的三个值一致。 */
-export const EVENT_STATUSES = ['draft', 'on_sale', 'ended'];
-
-/** 名字长度上限。数据库不拦，但界面放不下 —— 拦在写库之前，别让它进库。 */
-export const EVENT_NAME_MAX = 40;
-export const STALL_NAME_MAX = 30;
-export const STALL_LOC_MAX = 40;
 
 export const USAGE = `
 用法：
@@ -65,37 +63,10 @@ export const USAGE = `
    ============================================================ */
 
 /**
- * 活动时间的**唯一**解析方式。
- *
- * ★ 一定要带上 +08:00，不能直接 new Date('2026-04-18 09:00')：
- *   后者按**服务器本地时区**解释这个字符串，而云服务器默认是 UTC。
- *   在 UTC 机器上把「09:00」解析成 09:00Z，学生手机上看到的就是 17:00 —— 
- *   首页那行「9:00–17:00」会整整差 8 小时，而且本地怎么测都是对的。
- *   活动时间永远是北京时间，所以写死 +08:00。
+ * `parseEventTime` 现在住在 `server/time.mjs` —— 因为「新建活动」那个接口
+ * 也要用它。**两边各写一份是不行的**：同一句「2026-04-18 09:00」
+ * 会存成两个不同的时刻，而且只在线上、只在那一种入口下暴露。
  */
-export function parseEventTime(v, field) {
-  if (v === undefined || v === null || v === '') return null;
-  if (typeof v !== 'string') {
-    throw new Error(`${field} 要写成 "2026-04-18 09:00" 这样的字符串`);
-  }
-  const m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})$/.exec(v.trim());
-  if (!m) throw new Error(`${field} 格式不对，应当形如 "2026-04-18 09:00"`);
-
-  const [, y, mo, d, h, mi] = m;
-  const ms = Date.parse(`${y}-${mo}-${d}T${h}:${mi}:00+08:00`);
-  if (!Number.isFinite(ms)) throw new Error(`${field}「${v}」不是一个真实的日期`);
-
-  // ★ 光靠 Date.parse 拦不住「2 月 30 日」：V8 对 ISO 字符串里的越界日期是
-  //   **往后滚动**而不是报错，'2026-02-30T09:00:00+08:00' 会静悄悄变成 3 月 2 日。
-  //   所以按北京时间把结果渲染回去，和原文核对一遍。
-  const back = new Date(ms + 8 * 3600 * 1000).toISOString().slice(0, 16);
-  if (back !== `${y}-${mo}-${d}T${h}:${mi}`) {
-    throw new Error(`${field}「${v}」不是一个真实的日期`);
-  }
-
-  return ms;
-}
-
 const asText = (v) => (typeof v === 'string' ? v.trim() : '');
 
 /**
@@ -127,9 +98,7 @@ export function parseConfig(raw) {
 
   const startsAt = parseEventTime(ev.startsAt, 'event.startsAt');
   const endsAt = parseEventTime(ev.endsAt, 'event.endsAt');
-  if (startsAt !== null && endsAt !== null && endsAt < startsAt) {
-    throw new Error('event.endsAt 比 startsAt 还早');
-  }
+  checkRange(startsAt, endsAt, { start: 'event.startsAt', end: 'event.endsAt' });
 
   /* ---------- 摊位 ---------- */
   const rawStalls = raw.stalls === undefined ? [] : raw.stalls;

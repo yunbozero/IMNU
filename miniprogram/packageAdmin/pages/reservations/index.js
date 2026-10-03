@@ -74,8 +74,10 @@ Page({
       }));
 
       // 撤销核销和改设置都是「一级管理员及以上」：deputy 能看名单、改物品名额，
-      // 但这两件事影响面更大，门槛高一级（和服务端 api.mjs 的 isSeniorManager 一致）。
-      const isSenior = me.role === 'admin' || me.role === 'owner';
+      // 但这两件事影响面更大，门槛高一级。
+      // ★ 判定收在 session.js 里（和服务端 roles.mjs 的 canAdminister 比对），
+      //   别在这里手写角色名 —— 改规则时手写的那份不会跟着动。
+      const isSenior = session.isSeniorManager();
 
       this.setData({
         all,

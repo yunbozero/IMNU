@@ -44,7 +44,17 @@
       <view class="entry__icon">📦</view>
       <view class="grow">
         <view class="entry__title">管理端 · 物品名额</view>
-        <view class="entry__desc">临时加减名额、上下架</view>
+        <view class="entry__desc">临时加减名额、上下架、新建物品</view>
+      </view>
+      <view class="entry__arrow">›</view>
+    </view>
+
+    <!-- 活动与摊位：副主任能建摊位，一级管理员才能建/结束活动（页内再分一次） -->
+    <view wx:if="{{isManager}}" class="entry entry--staff" bindtap="goAdminEvent" hover-class="entry--hover">
+      <view class="entry__icon">📅</view>
+      <view class="grow">
+        <view class="entry__title">管理端 · 活动与摊位</view>
+        <view class="entry__desc">建活动、结束活动、加摊位</view>
       </view>
       <view class="entry__arrow">›</view>
     </view>

@@ -676,6 +676,256 @@ test('管理端：取消不存在的预定返回 404', async () => {
 });
 
 /* ============================================================
+   活动与摊位（原来是只能跑脚本的，现在有界面入口了）
+   ============================================================ */
+
+const createEvent = (ctx, token, body) => call(ctx, 'POST', '/api/admin/event', { token, body });
+const createStall = (ctx, token, body) => call(ctx, 'POST', '/api/admin/stall', { token, body });
+
+test('活动：只有一级管理员及以上能建、能看列表', async () => {
+  const ctx = await startTestServer();
+  try {
+    for (const code of ['code-student', 'code-vol', 'code-deputy']) {
+      const made = await createEvent(ctx, ctx.tokens[code], { name: '想偷偷建的' });
+      assert.equal(made.status, 403, `${code} 不该能建活动`);
+      assert.equal(made.body.error, 'forbidden');
+
+      const list = await call(ctx, 'GET', '/api/admin/events', { token: ctx.tokens[code] });
+      assert.equal(list.status, 403, `${code} 不该能看活动列表`);
+    }
+
+    for (const code of ['code-admin', 'code-owner']) {
+      const list = await call(ctx, 'GET', '/api/admin/events', { token: ctx.tokens[code] });
+      assert.equal(list.body.ok, true, `${code} 应当能看活动列表`);
+      assert.ok(Array.isArray(list.body.events));
+    }
+
+    // 越权失败时不能有副作用
+    assert.equal(ctx.repo.listEvents().length, 1, '越权调用不该建出活动来');
+  } finally { await ctx.close(); }
+});
+
+test('活动：建出来就是在售，时间按北京时间存', async () => {
+  const ctx = await startTestServer();
+  try {
+    // 先把现有的在售活动结束掉，免得撞「只能一个在售」
+    await call(ctx, 'POST', '/api/admin/event/status', {
+      token: ctx.tokens['code-admin'],
+      body: { eventId: ctx.ids.eventId, status: 'ended' },
+    });
+
+    const r = await createEvent(ctx, ctx.tokens['code-admin'], {
+      name: '春季闲置物品登记',
+      startsAt: '2026-04-18 09:00',
+      endsAt: '2026-04-18 17:00',
+    });
+    assert.equal(r.body.ok, true, JSON.stringify(r.body));
+    assert.equal(r.body.event.status, 'on_sale', '不传 draft 就是直接开售');
+
+    // ★ 时间必须是北京时间：09:00 CST = 01:00 UTC。
+    //   这里错了的话首页那行「9:00–17:00」会差 8 小时，而且只在线上暴露。
+    assert.equal(new Date(r.body.event.startsAt).toISOString(), '2026-04-18T01:00:00.000Z');
+    assert.equal(new Date(r.body.event.endsAt).toISOString(), '2026-04-18T09:00:00.000Z');
+
+    // 学生那头立刻就能看到
+    const ev = await call(ctx, 'GET', '/api/event');
+    assert.equal(ev.body.event.name, '春季闲置物品登记');
+
+    // 列表里带上给界面回显用的文本
+    const list = await call(ctx, 'GET', '/api/admin/events', { token: ctx.tokens['code-admin'] });
+    const mine = list.body.events.find((e) => e.name === '春季闲置物品登记');
+    assert.equal(mine.startsAtText, '2026-04-18 09:00');
+    assert.equal(mine.active, true);
+  } finally { await ctx.close(); }
+});
+
+test('活动：草稿不占「在售」，可以和现有的并存', async () => {
+  const ctx = await startTestServer();
+  try {
+    const r = await createEvent(ctx, ctx.tokens['code-admin'], { name: '下次的', draft: true });
+    assert.equal(r.body.ok, true, JSON.stringify(r.body));
+    assert.equal(r.body.event.status, 'draft');
+
+    // 在售的还是原来那个 —— 草稿不该抢走首页
+    const ev = await call(ctx, 'GET', '/api/event');
+    assert.equal(ev.body.event.name, '测试义卖');
+  } finally { await ctx.close(); }
+});
+
+test('活动：入参错误要明确拒绝', async () => {
+  const ctx = await startTestServer();
+  try {
+    const t = ctx.tokens['code-admin'];
+    const cases = [
+      [{ name: undefined }, 400],
+      [{ name: '   ' }, 400],
+      [{ name: 'x'.repeat(41) }, 400],
+      [{ name: 'a', startsAt: '2026/04/18 09:00' }, 400],
+      [{ name: 'a', startsAt: '2026-02-30 09:00' }, 400],
+      [{ name: 'a', startsAt: '2026-04-18 17:00', endsAt: '2026-04-18 09:00' }, 400],
+    ];
+    for (const [body, expect] of cases) {
+      const r = await createEvent(ctx, t, body);
+      assert.equal(r.status, expect,
+        `${JSON.stringify(body)} 应当 ${expect}，实际 ${r.status}：${JSON.stringify(r.body)}`);
+    }
+    assert.equal(ctx.repo.listEvents().length, 1, '参数被拒时不能留下半成品');
+  } finally { await ctx.close(); }
+});
+
+test('活动：★ 不能静默地出现两个在售（首页只认最新的那个）', async () => {
+  const ctx = await startTestServer();
+  try {
+    const t = ctx.tokens['code-admin'];
+
+    // 已经有一个在售的了，直接建第二个 → 冲突，并且什么都不改
+    const conflict = await createEvent(ctx, t, { name: '第二个' });
+    assert.equal(conflict.body.ok, false);
+    assert.equal(conflict.body.error, 'event_conflict');
+    assert.match(conflict.body.message, /测试义卖/, '要把现在在售的是哪个说出来');
+    assert.equal(ctx.repo.listEvents().length, 1, '冲突时不能建出活动来');
+    assert.equal(ctx.repo.getActiveEvent().name, '测试义卖', '旧的必须还在售');
+
+    // 明确要求「先把旧的结束掉」→ 旧的收尾、新的接上
+    const ok = await createEvent(ctx, t, { name: '第二个', endPrevious: true });
+    assert.equal(ok.body.ok, true, JSON.stringify(ok.body));
+    assert.equal(ok.body.endedPrevious.name, '测试义卖');
+    assert.equal(ctx.repo.getActiveEvent().name, '第二个');
+    assert.equal(ctx.repo.listEvents().filter((e) => e.status === 'on_sale').length, 1,
+      '任何时刻最多只能有一个在售');
+
+    // 两件事都要留日志：建新的、以及结束旧的
+    assert.ok(auditDetail(ctx, 'event.create'), '建活动要留日志');
+    assert.equal(auditDetail(ctx, 'event.end').name, '测试义卖', '结束旧活动也要留日志');
+  } finally { await ctx.close(); }
+});
+
+test('活动：能收尾、能重开、能退回草稿', async () => {
+  const ctx = await startTestServer();
+  try {
+    const t = ctx.tokens['code-admin'];
+    const setStatus = (status) => call(ctx, 'POST', '/api/admin/event/status', {
+      token: t, body: { eventId: ctx.ids.eventId, status },
+    });
+
+    // ★ 以前**没有任何办法结束活动**，只能改数据库 ——
+    //   不收尾的话它会一直挂着在售，下次办活动就互相打架
+    assert.equal((await setStatus('ended')).body.ok, true);
+    assert.equal(ctx.repo.getActiveEvent(), null, '结束之后就不该有在售活动了');
+    assert.match(auditDetail(ctx, 'event.status').to, /ended/);
+
+    // 重开
+    assert.equal((await setStatus('on_sale')).body.ok, true);
+    assert.equal(ctx.repo.getActiveEvent().id, ctx.ids.eventId);
+
+    // 重复设成同一个状态：算成功，但标记 unchanged（界面据此不用提示「已改」）
+    const same = await setStatus('on_sale');
+    assert.equal(same.body.ok, true);
+    assert.equal(same.body.unchanged, true);
+
+    // 退回草稿
+    assert.equal((await setStatus('draft')).body.ok, true);
+    assert.equal(ctx.repo.getActiveEvent(), null);
+  } finally { await ctx.close(); }
+});
+
+test('活动：把别的活动设成在售要拦住（否则就有两个在售）', async () => {
+  const ctx = await startTestServer();
+  try {
+    const t = ctx.tokens['code-admin'];
+    const draft = await createEvent(ctx, t, { name: '草稿的', draft: true });
+
+    const r = await call(ctx, 'POST', '/api/admin/event/status', {
+      token: t, body: { eventId: draft.body.event.id, status: 'on_sale' },
+    });
+    assert.equal(r.body.ok, false);
+    assert.equal(r.body.error, 'event_conflict');
+    assert.match(r.body.message, /测试义卖/);
+    assert.equal(ctx.repo.listEvents().filter((e) => e.status === 'on_sale').length, 1);
+  } finally { await ctx.close(); }
+});
+
+test('活动：状态 / eventId 不合法要拒', async () => {
+  const ctx = await startTestServer();
+  try {
+    const t = ctx.tokens['code-admin'];
+    const cases = [
+      [{ status: 'ended' }, 400],                                  // 没给 eventId
+      [{ eventId: ctx.ids.eventId, status: '乱七八糟' }, 400],
+      [{ eventId: 'ev_不存在', status: 'ended' }, 404],
+    ];
+    for (const [body, expect] of cases) {
+      const r = await call(ctx, 'POST', '/api/admin/event/status', { token: t, body });
+      assert.equal(r.status, expect, `${JSON.stringify(body)} 应当 ${expect}`);
+    }
+    assert.equal(ctx.repo.getActiveEvent().id, ctx.ids.eventId, '拒绝时不能改动现状');
+  } finally { await ctx.close(); }
+});
+
+test('摊位：副主任及以上能建，学生志愿者不行', async () => {
+  const ctx = await startTestServer();
+  try {
+    for (const code of ['code-student', 'code-vol']) {
+      const r = await createStall(ctx, ctx.tokens[code], { name: '偷偷建的摊' });
+      assert.equal(r.status, 403, `${code} 不该能建摊位`);
+    }
+    assert.equal(ctx.repo.listStalls(ctx.ids.eventId).length, 1, '越权时不能建出来');
+
+    // 摊位是内容，门槛和「建物品」一致（deputy+）
+    for (const code of ['code-deputy', 'code-admin', 'code-owner']) {
+      const r = await createStall(ctx, ctx.tokens[code], { name: `摊位-${code}`, loc: '图书馆前' });
+      assert.equal(r.body.ok, true, `${code} 应当能建摊位：${JSON.stringify(r.body)}`);
+    }
+  } finally { await ctx.close(); }
+});
+
+test('摊位：建完学生那头就能按摊位筛选', async () => {
+  const ctx = await startTestServer();
+  try {
+    const r = await createStall(ctx, ctx.tokens['code-deputy'], {
+      name: '三号摊位 · 手作烘焙', loc: '图书馆前广场北侧',
+    });
+    assert.equal(r.body.ok, true, JSON.stringify(r.body));
+
+    const ev = await call(ctx, 'GET', '/api/event');
+    const mine = ev.body.stalls.find((s) => s.id === r.body.stall.id);
+    assert.ok(mine, '新建的摊位要出现在学生端的摊位列表里');
+    assert.equal(mine.loc, '图书馆前广场北侧');
+    assert.equal(auditDetail(ctx, 'stall.create').name, '三号摊位 · 手作烘焙');
+  } finally { await ctx.close(); }
+});
+
+test('摊位：入参错误 / 重名 / 没有在售活动，都要说清楚', async () => {
+  const ctx = await startTestServer();
+  try {
+    const t = ctx.tokens['code-deputy'];
+
+    for (const [body, expect] of [
+      [{ name: undefined }, 400],
+      [{ name: '  ' }, 400],
+      [{ name: 'x'.repeat(31) }, 400],
+      [{ name: '位置太长的', loc: 'x'.repeat(41) }, 400],
+    ]) {
+      const r = await createStall(ctx, t, body);
+      assert.equal(r.status, expect, `${JSON.stringify(body)} 应当 ${expect}`);
+    }
+
+    // 重名会让「这堆东西在哪个摊」变得含糊，列表里两条也长得一样
+    const dup = await createStall(ctx, t, { name: '一号摊位' });
+    assert.equal(dup.body.ok, false);
+    assert.equal(dup.body.error, 'stall_exists');
+    assert.match(dup.body.message, /一号摊位/);
+
+    // 没有在售活动时，摊位挂在哪儿都不对 —— 直接说清楚
+    ctx.db.prepare("UPDATE events SET status = 'ended'").run();
+    const noEvent = await createStall(ctx, t, { name: '四号摊位' });
+    assert.equal(noEvent.body.ok, false);
+    assert.equal(noEvent.body.error, 'no_active_event');
+    assert.match(noEvent.body.message, /活动与摊位/, '要告诉他去哪儿建活动');
+  } finally { await ctx.close(); }
+});
+
+/* ============================================================
    运行期设置：每账号预定上限
    ============================================================ */
 

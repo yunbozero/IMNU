@@ -44,6 +44,19 @@ export const canRedeem = (role) => RANK[role] >= RANK.volunteer;
 export const canManage = (role) => RANK[role] >= RANK.deputy;
 
 /**
+ * 能碰「影响全场」的东西的角色：撤销误核销、改每账号上限、**建/结束活动**。
+ *
+ * 比 canManage 高一级。为什么要有这个名字：这三件事都属于「一改就是全场的事」，
+ * 而改物品名额、看名单是日常操作 —— 门槛不同是刻意的。
+ *
+ * ★ 小程序那边有一份副本（`ROLES_CAN_ADMINISTER`），
+ *   由 tests/miniprogram.test.mjs 拿这里的谓词反推校验。
+ *   以前 reservations 页面是**手写** `role === 'admin' || role === 'owner'` 的，
+ *   改这里的规则时那边不会跟着动，也没有测试盯着。
+ */
+export const canAdminister = (role) => RANK[role] >= RANK.admin;
+
+/**
  * 任命规则。
  *
  * 注意 admin 可以任命 admin —— 这是有意为之：换届时要有多个一级管理员

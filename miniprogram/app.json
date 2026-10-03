@@ -38,6 +38,7 @@
         "pages/reservations/index",
         "pages/items/index",
         "pages/item-new/index",
+        "pages/event/index",
         "pages/cancel/index"
       ]
     }

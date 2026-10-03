@@ -16,12 +16,13 @@
  * 所有 `error` 都是稳定的机器可读字符串，`message` 才是给人看的中文。
  */
 import { generateCode, SETTING_MAX_PER_USER, pickMaxPerUser } from './repository.mjs';
+import { parseEventTime, checkRange, formatEventTime } from './time.mjs';
 import {
   saveImage, deleteImage, imageExists, imageUrlOf,
   MAX_IMAGE_BYTES, MAX_IMAGE_BASE64, PROD_IMAGE_DIR,
 } from './images.mjs';
 import {
-  ROLE_LABEL, isRole, canManage, canRedeem,
+  ROLE_LABEL, isRole, canManage, canRedeem, canAdminister,
   checkRoleChange, checkOwnerTransfer,
 } from './roles.mjs';
 
@@ -55,6 +56,14 @@ export const ITEM_QUOTA_MAX = 9999;
  */
 export const ITEM_EMOJI_MAX = 2;
 
+/** 场次名字与摊位名字的字数上限 */
+export const EVENT_NAME_MAX = 40;
+export const STALL_NAME_MAX = 30;
+export const STALL_LOC_MAX = 40;
+
+/** 场次的三个状态。和 server/db.mjs 里注释写的、以及 init-event.mjs 用的保持一致。 */
+export const EVENT_STATUSES = ['draft', 'on_sale', 'ended'];
+
 /** 图片太大时的提示。抽出来是因为它出现在两个地方，措辞必须一致。 */
 const TOO_BIG_MSG = `图片不能超过 ${Math.round(MAX_IMAGE_BYTES / 1024)}KB，请压缩后再传`;
 
@@ -72,9 +81,10 @@ const isStaff = (user) => !!user && canRedeem(user.role);
 const isManager = (user) => !!user && canManage(user.role);
 /**
  * 一级管理员及以上（副主任管理员不算）。
- * 用于「撤销核销」和「改运行期设置」—— 这两件事的影响面比改单个物品大。
+ * 用于「撤销核销」「改运行期设置」「建/结束活动」—— 这几件事的影响面比改单个物品大。
+ * ★ 规则住在 roles.mjs 的 canAdminister 里，这里只是套上「是不是登录用户」。
  */
-const isSeniorManager = (user) => isManager(user) && user.role !== 'deputy';
+const isSeniorManager = (user) => isManager(user) && canAdminister(user.role);
 
 /* ============================================================
    给小程序看的文案 —— 统一放在一处，前端就不用自己拼
@@ -142,6 +152,20 @@ export function createApi({
     if (typeof v !== 'string') return null;
     const s = v.trim();
     return s.length >= 1 && s.length <= ITEM_NAME_MAX ? s : null;
+  };
+
+  /** 场次名。同一个道理：太长了在列表和首页上都会折行。 */
+  const asEventName = (v) => {
+    if (typeof v !== 'string') return null;
+    const s = v.trim();
+    return s.length >= 1 && s.length <= EVENT_NAME_MAX ? s : null;
+  };
+
+  /** 摊位名。 */
+  const asStallName = (v) => {
+    if (typeof v !== 'string') return null;
+    const s = v.trim();
+    return s.length >= 1 && s.length <= STALL_NAME_MAX ? s : null;
   };
 
   /** 可选的短文本（简介 / 图标）：没填就是 null，填了超长才报错。 */
@@ -476,6 +500,178 @@ export function createApi({
       }
       if (r.reason === 'cancelled') return fail('cancelled', MESSAGES.cancelled);
       return fail(r.reason, '核销失败');
+    },
+
+    /* ============================================================
+       管理端 · 活动与摊位
+
+       为什么现在有界面入口了：以前建活动 / 摊位只能 SSH 上去改 JSON 再跑脚本。
+       对「一年做一两次」本来可以忍，但组织者手上未必有 SSH ——
+       换届之后那条命令谁来敲？所以补上。
+       ★ 只有「设立第一个超管」必须走命令行（不能让任何人在界面上把自己设成超管）。
+       ============================================================ */
+
+    /** 列出全部场次，含已结束的。管理端要用它看历史、收尾旧活动。 */
+    adminListEvents({ user }) {
+      if (!user) return fail('unauthorized', '请先登录', 401);
+      if (!isSeniorManager(user)) {
+        return fail('forbidden', '看活动列表需要一级管理员及以上', 403);
+      }
+
+      return ok({
+        events: repo.listEvents().map((e) => ({
+          ...e,
+          startsAtText: formatEventTime(e.startsAt),
+          endsAtText: formatEventTime(e.endsAt),
+          active: e.status === 'on_sale',
+        })),
+      });
+    },
+
+    /**
+     * 新建场次。**一级管理员及以上** ——
+     * 它决定全场看到什么，和「撤销核销」「改每账号上限」是同一量级的事。
+     *
+     * ★ 同时只能有一个「在售」场次。已经有一个在售时：
+     *     不传 endPrevious → 返回 event_conflict（界面据此问「要先把旧的结束掉吗」）
+     *     传了 endPrevious → 把旧的那个结束掉，再建这个
+     *   之所以不静默地让两个并存：`getActiveEvent` 只认最新的那个，
+     *   于是首页显示的是新的、而管理端看着有两个 —— 排查起来很费劲。
+     */
+    adminCreateEvent({ body, user }) {
+      if (!user) return fail('unauthorized', '请先登录', 401);
+      if (!isSeniorManager(user)) {
+        return fail('forbidden', '建活动需要一级管理员及以上', 403);
+      }
+
+      const name = asEventName(body?.name);
+      if (!name) return fail('bad_request', `活动名要填 1–${EVENT_NAME_MAX} 个字`, 400);
+
+      let startsAt;
+      let endsAt;
+      try {
+        startsAt = parseEventTime(body?.startsAt, '开始时间');
+        endsAt = parseEventTime(body?.endsAt, '结束时间');
+        checkRange(startsAt, endsAt);
+      } catch (e) {
+        return fail('bad_request', e.message, 400);
+      }
+
+      const draft = body?.draft === true;
+
+      let endedPrevious = null;
+      if (!draft) {
+        const active = repo.getActiveEvent();
+        if (active) {
+          if (body?.endPrevious !== true) {
+            return fail('event_conflict',
+              `现在已经在售「${active.name}」。要开始新的，请先把旧的结束掉。`);
+          }
+          repo.updateEventStatus(active.id, 'ended');
+          endedPrevious = active;
+        }
+      }
+
+      const event = repo.createEvent({
+        name, startsAt, endsAt, status: draft ? 'draft' : 'on_sale',
+      });
+
+      repo.writeAudit({
+        actorId: user.id, action: 'event.create',
+        targetType: 'event', targetId: event.id,
+        detail: { name, draft, endedPrevious: endedPrevious ? endedPrevious.id : null },
+      });
+      if (endedPrevious) {
+        repo.writeAudit({
+          actorId: user.id, action: 'event.end',
+          targetType: 'event', targetId: endedPrevious.id,
+          detail: { name: endedPrevious.name, reason: '新建活动时顺带结束', via: 'admin' },
+        });
+      }
+
+      return ok({ event, endedPrevious });
+    },
+
+    /** 改场次状态：开售 / 收尾（结束）/ 退回草稿。一级管理员及以上。 */
+    adminSetEventStatus({ body, user }) {
+      if (!user) return fail('unauthorized', '请先登录', 401);
+      if (!isSeniorManager(user)) {
+        return fail('forbidden', '改活动状态需要一级管理员及以上', 403);
+      }
+
+      const eventId = asId(body?.eventId);
+      if (!eventId) return fail('bad_request', '缺少 eventId', 400);
+
+      const status = body?.status;
+      if (!EVENT_STATUSES.includes(status)) {
+        return fail('bad_request', `状态只能是 ${EVENT_STATUSES.join(' / ')}`, 400);
+      }
+
+      const target = repo.listEvents().find((e) => e.id === eventId);
+      if (!target) return fail('not_found', '活动不存在', 404);
+
+      // 同一个不变量：至多一个在售。★ 要排除它自己，否则「重复设成在售」会被自己挡住。
+      if (status === 'on_sale') {
+        const active = repo.getActiveEvent();
+        if (active && active.id !== eventId) {
+          return fail('event_conflict',
+            `「${active.name}」还在售。要开始这个，请先把那个结束掉。`);
+        }
+      }
+
+      if (target.status === status) {
+        return ok({ event: target, unchanged: true });
+      }
+
+      const r = repo.updateEventStatus(eventId, status);
+      if (!r.ok) return fail(r.reason, '改不了', 404);
+
+      repo.writeAudit({
+        actorId: user.id, action: 'event.status',
+        targetType: 'event', targetId: eventId,
+        detail: { name: target.name, from: target.status, to: status },
+      });
+
+      return ok({ event: r.event });
+    },
+
+    /**
+     * 新建摊位。**副主任管理员及以上**（和建/改物品同一档）——
+     * 摊位是内容，不是全场开关，没必要抬到一级管理员。
+     *
+     * 摊位挂在**当前在售的活动**下。没有在售活动时直接说清楚 ——
+     * 挂在草稿活动下的摊位谁也看不到，与其让它变成一个查不到的孤儿，
+     * 不如告诉管理员先把活动开起来。
+     */
+    adminCreateStall({ body, user }) {
+      if (!user) return fail('unauthorized', '请先登录', 401);
+      if (!isManager(user)) return fail('forbidden', '你没有管理权限', 403);
+
+      const event = repo.getActiveEvent();
+      if (!event) {
+        return fail('no_active_event', '还没有在售的活动，先在「活动与摊位」里建一个');
+      }
+
+      const name = asStallName(body?.name);
+      if (!name) return fail('bad_request', `摊位名要填 1–${STALL_NAME_MAX} 个字`, 400);
+
+      const loc = asOptionalText(body?.loc, STALL_LOC_MAX);
+      if (!loc.ok) return fail('bad_request', `位置最多 ${STALL_LOC_MAX} 个字`, 400);
+
+      // 同名摊位会让「这堆东西在哪个摊」变得含糊，而且列表里两条长得一样
+      if (repo.listStalls(event.id).some((s) => s.name === name)) {
+        return fail('stall_exists', `这次活动里已经有一个叫「${name}」的摊位了`);
+      }
+
+      const stall = repo.createStall({ eventId: event.id, name, loc: loc.value });
+
+      repo.writeAudit({
+        actorId: user.id, action: 'stall.create',
+        targetType: 'stall', targetId: stall.id,
+        detail: { name, loc: loc.value, eventId: event.id },
+      });
+
+      return ok({ stall });
     },
 
     /* ============================================================

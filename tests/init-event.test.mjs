@@ -19,7 +19,7 @@ import { startServer } from '../server/http.mjs';
 import { createFakeSessionProvider } from '../server/auth.mjs';
 import { ITEM_TINTS } from '../server/api.mjs';
 import {
-  parseEventTime, parseConfig, planInit, formatPlan, applyInit, parseArgs, run, loadImages,
+  parseConfig, planInit, formatPlan, applyInit, parseArgs, run, loadImages,
 } from '../scripts/init-event.mjs';
 
 /** 一份合法配置。每个用例在它上面只改一处。 */
@@ -66,51 +66,6 @@ function tempConfig(config) {
 }
 
 /* ============================================================
-   活动时间：必须是北京时间
-   ============================================================ */
-
-test('init-event：活动时间按北京时间解析，不受服务器时区影响', () => {
-  const ms = parseEventTime('2026-04-18 09:00', 'event.startsAt');
-
-  // toISOString 永远是 UTC，所以这条断言在任何时区的机器上都成立。
-  // ★ 反过来说：如果实现改成 new Date('2026-04-18 09:00')（按本机时区解释），
-  //   在 UTC 的云服务器上这里会得到 09:00Z，学生手机（+08:00）看到的是 17:00。
-  assert.equal(new Date(ms).toISOString(), '2026-04-18T01:00:00.000Z',
-    '09:00 北京时间 = 01:00 UTC，差 8 小时就是时区没处理对');
-
-  // 带 T 的写法也认
-  assert.equal(parseEventTime('2026-04-18T09:00', 'x'), ms);
-
-  // 不填就是 null（这两个字段可以为空）
-  for (const empty of [undefined, null, '']) {
-    assert.equal(parseEventTime(empty, 'x'), null);
-  }
-});
-
-test('init-event：时间格式不对要说清楚是哪个字段', () => {
-  const bad = [
-    ['2026/04/18 09:00', /startsAt/],
-    ['2026-04-18', /startsAt/],
-    ['09:00', /startsAt/],
-    ['2026-04-18 09:00:00', /startsAt/],
-    [20260418090000, /字符串/],
-  ];
-  for (const [v, re] of bad) {
-    assert.throws(() => parseEventTime(v, 'startsAt'), re,
-      `「${v}」应当被拒，且报错要指明是 event.startsAt`);
-  }
-
-  // 2 月 30 日不存在。
-  // ★ 注意 V8 对 ISO 字符串里的越界日期是**往后滚动**而不是报错，
-  //   Date.parse('2026-02-30T09:00:00+08:00') 会静悄悄变成 3 月 2 日，
-  //   所以光靠 Date.parse + isFinite 拦不住，必须回头核对。
-  assert.throws(() => parseEventTime('2026-02-30 09:00', 'startsAt'), /真实的日期/);
-  assert.throws(() => parseEventTime('2026-04-31 09:00', 'startsAt'), /真实的日期/);
-  assert.throws(() => parseEventTime('2026-13-01 09:00', 'startsAt'), /真实的日期/);
-  assert.throws(() => parseEventTime('2026-04-18 25:00', 'startsAt'), /真实的日期/);
-});
-
-/* ============================================================
    配置校验
    ============================================================ */
 
@@ -121,7 +76,8 @@ test('init-event：配置错误要逐条指出来', () => {
     [{ event: {} }, /name 必填/],
     [{ event: { name: 'x'.repeat(41) } }, /最多 40/],
     [{ event: { name: 'a', status: '乱七八糟' } }, /status 只能是/],
-    [{ event: { name: 'a', startsAt: '2026-04-18 17:00', endsAt: '2026-04-18 09:00' } }, /比 startsAt 还早/],
+    [{ event: { name: 'a', startsAt: '2026-04-18 17:00', endsAt: '2026-04-18 09:00' } },
+      /event\.endsAt 比 event\.startsAt 还早/],
     [{ event: { name: 'a' }, stalls: '不是数组' }, /stalls 必须是数组/],
     [{ event: { name: 'a' }, stalls: [{}] }, /stalls\[0\]\.name 必填/],
     [{ event: { name: 'a' }, stalls: [{ name: '一号' }, { name: '一号' }] }, /出现了两次/],

@@ -61,6 +61,11 @@ export const ROUTES = {
   // 管理端。门槛（二级管理员 / 一级管理员 / 超管）在 api.mjs 里逐个判断，
   // 这里只保证「必须先登录」。
   'POST /api/admin/item': { handler: 'adminUpdateItem', auth: 'user' },
+  // 活动与摊位。门槛（一级管理员 / 副主任）在 api.mjs 里逐个判断。
+  'GET /api/admin/events': { handler: 'adminListEvents', auth: 'user' },
+  'POST /api/admin/event': { handler: 'adminCreateEvent', auth: 'user' },
+  'POST /api/admin/event/status': { handler: 'adminSetEventStatus', auth: 'user' },
+  'POST /api/admin/stall': { handler: 'adminCreateStall', auth: 'user' },
   'POST /api/admin/item/create': { handler: 'adminCreateItem', auth: 'user' },
   // 传图：body 是 base64 的 JSON，所以上限要单独放宽
   'POST /api/admin/image': {

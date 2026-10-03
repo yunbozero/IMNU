@@ -56,6 +56,13 @@ export const getUser = () => loadUser();
  */
 export const ROLES_CAN_REDEEM = ['volunteer', 'deputy', 'admin', 'owner'];
 export const ROLES_CAN_MANAGE = ['deputy', 'admin', 'owner'];
+/**
+ * 能碰「影响全场」的东西：撤销误核销、改每账号上限、**建/结束活动**。
+ *
+ * 以前这一段是**手写**在 reservations 页面里的（`role === 'admin' || role === 'owner'`），
+ * 改服务端规则时那边不会跟着动，也没有测试盯着 —— 现在收在这里，由测试比对。
+ */
+export const ROLES_CAN_ADMINISTER = ['admin', 'owner'];
 
 /** 能进核销台（志愿者及以上） */
 export function isStaff() {
@@ -67,6 +74,12 @@ export function isStaff() {
 export function isManager() {
   const u = loadUser();
   return !!u && ROLES_CAN_MANAGE.includes(u.role);
+}
+
+/** 能撤销核销 / 改设置 / 建活动（一级管理员及以上）。比管理端再高一级。 */
+export function isSeniorManager() {
+  const u = loadUser();
+  return !!u && ROLES_CAN_ADMINISTER.includes(u.role);
 }
 
 /**
