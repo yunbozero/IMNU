@@ -196,6 +196,50 @@ test('图片：删一个不存在的文件不抛错（换图时删旧图必须�
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
+test('图片：图鉴照片走 cats/ 子目录，可读文件名也认', () => {
+  // 图鉴的照片是**跟着仓库走的静态资源**（assets/cats/，deploy.sh 同步过去），
+  // 文件名是人起的，不是服务端生成的 img_<hex>。
+  assert.equal(isImageName('cats/daju.jpg'), true);
+  assert.equal(isImageName('cats/cat_01.png'), true);
+  assert.equal(isImageName('cats/xiao-hei.webp'), true);
+
+  // 但仍然卡得很紧：扩展名白名单、不许大写、不许再往下一层
+  for (const bad of [
+    'cats/daju.gif.exe', 'cats/DAJU.jpg', 'cats/.jpg', 'cats/a/b.jpg',
+    'cats/../secret.jpg', 'cats/', 'cats', 'cats/daju.BMP',
+  ]) {
+    assert.equal(isImageName(bad), false, `不该认成合法图鉴照片名：${bad}`);
+  }
+});
+
+test('图片：★ 图鉴照片名必须是纯 ASCII（中文名会静默 404）', () => {
+  // 小程序的 <image> 会把中文名做百分号编码，而我们的静态服务**故意不做
+  // URL 解码**（那是为了从一开始就不存在路径穿越）。两边一撞：
+  // /images/cats/大橘.jpg 会请求成 /images/cats/%E5%A4%A7... 直接 404，
+  // 而界面因为「失败回落 emoji」不报任何错 —— 只看到那只猫一直没照片。
+  assert.equal(isImageName('cats/大橘.jpg'), false, '中文名必须被拒，否则是静默 404');
+  assert.equal(isImageName('cats/daju 大橘.jpg'), false);
+  assert.equal(isImageName('cats/🐱.jpg'), false);
+});
+
+test('图片：cats/ 子目录能真的存取', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'imnu-catimg-'));
+  try {
+    const name = 'cats/daju.jpg';
+    fs.mkdirSync(path.join(dir, 'cats'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'cats', 'daju.jpg'), fakeImage('jpg', 128));
+
+    assert.deepEqual(readImage(name, dir), fakeImage('jpg', 128));
+    assert.equal(imageExists(name, dir), true);
+    assert.equal(mimeOfName(name), 'image/jpeg');
+    assert.equal(imageUrlOf(name), '/images/cats/daju.jpg');
+
+    // 删得掉，而且删不掉目录外的东西
+    assert.equal(deleteImage(name, dir), true);
+    assert.equal(imageExists(name, dir), false);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
 /* ============================================================
    接口
    ============================================================ */
@@ -369,6 +413,27 @@ test('照片：静态服务拿不到目录外的文件', async () => {
       const r = await fetch(ctx.base + p);
       assert.equal(r.status, 404, `${p} 应当是 404，实际 ${r.status}`);
     }
+  } finally { await ctx.close(); }
+});
+
+test('照片：图鉴的 cats/ 能通过 HTTP 取到，中文名取不到', async () => {
+  const ctx = await startTestServer();
+  try {
+    // 模拟 deploy.sh 把 assets/cats/ 同步过来的结果
+    fs.mkdirSync(path.join(ctx.imageDir, 'cats'), { recursive: true });
+    const buf = fakeImage('jpg', 300);
+    fs.writeFileSync(path.join(ctx.imageDir, 'cats', 'daju.jpg'), buf);
+
+    const ok = await fetch(`${ctx.base}/images/cats/daju.jpg`);
+    assert.equal(ok.status, 200, '图鉴照片必须能取到，否则界面只剩 emoji');
+    assert.equal(ok.headers.get('content-type'), 'image/jpeg');
+    assert.deepEqual(Buffer.from(await ok.arrayBuffer()), buf);
+
+    // ★ 反向对照：中文名会被小程序百分号编码，而静态服务不做 URL 解码
+    // （不解释放它是为了从根上杜绝路径穿越）。所以这条请求必须 404 ——
+    // 如果哪天有人「顺手加个 decodeURIComponent」，这个测试会先红。
+    const bad = await fetch(`${ctx.base}/images/cats/大橘.jpg`);
+    assert.equal(bad.status, 404, '中文名的图鉴照片是取不到的，命名必须用 ASCII');
   } finally { await ctx.close(); }
 });
 

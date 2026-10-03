@@ -1,7 +1,15 @@
 <view class="page" wx:if="{{cat}}">
 
   <view class="hero {{cat.tint}}">
-    <text class="hero__emoji">{{cat.emoji}}</text>
+    <!-- 有照片显示照片；没有 / 加载失败就回落 emoji + 底色（和物品那边同一个套路） -->
+    <image
+      wx:if="{{photo && !photoFailed}}"
+      class="thumb-img"
+      src="{{photo}}"
+      mode="aspectFill"
+      binderror="onPhotoError"
+    />
+    <text wx:else class="hero__emoji">{{cat.emoji}}</text>
   </view>
 
   <view class="name-row">

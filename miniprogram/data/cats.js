@@ -8,9 +8,24 @@
  *    而图鉴列表页是 tabBar 页面、必须在主包。
  *    分包里的页面反过来可以 require 这里的（分包 → 主包是允许的）。
  *
- * 图片说明：小程序 <image> 组件的 src **不受服务器域名白名单限制**，
- * 所以照片可以放对象存储 + CDN，不需要备案域名。
- * 这里先用色块 + emoji 占位，等有真实照片再换。
+ * ------------------------------------------------------------------
+ * 照片怎么放
+ * ------------------------------------------------------------------
+ * 照片**不放包里**，放仓库的 `assets/cats/`，发布时 `deploy.sh` 同步到服务器的
+ * 图片目录，nginx 直接发。为什么：
+ *   · 主包有 2MB 硬上限，十几张照片就顶满了，而主包每次冷启动都要下载一遍
+ *     （仓库自己的原则就是「主包要尽量小」，照片搬进来等于自打嘴巴）；
+ *   · 放服务器上改一张图不用重新发版。
+ * 这里只写**文件名**（如 `cats/daju.jpg`），完整地址由 `utils/format.js`
+ * 的 `imageUrl()` 拼 —— 和物品照片同一个套路。
+ *
+ * ★ 文件名必须是**纯 ASCII**（小写字母/数字/下划线，见 `assets/cats/README.md`）。
+ *   小程序的 `<image>` 会把中文名做百分号编码，而服务端的静态服务**故意不做
+ *   URL 解码**（那是为了防路径穿越），于是 `cats/大橘.jpg` 会直接 404。
+ *   有测试守着这一点。
+ *
+ * 没有照片、或者照片加载失败时，界面回落到 `emoji` + `tint` 那个色块 ——
+ * 所以断网也能看图鉴。
  */
 
 export const CAT_STATUS = {
@@ -25,6 +40,9 @@ export const CATS = [
     name: '大橘',
     emoji: '🐱',
     tint: 't-orange',
+    // ★ 有照片就写文件名（相对图片目录）：'cats/daju.jpg'。
+    //   文件名必须全小写 ASCII；没有照片就 null（界面回落 emoji + 底色）。
+    image: null,
     status: 'onCampus',
     gender: '公',
     location: '图书馆前广场一带',
@@ -36,6 +54,7 @@ export const CATS = [
     name: '奶牛',
     emoji: '🐈‍⬛',
     tint: 't-blue',
+    image: null,
     status: 'onCampus',
     gender: '母',
     location: '学生活动中心门口',
@@ -47,6 +66,7 @@ export const CATS = [
     name: '三花',
     emoji: '🐈',
     tint: 't-pink',
+    image: null,
     status: 'onCampus',
     gender: '母',
     location: '三号教学楼连廊',
@@ -58,6 +78,7 @@ export const CATS = [
     name: '小黑',
     emoji: '🐈‍⬛',
     tint: 't-purple',
+    image: null,
     status: 'missing',
     gender: '公',
     location: '最后目击：体育馆西侧',
@@ -69,6 +90,7 @@ export const CATS = [
     name: '小橘白',
     emoji: '🐱',
     tint: 't-yellow',
+    image: null,
     status: 'onCampus',
     gender: '公',
     location: '一号食堂后门',

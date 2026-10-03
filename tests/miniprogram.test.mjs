@@ -773,6 +773,90 @@ test('照片：每张图都要有失败回退，列表图还要懒加载', () =>
 });
 
 /* ============================================================
+   ★ 猫猫图鉴的照片
+   ============================================================ */
+
+/** 图鉴照片的文件名规则：cats/ + 小写 ASCII + 白名单扩展名。 */
+const CAT_IMAGE_RE = /^cats\/[a-z0-9][a-z0-9_-]{0,40}\.(jpg|png|webp|gif)$/;
+
+test('图鉴：照片名必须是 cats/ 下的纯 ASCII（中文名会静默 404）', async () => {
+  // 这条是**最容易犯、又最难查**的错：把猫的照片命名成 `大橘.jpg` 传上去，
+  // 小程序会把它百分号编码，而服务端的静态服务故意不解码 → 404。
+  // 界面上因为「失败回落 emoji」连个报错都没有，看起来就跟「还没传照片」一样。
+  const { CATS } = await import('../miniprogram/data/cats.js');
+  assert.ok(Array.isArray(CATS) && CATS.length > 0, 'CATS 得是个非空数组');
+
+  const problems = [];
+  for (const cat of CATS) {
+    if (cat.image === null || cat.image === undefined) continue;
+    if (typeof cat.image !== 'string' || !CAT_IMAGE_RE.test(cat.image)) {
+      problems.push(`${cat.name}(${cat.id}): ${JSON.stringify(cat.image)}`);
+    }
+  }
+
+  assert.deepEqual(problems, [],
+    '这些图鉴照片名不合规。必须是 cats/ + 全小写 ASCII + .jpg/.png/.webp/.gif，'
+    + '不能有中文、空格、大写，也不能再往下一层目录：\n' + problems.join('\n'));
+});
+
+test('图鉴守卫自测：中文名、大写、绝对路径都得被抓到', () => {
+  assert.equal(CAT_IMAGE_RE.test('cats/daju.jpg'), true);
+  assert.equal(CAT_IMAGE_RE.test('cats/xiao-hei_2.webp'), true);
+  assert.equal(CAT_IMAGE_RE.test('cats/大橘.jpg'), false, '中文名必须被抓到');
+  assert.equal(CAT_IMAGE_RE.test('cats/DAJU.jpg'), false);
+  assert.equal(CAT_IMAGE_RE.test('cats/daju.bmp'), false);
+  assert.equal(CAT_IMAGE_RE.test('cats/a/b.jpg'), false, '不许再往下一层');
+  assert.equal(CAT_IMAGE_RE.test('/srv/bazaar/images/cats/daju.jpg'), false,
+    '写的应当是相对图片目录的路径，不是服务器绝对路径');
+  assert.equal(CAT_IMAGE_RE.test('daju.jpg'), false, '忘了 cats/ 前缀也取不到图');
+});
+
+test('图鉴：有照片时渲染 <image>，没有或加载失败回落 emoji', async () => {
+  const { CATS } = await import('../miniprogram/data/cats.js');
+  const withPhoto = CATS.filter((c) => c.image);
+  if (withPhoto.length === 0) return; // 还没配照片时这条没得测，由上面的命名测试兜着
+
+  // 列表页和详情页都得有「照片 + 回落」这一对，否则要么没照片、
+  // 要么照片挂了留一个空格子（比 emoji 还难看，而且看不出是加载失败）。
+  const sites = [
+    ['pages/cats/index.wxml', 'pages/cats/index.js'],
+    ['packageCats/pages/detail/index.wxml', 'packageCats/pages/detail/index.js'],
+  ];
+
+  for (const [wxml, js] of sites) {
+    const src = read(path.join(MP, wxml));
+    const tags = src.match(/<image[\s\S]*?\/>/g) || [];
+    assert.ok(tags.length >= 1, `${wxml} 里找不到 <image>`);
+
+    for (const tag of tags) {
+      assert.match(tag, /binderror="onPhotoError"/, `${wxml} 的照片没接失败回调`);
+      assert.match(tag, /mode="aspectFill"/, `${wxml} 的照片缺 aspectFill`);
+      assert.match(tag, /photoFailed/, `${wxml} 的 wx:if 要带上「失败过就别再显示」`);
+    }
+    assert.match(src, /wx:else/, `${wxml} 没有 emoji 回落分支`);
+    assert.match(src, /item\.emoji|cat\.emoji/, `${wxml} 的回落分支没用到 emoji`);
+    assert.match(read(path.join(MP, js)), /onPhotoError/, `${js} 没有实现 onPhotoError`);
+  }
+});
+
+test('图鉴：照片地址由 imageUrl() 拼，界面里不许出现裸域名', async () => {
+  // 和物品照片同一套路：数据里只有文件名，base 在 config.js 一处收口。
+  // 一旦有人在页面里写死 http://... ，换服务器时就会漏掉几处。
+  const { CATS } = await import('../miniprogram/data/cats.js');
+  for (const cat of CATS) {
+    if (!cat.image) continue;
+    assert.doesNotMatch(cat.image, /^https?:\/\//,
+      `${cat.name} 的 image 写成了完整 URL —— 数据里只放文件名`);
+  }
+
+  for (const rel of ['pages/cats/index.js', 'packageCats/pages/detail/index.js']) {
+    const js = read(path.join(MP, rel));
+    assert.match(js, /imageUrl\(/, `${rel} 应当用 imageUrl() 拼照片地址`);
+    assert.doesNotMatch(js, /https?:\/\//, `${rel} 里出现了写死的地址`);
+  }
+});
+
+/* ============================================================
    ★ 管理端活动与摊位
    ============================================================ */
 

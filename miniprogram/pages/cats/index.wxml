@@ -30,7 +30,18 @@
       bindtap="goDetail"
       hover-class="cat-card--hover"
     >
-      <view class="cat-card__thumb {{item.tint}}">{{item.emoji}}</view>
+      <view class="cat-card__thumb {{item.tint}}">
+        <image
+          wx:if="{{item.photo && !photoFailed[item.id]}}"
+          class="thumb-img"
+          src="{{item.photo}}"
+          mode="aspectFill"
+          lazy-load
+          data-id="{{item.id}}"
+          binderror="onPhotoError"
+        />
+        <text wx:else>{{item.emoji}}</text>
+      </view>
       <view class="cat-card__name">{{item.name}}</view>
       <view class="cat-card__loc">{{item.location}}</view>
     </view>

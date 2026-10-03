@@ -57,8 +57,27 @@ const SIGNATURES = [
 /** 服务端生成的文件名长这样。任何不符合的字符串都不会被当成路径用。 */
 const NAME_RE = /^img_[0-9a-f]{32}\.(jpg|png|webp|gif)$/;
 
-/** 是不是我们自己生成的文件名。用它可以安全地拼路径。 */
-export const isImageName = (name) => typeof name === 'string' && NAME_RE.test(name);
+/**
+ * 猫猫图鉴的照片，放在图片目录的 `cats/` 子目录下。
+ *
+ * 和物品照片不同，这批图是**跟着仓库一起走的静态资源**（`assets/cats/`，
+ * 由 `deploy.sh` 同步过来），所以文件名是人起的可读名字，而不是随机串。
+ *
+ * ★ 名字必须是**纯 ASCII**。小程序的 `<image>` 会把中文名做百分号编码，
+ *   而我们的静态服务**故意不做 URL 解码**（见 server/http.mjs 的 sendImage）——
+ *   于是 `/images/cats/大橘.jpg` 会变成 `/images/cats/%E5%A4%A7...` 直接 404。
+ *   `tests/miniprogram.test.mjs` 有一条守卫盯着 data/cats.js 里的文件名。
+ */
+const CAT_DIR = 'cats';
+const CAT_NAME_RE = /^[a-z0-9][a-z0-9_-]{0,40}\.(jpg|png|webp|gif)$/;
+
+/** 是不是我们自己生成的文件名，或者是图鉴的可读名。用它可以安全地拼路径。 */
+export function isImageName(name) {
+  if (typeof name !== 'string') return false;
+  if (NAME_RE.test(name)) return true;
+  if (!name.startsWith(`${CAT_DIR}/`)) return false;
+  return CAT_NAME_RE.test(name.slice(CAT_DIR.length + 1));
+}
 
 /** 看魔术字节认类型。认不出来返回 null。 */
 export function sniffImage(buf) {
