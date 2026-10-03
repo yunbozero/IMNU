@@ -871,6 +871,64 @@ test('图鉴：照片地址只在一处拼，页面里不许出现裸域名', as
   }
 });
 
+test('图鉴：CATS 的 id 必须被服务端认（否则照片永远挂不上去）', async () => {
+  // ★ 服务端不 import CATS（server/ 不该依赖 miniprogram/），两边各存一份规则，
+  //   靠这条测试盯着别漂走。所以这里**不重抄正则**，直接 import 服务端那个常量 ——
+  //   重抄一遍的话，服务端改了这边不会跟着改，测试反而变成假的保证。
+  const { CAT_ID_RE } = await import('../server/api.mjs');
+  const { CATS } = await import('../miniprogram/data/cats.js');
+
+  const bad = CATS.filter((c) => !CAT_ID_RE.test(String(c.id)));
+  assert.deepEqual(bad.map((c) => `${c.name}: ${JSON.stringify(c.id)}`), [],
+    '这些猫的 id 服务端不认 —— 管理员给它们换照片会被 400 打回来。'
+    + 'id 要满足 ' + String(CAT_ID_RE));
+
+  // id 也不能重复：覆盖表以 cat_id 为主键，重复的话两只猫会共用一张照片
+  const ids = CATS.map((c) => c.id);
+  assert.equal(new Set(ids).size, ids.length, `id 有重复：${ids.join(', ')}`);
+
+  // 自检：这个正则不是「什么都过」
+  assert.equal(CAT_ID_RE.test('C1'), false);
+  assert.equal(CAT_ID_RE.test('大橘'), false);
+  assert.equal(CAT_ID_RE.test(''), false);
+});
+
+test('图鉴：★ cats.js 里写的照片名必须和 assets/cats/ 里的文件名逐字对上', async () => {
+  // 这条防的是**手动放照片时最容易犯、又完全查不出来**的错：
+  // 文件名和 cats.js 里那串差一个字母、或者大小写不同 —— 结果是服务器 404、
+  // 界面回落 emoji，一句报错都没有，看起来就像「还没配照片」。
+  //
+  // ★ 必须拿目录里的**真实文件名**来比，不能用 fs.existsSync：
+  //   开发机是 Windows（大小写不敏感），`Daju.jpg` 写成 `cats/daju.jpg`
+  //   在本地一路绿灯，上了 Linux 服务器才 404 —— 那正是最坏的情况。
+  const { CATS } = await import('../miniprogram/data/cats.js');
+
+  const dir = path.join(ROOT, 'assets', 'cats');
+  assert.ok(exists(dir), 'assets/cats/ 目录不见了');
+  const onDisk = fs.readdirSync(dir).filter((f) => f !== 'README.md' && !f.startsWith('.'));
+
+  // ① cats.js 提到的每个文件都要真的在
+  const missing = [];
+  for (const cat of CATS) {
+    if (!cat.image) continue;
+    const name = String(cat.image).replace(/^cats\//, '');
+    if (!onDisk.includes(name)) {
+      missing.push(`${cat.name} 写的是 cats/${name}，但目录里没有这个名字`
+        + `（目录里有：${onDisk.join(', ') || '一个都没有'}）`);
+    }
+  }
+  assert.deepEqual(missing, [], '这些猫的照片名和实际文件名对不上：\n' + missing.join('\n'));
+
+  // ② 目录里也不该有没人引用的照片 —— 那通常是「放了图但忘了写进 cats.js」，
+  //    或者是上面 ① 那个错的镜像（照片叫 a.jpg，cats.js 里写的却是 b.jpg）
+  const referenced = new Set(CATS.filter((c) => c.image)
+    .map((c) => String(c.image).replace(/^cats\//, '')));
+  const orphans = onDisk.filter((f) => !referenced.has(f));
+  assert.deepEqual(orphans, [],
+    'assets/cats/ 里这些照片没有任何一只猫在用（放了图但忘了写进 cats.js？）：\n'
+    + orphans.join('\n'));
+});
+
 test('图鉴：管理端只能改照片，改动要过覆盖表（不是改 cats.js）', () => {
   // 「在小程序里换照片」这件事只能落在覆盖表上。如果有人图省事去
   // 改 cats.js 里的 image 字段，那要重新发版 —— 而这个功能的全部意义

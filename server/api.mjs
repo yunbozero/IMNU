@@ -83,6 +83,17 @@ const TOO_BIG_MSG = `图片不能超过 ${Math.round(MAX_IMAGE_BYTES / 1024)}KB�
  */
 export const ITEM_TINTS = ['t-pink', 't-green', 't-blue', 't-yellow', 't-purple', 't-orange'];
 
+/**
+ * 图鉴里一只猫的 id 长什么样。
+ *
+ * ★ 和 miniprogram/data/cats.js 里的 id 必须对得上，但**不 import 那个文件** ——
+ *   server/ 一旦依赖 miniprogram/ 就不能单独跑了（现在它可以是自足的）。
+ *   本仓库对这类「两边都需要的知识」的做法是各存一份 + 一条漂移测试，
+ *   所以这里导出，让 tests/miniprogram.test.mjs 拿 CATS 的真实 id 来过它 ——
+ *   两份规则不会各自漂走。
+ */
+export const CAT_ID_RE = /^[a-z0-9][a-z0-9_-]{0,31}$/;
+
 const ok = (body = {}) => ({ status: 200, body: { ok: true, ...body } });
 const fail = (error, message, status = 200) => ({ status, body: { ok: false, error, message } });
 
@@ -202,16 +213,8 @@ export function createApi({
   };
 
   /**
-   * 图鉴里一只猫的 id 长什么样。
-   *
-   * ★ 和 miniprogram/data/cats.js 里的 id 必须对得上，但**不 import 那个文件** ——
-   *   server/ 一旦依赖 miniprogram/ 就不能单独跑了（现在它可以是自足的）。
-   *   本仓库对这类「两边都需要的知识」的做法是各存一份 + 一条漂移测试，
-   *   tests/miniprogram.test.mjs 里那条会拿 CATS 的真实 id 来过这个正则。
+   * 覆盖用的照片只能是**上传接口产出的**文件名，不能是仓库里那张 cats/xxx.jpg。
    */
-  const CAT_ID_RE = /^[a-z0-9][a-z0-9_-]{0,31}$/;
-
-  /** 覆盖用的照片只能是**上传接口产出的**文件名，不能是仓库里那张 cats/xxx.jpg。 */
   const isUploadedImage = (name) => typeof name === 'string' && name.startsWith('img_');
 
   /**
