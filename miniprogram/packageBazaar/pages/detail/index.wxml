@@ -4,7 +4,13 @@
 
   <block wx:if="{{item}}">
     <view class="hero {{item.tint}}">
-      <image wx:if="{{item.imageUrl}}" class="thumb-img" src="{{item.imageUrl}}" mode="aspectFill" />
+      <image
+        wx:if="{{item.imageUrl && !imageFailed}}"
+        class="thumb-img"
+        src="{{item.imageUrl}}"
+        mode="aspectFill"
+        binderror="onImageError"
+      />
       <text wx:else class="hero__emoji">{{item.emoji || '🎁'}}</text>
     </view>
 
@@ -62,7 +68,13 @@
 
     <view class="sheet__summary">
       <view class="sheet__thumb {{item.tint}}">
-        <image wx:if="{{item.imageUrl}}" class="thumb-img" src="{{item.imageUrl}}" mode="aspectFill" />
+        <image
+          wx:if="{{item.imageUrl && !imageFailed}}"
+          class="thumb-img"
+          src="{{item.imageUrl}}"
+          mode="aspectFill"
+          binderror="onImageError"
+        />
         <text wx:else>{{item.emoji || '🎁'}}</text>
       </view>
       <view class="grow">

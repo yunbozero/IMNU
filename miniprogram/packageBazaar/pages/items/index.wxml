@@ -44,7 +44,19 @@
       hover-class="item--hover"
     >
       <view class="item__thumb {{item.tint}}">
-        <image wx:if="{{item.imageUrl}}" class="thumb-img" src="{{item.imageUrl}}" mode="aspectFill" />
+        <!-- ★ lazy-load：不写的话首屏会把**列表里所有照片**一起拉，
+             几十张图同时下载，在真机调试那种绕经电脑的通道上会直接卡住。
+             ★ binderror：加载失败要回落到 emoji —— 不回落的后果是那一格永远空着，
+             比 emoji 还难看，而且完全看不出是加载失败。 -->
+        <image
+          wx:if="{{item.imageUrl && !imageFailed[item.id]}}"
+          class="thumb-img"
+          src="{{item.imageUrl}}"
+          mode="aspectFill"
+          lazy-load
+          data-id="{{item.id}}"
+          binderror="onImageError"
+        />
         <text wx:else>{{item.emoji || '🎁'}}</text>
         <view wx:if="{{item.remainingQuota <= 0}}" class="item__soldout">已约满</view>
       </view>

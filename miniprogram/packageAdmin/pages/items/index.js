@@ -38,6 +38,7 @@ Page({
     error: '',
     busyId: '',
     list: [],
+    imageFailed: {},
   },
 
   onShow() {
@@ -73,6 +74,13 @@ Page({
   bumpQuota(e) {
     const { id, delta } = e.currentTarget.dataset;
     return this.patch(id, { quotaDelta: Number(delta) });
+  },
+
+  /** 照片加载失败 → 这一格回落到 emoji */
+  onImageError(e) {
+    const id = e.currentTarget.dataset.id;
+    if (!id || this.data.imageFailed[id]) return;
+    this.setData({ [`imageFailed.${id}`]: true });
   },
 
   /** 去新建物品页。建完它自己会退回来，本页 onShow 会重新拉一次。 */

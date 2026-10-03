@@ -16,7 +16,15 @@
   <view wx:for="{{list}}" wx:key="id" class="it {{item.offShelf ? 'it--off' : ''}}">
     <view class="it__head">
       <view class="it__thumb {{item.tint}}">
-        <image wx:if="{{item.imageUrl}}" class="thumb-img" src="{{item.imageUrl}}" mode="aspectFill" />
+        <image
+          wx:if="{{item.imageUrl && !imageFailed[item.id]}}"
+          class="thumb-img"
+          src="{{item.imageUrl}}"
+          mode="aspectFill"
+          lazy-load
+          data-id="{{item.id}}"
+          binderror="onImageError"
+        />
         <text wx:else>{{item.emoji || '🎁'}}</text>
       </view>
       <view class="grow">

@@ -597,6 +597,44 @@ test('文档：不能把「配 downloadFile 合法域名」说成看图片的前
     + problems.join('\n'));
 });
 
+test('照片：每张图都要有失败回退，列表图还要懒加载', () => {
+  // 两条都是真机上才暴露的问题：
+  //   · 没有 binderror → 加载失败时那一格**永远空着**，比 emoji 还难看，
+  //     而且完全看不出是加载失败；
+  //   · 没有 lazy-load → 首屏把列表里**所有**照片一起拉。几十张图同时下载，
+  //     在真机调试那种绕经电脑的通道上会直接把页面拖住。
+  const listSites = [
+    'packageBazaar/pages/items/index.wxml',
+    'packageBazaar/pages/my-reservations/index.wxml',
+    'packageAdmin/pages/items/index.wxml',
+  ];
+  const allSites = [...listSites, 'packageBazaar/pages/detail/index.wxml'];
+
+  for (const f of allSites) {
+    const src = read(path.join(MP, f));
+    const tags = src.match(/<image[\s\S]*?\/>/g) || [];
+    assert.ok(tags.length >= 1, `${f} 里找不到 <image>，正则可能失效了`);
+
+    for (const tag of tags) {
+      assert.match(tag, /binderror="onImageError"/,
+        `${f} 有一张图没接 binderror —— 加载失败时那一格会永远空着`);
+      assert.match(tag, /mode="aspectFill"/, `${f} 有一张图缺 aspectFill`);
+      assert.match(tag, /wx:if="\{\{item\.imageUrl[^"]*\}\}"/,
+        `${f} 的 wx:if 要带上「失败过就别再显示」的判断`);
+    }
+
+    const js = read(path.join(MP, f.replace('.wxml', '.js')));
+    assert.match(js, /onImageError/, `${f} 对应的页面没有实现 onImageError`);
+  }
+
+  for (const f of listSites) {
+    for (const tag of read(path.join(MP, f)).match(/<image[\s\S]*?\/>/g)) {
+      assert.match(tag, /lazy-load/,
+        `${f} 的列表图缺 lazy-load —— 首屏会同时下载几十张照片`);
+    }
+  }
+});
+
 /* ============================================================
    管理端新建物品
    ============================================================ */

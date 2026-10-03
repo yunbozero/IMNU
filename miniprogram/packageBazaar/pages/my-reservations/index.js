@@ -17,6 +17,7 @@ Page({
     all: [],
     list: [],
     pendingCount: 0,
+    imageFailed: {},
   },
 
   onShow() {
@@ -67,6 +68,13 @@ Page({
 
   onTabTap(e) {
     this.setData({ active: e.currentTarget.dataset.key }, () => this.applyTab());
+  },
+
+  /** 照片加载失败 → 这一格回落到 emoji（按 id 记，列表会切换分组重排） */
+  onImageError(e) {
+    const id = e.currentTarget.dataset.id;
+    if (!id || this.data.imageFailed[id]) return;
+    this.setData({ [`imageFailed.${id}`]: true });
   },
 
   goPickup(e) {

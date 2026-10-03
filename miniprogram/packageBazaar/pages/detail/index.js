@@ -23,6 +23,9 @@ Page({
 
     // 已经预定过这件物品时，底部按钮变成「查看取货码」
     myReservation: null,
+
+    // 照片加载失败过 —— 回落到 emoji（和列表页同一个套路）
+    imageFailed: false,
   },
 
   onLoad(query) {
@@ -109,6 +112,11 @@ Page({
   closeSheet() {
     if (this.data.submitting) return;
     this.setData({ showSheet: false });
+  },
+
+  /** 照片加载失败 → 大图和弹层里的小图都回落到 emoji */
+  onImageError() {
+    if (!this.data.imageFailed) this.setData({ imageFailed: true });
   },
 
   noop() { /* 阻止弹层内部点击冒泡到遮罩 */ },

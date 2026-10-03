@@ -11,6 +11,8 @@ Page({
     stalls: [],
     activeStall: 'all',
     keyword: '',
+    // 照片加载失败过的物品 id。键是 id，值恒为 true —— 模板里这样写就能回落 emoji。
+    imageFailed: {},
   },
 
   onLoad() {
@@ -59,6 +61,18 @@ Page({
 
   onSearch(e) {
     this.setData({ keyword: String(e.detail.value || '').trim() }, () => this.applyFilter());
+  },
+
+  /**
+   * 照片加载失败 → 这一格回落到 emoji。
+   *
+   * 按 id 记，不按下标：列表会被筛选重排，下标对不上就会标记错行。
+   * 用 `imageFailed.<id>` 这种路径写法，只更新那一条，不重建整个列表。
+   */
+  onImageError(e) {
+    const id = e.currentTarget.dataset.id;
+    if (!id || this.data.imageFailed[id]) return;
+    this.setData({ [`imageFailed.${id}`]: true });
   },
 
   goDetail(e) {
