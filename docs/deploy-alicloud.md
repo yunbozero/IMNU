@@ -289,26 +289,39 @@ sudo git remote set-url origin <镜像地址>
 
 之后服务器从镜像拉，你往两个远端推（或给 GitHub 配 webhook 自动同步）。
 
-**③ 应急（今天就要发）** → 不拉代码，从本机把当前提交打包送上去：
+**③ ★ 最省事、而且永远可用的一条：别让服务器去拉**
+
+代码就在你本机。直接把它送过去，服务器完全不碰网络：
 
 ```bash
-# 本地
-git archive --format=tar.gz -o imnu.tar.gz HEAD
-scp imnu.tar.gz root@<服务器IP>:/tmp/
-
-# 服务器
-cd /srv/bazaar/app
-sudo tar xzf /tmp/imnu.tar.gz
-sudo chown -R bazaar:bazaar /srv/bazaar/app
-# ★ 这条路**跳过了测试闸门和首页安装**，两件事必须手工补：
-node tests/all.mjs                                            # 测试自己先跑过
-sudo install -m 644 deploy/www/index.html /srv/bazaar/www/index.html
-sudo systemctl restart bazaar
-curl -s http://127.0.0.1:3000/api/health
+# 在你本机（Git Bash）跑
+SERVER=root@<服务器IP> bash deploy/push-from-local.sh
 ```
 
-> `deploy.sh` 现在给 `git fetch` 加了超时并且禁止交互，所以**不会再卡两分钟**：
-> 最多二十来秒就会带着上面这几条提示失败，并明确说明「线上没有被动过」。
+它做四件事：本地先跑一遍测试 → `git bundle` 打包当前提交 → scp 上去 →
+在服务器上执行
+
+```bash
+git fetch /tmp/imnu-deploy.bundle 'refs/heads/main:refs/remotes/local-deploy/main' --force
+SKIP_FETCH=1 TARGET_REF=local-deploy/main bash deploy/deploy.sh
+```
+
+**这条路的两个设计要点：**
+
+- **仍然会调用服务器上的 `deploy.sh`**，所以测试闸门、首页安装、重启、健康检查
+  一个都不少 —— 比手工解压安全得多（那样会跳过测试）。
+- **用 `git bundle` 而不是 tar 解压**。tar 覆盖法有一个很难发现的毛病：
+  它对「两个版本之间被删掉的文件」无能为力 —— 旧文件会留在线上，
+  而且**不报任何错**（线上跑着已经删掉的代码）。
+  bundle 是 git 官方的离线传输格式，服务器上 `fetch` 完就是正常的 git 仓库状态，
+  接着 `deploy.sh` 里那句 `reset --hard` 会老老实实把删掉的文件也删掉。
+  （这条已经实测验证过：模拟服务器停在旧版本并多一个残留文件，
+  reset 之后残留文件消失、HEAD 正好对上。）
+
+> **为什么 `SKIP_FETCH` 只跳过「网络拉取」而不是跳过整个第一步**：
+> reset 必须照做。它是「让工作区和目标版本完全一致」的那一步，
+> 少了它，线上就会残留旧文件。
+
 
 ### 之后每次发布
 
@@ -319,6 +332,13 @@ sudo bash /srv/bazaar/app/deploy/deploy.sh
 ```
 
 脚本会 `git fetch` + `reset`、跑一遍测试、更新首页、再重启服务。**测试不过就不重启** —— 避免把线上搞挂。
+
+> **服务器连不上 GitHub 时**（国内 ECS 家常便饭，见上一节）：别在服务器上跑这条，
+> 改从本机跑
+> ```bash
+> SERVER=root@<服务器IP> bash deploy/push-from-local.sh
+> ```
+> 它把代码直接送过去，走的还是同一套发布流程（测试闸门照样跑）。
 
 > ⚠️ 改首页文案（比如网站名称、备案口径）时注意：**nginx 不读仓库**，它读的是
 > `/srv/bazaar/www/index.html` 这个副本。所以只 `git pull` 是不够的，必须重新装一次 ——

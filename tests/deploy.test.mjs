@@ -282,11 +282,39 @@ test('部署：bootstrap.sh 会生成随机密钥并收紧权限', () => {
 
 test('部署：单元文件不带 BOM、不带 CRLF', () => {
   // CRLF 会让 Linux 上的 systemd / bash 直接报莫名其妙的错
-  for (const f of ['bazaar.service', 'bootstrap.sh', 'deploy.sh', 'nginx.conf']) {
+  for (const f of ['bazaar.service', 'bootstrap.sh', 'deploy.sh', 'push-from-local.sh', 'nginx.conf']) {
     const raw = fs.readFileSync(path.join(DEPLOY, f));
     assert.notEqual(raw[0], 0xef, `${f} 带 BOM`);
     assert.equal(raw.includes(Buffer.from('\r\n')), false, `${f} 里是 CRLF 换行，Linux 上会出错`);
   }
+});
+
+test('部署：★ 不依赖服务器连 github 的发布路径（bundle + SKIP_FETCH）', () => {
+  // 服务器连不上 github 时整条发布链路断掉，而代码明明就在本机。
+  // 这条路径让发布不再依赖服务器的出网能力。
+  const d = DEPLOY_SH();
+  const push = read(path.join(DEPLOY, 'push-from-local.sh'));
+
+  assert.match(d, /SKIP_FETCH/, 'deploy.sh 要支持 SKIP_FETCH');
+  assert.match(d, /TARGET_REF/, 'deploy.sh 要支持从指定的 ref 发布');
+
+  // ★ 关键：跳过网络，但**不能跳过 reset** ——
+  //   reset 才负责把「两个版本之间被删掉的文件」删掉。
+  //   只解压覆盖的话旧文件会留在线上，而且完全不报错。
+  assert.ok(cmdAt(d, 'git reset --hard "\\$TARGET_REF"') !== -1,
+    'reset 必须用 $TARGET_REF（SKIP_FETCH 时也要执行）—— 否则删掉的文件会留在线上');
+  assert.ok(!/^[ \t]*git reset --hard "origin\/\$BRANCH"/m.test(d),
+    'reset 不能写死 origin/$BRANCH，否则 SKIP_FETCH 会把送上去的代码又回退掉');
+
+  // 本机脚本：用 git bundle（不是 tar），并且最终调用服务器上的 deploy.sh
+  assert.match(push, /git bundle create/, '要用 git bundle —— tar 覆盖法删不掉已删除的文件');
+  assert.match(push, /SKIP_FETCH=1/, '要告诉服务器别再拉网络');
+  assert.match(push, /deploy\/deploy\.sh/, '★ 最终要调用服务器上的 deploy.sh，测试闸门不能绕过');
+  assert.match(push, /node tests\/all\.mjs/, '本地也先跑一遍测试');
+
+  assert.match(push, /SERVER="\$\{SERVER:-\}"/, 'SERVER 没给要能检测出来');
+  assert.match(push, /必填/, '要打印用法');
+  assert.match(push, /trap\s+cleanup\s+EXIT/, 'bundle 临时文件要清理');
 });
 
 /* ============================================================
@@ -848,9 +876,12 @@ test('部署：手册写明了「服务器连不上 github」的症状和三条�
     '要把真实报错写进手册，搜得到');
   assert.match(doc, /ssh\.github\.com/, '要给出 SSH over 443 的测法和换法');
   assert.match(doc, /Codeup|Gitee/, '要有长期方案（国内镜像）');
-  assert.match(doc, /git archive/, '要有今天就能用的应急办法');
-  // 应急办法跳过测试闸门 —— 这个必须写明，否则等于教人绕过质量门
-  assert.match(doc, /跳过了测试闸门/, '应急办法的代价要说清楚');
+  assert.match(doc, /push-from-local\.sh/,
+    '要给出「别让服务器去拉」这条最省事、永远可用的路');
+  // 手工 tar 解压那条路已经被 push-from-local 取代：它有删不掉旧文件的毛病，
+  // 而且跳过测试闸门。文档里不该再教它。
+  assert.ok(!/git archive --format=tar\.gz/.test(doc),
+    '不要再教 tar 解压那条路 —— 它删不掉已删除的文件，还跳过测试闸门');
   // 「之前没问题」这种情况的答案：代理掉了，而且 sudo 会吃掉代理变量
   assert.match(doc, /sudo.*默认会清掉环境变量/,
     '要点破「我明明挂着代理，git 还是连不上」的原因');

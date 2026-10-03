@@ -40,18 +40,19 @@ fi
 cd "$APP_DIR"
 
 # ---------- 1. 取代码 ----------
-log "拉取 origin/$BRANCH"
-
-# ★ 这一步必须**绝不允许无限等待**。
-#   服务器（国内 ECS 尤其）连 github.com 又慢又不稳，而 git 默认会：
-#     · 弹出用户名 / 密码提示 —— 脚本里没人能回答，于是永远停住；
-#     · 首次连 SSH 时问「是否信任这台主机的指纹」—— 同样是无限等待；
-#     · 传输中途卡死时一直等下去（HTTPS / SSH 都没有默认超时）。
-#   三种现象都是「发布卡住了，什么都不说」，而且分不清是网络、认证还是真挂了。
-#   下面这些设置把它变成：**最多等一小会儿，然后带着原因失败**。
 #
-#   这跟客户端那个 wx.login 超时是同一个道理 ——
-#   一个没有上限的等待，等于一个没有信息的失败。
+# 两条路：
+#   · 默认：从 origin 拉（需要服务器能连上 github）
+#   · SKIP_FETCH=1：**完全不碰网络**，代码已经用别的方式取到本地了
+#     配合 TARGET_REF 指定从哪个 ref 发布。给 deploy/push-from-local.sh 用 ——
+#     服务器连不上 github 时的可靠发布路径，见手册 §5「服务器连不上 github.com」。
+#
+# ★ SKIP_FETCH 只跳过**网络拉取**，后面的 `git reset --hard` 照做。
+#   这很重要：reset 才能把「两个版本之间被删掉的文件」也删掉。
+#   光把新文件解压覆盖上去的话，旧文件会留在线上，而且没有任何提示。
+SKIP_FETCH="${SKIP_FETCH:-0}"
+TARGET_REF="${TARGET_REF:-origin/$BRANCH}"
+
 export GIT_TERMINAL_PROMPT=0
 
 # 如果 bootstrap 给服务账号生成过 deploy key，root 跑 git 时也要用它。
@@ -68,24 +69,40 @@ export GIT_SSH_COMMAND="ssh $SSH_OPTS"
 
 PREV="$(git rev-parse --short HEAD)"
 
-# http.lowSpeedLimit/Time 只管 HTTPS 传输；SSH 那边靠上面的 ServerAlive*
-if ! git -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=20 fetch --all --prune; then
-  warn "取不到代码。按可能性排："
-  warn ""
-  warn "  1) ★ 代理掉了？（如果你之前一直能拉，多半就是这个）"
-  warn "     典型报错：Failed to connect to github.com port 443 after 133919 ms"
-  warn "     ——等两分钟才失败 = TCP 都建不起来，不是认证问题，也不是仓库权限。"
-  warn "     先看 root 到底有没有代理（deploy.sh 是以 root 跑 git 的）："
-  warn "       sudo env | grep -i proxy"
-  warn "       sudo git config --global --get http.proxy"
-  warn "     ★ 最容易踩的坑：**sudo 默认会清掉环境变量**，所以你在自己 shell 里"
-  warn "       export 的 https_proxy 根本传不进 deploy.sh。两条干净的做法："
-  warn "         · sudo -E bash deploy/deploy.sh          （-E 保留环境变量）"
-  warn "         · sudo git config --global http.proxy http://127.0.0.1:<端口>"
-  warn "           （配在 git 里，与 shell 无关，换了终端也还在）"
-  warn "     代理起来之后先单独验一次再发布："
-  warn "       sudo git -C $APP_DIR ls-remote origin main"
-  warn ""
+if [ "$SKIP_FETCH" = "1" ]; then
+  log "跳过网络拉取（SKIP_FETCH=1），从 $TARGET_REF 发布"
+else
+  log "拉取 origin/$BRANCH"
+
+  # ★ 这一步必须**绝不允许无限等待**。
+  #   服务器（国内 ECS 尤其）连 github.com 又慢又不稳，而 git 默认会：
+  #     · 弹出用户名 / 密码提示 —— 脚本里没人能回答，于是永远停住；
+  #     · 首次连 SSH 时问「是否信任这台主机的指纹」—— 同样是无限等待；
+  #     · 传输中途卡死时一直等下去（HTTPS / SSH 都没有默认超时）。
+  #   三种现象都是「发布卡住了，什么都不说」，而且分不清是网络、认证还是真挂了。
+  #   下面这些设置把它变成：**最多等一小会儿，然后带着原因失败**。
+  #
+  #   这跟客户端那个 wx.login 超时是同一个道理 ——
+  #   一个没有上限的等待，等于一个没有信息的失败。
+  #
+  # http.lowSpeedLimit/Time 只管 HTTPS 传输；SSH 那边靠上面的 ServerAlive*
+  if ! git -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=20 fetch --all --prune; then
+    warn "取不到代码。按可能性排："
+    warn ""
+    warn "  1) ★ 代理掉了？（如果你之前一直能拉，多半就是这个）"
+    warn "     典型报错：Failed to connect to github.com port 443 after 133919 ms"
+    warn "     ——等两分钟才失败 = TCP 都建不起来，不是认证问题，也不是仓库权限。"
+    warn "     先看 root 到底有没有代理（deploy.sh 是以 root 跑 git 的）："
+    warn "       sudo env | grep -i proxy"
+    warn "       sudo git config --global --get http.proxy"
+    warn "     ★ 最容易踩的坑：**sudo 默认会清掉环境变量**，所以你在自己 shell 里"
+    warn "       export 的 https_proxy 根本传不进 deploy.sh。两条干净的做法："
+    warn "         · sudo -E bash deploy/deploy.sh          （-E 保留环境变量）"
+    warn "         · sudo git config --global http.proxy http://127.0.0.1:<端口>"
+    warn "           （配在 git 里，与 shell 无关，换了终端也还在）"
+    warn "     代理起来之后先单独验一次再发布："
+    warn "       sudo git -C $APP_DIR ls-remote origin main"
+    warn ""
   warn "  2) 服务器直连确实不通（国内 ECS 很常见，没代理时就是这样）："
   warn "       curl -sS -m 8 -o /dev/null -w 'github -> %{http_code}\\n' https://github.com"
   warn ""
@@ -94,13 +111,18 @@ if ! git -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=20 fetch --all --prune;
   warn "       git remote set-url origin ssh://git@ssh.github.com:443/<你>/IMNU.git"
   warn "     需要只读 deploy key（手册 §5 ②），本脚本会自动用 /srv/bazaar/.ssh 下那把。"
   warn ""
-  warn "  4) 都不通 → 换国内镜像长期方案（阿里云 Codeup / Gitee），服务器从镜像拉。"
-  warn "  5) 今天就要发 → 从本机打包 scp 上来（跳过测试闸门，本地测试要先过）。"
-  warn "     完整步骤见 docs/deploy-alicloud.md「服务器连不上 github.com」一节。"
-  die "取不到代码，线上还是 $PREV（服务没有被动过）"
+    warn "  4) 都不通 → 换国内镜像长期方案（阿里云 Codeup / Gitee），服务器从镜像拉。"
+    warn "  5) ★ 最省事的一条：**别让服务器去拉**。在你本机跑："
+    warn "       SERVER=root@<服务器IP> bash deploy/push-from-local.sh"
+    warn "     它把当前提交打成 git bundle 送上来，再就地发布（不碰网络、"
+    warn "     照样跑测试闸门）。详见手册 §5「服务器连不上 github.com」。"
+    die "取不到代码，线上还是 $PREV（服务没有被动过）"
+  fi
 fi
 
-git reset --hard "origin/$BRANCH"
+# ★ SKIP_FETCH 时也要走 reset：它才能把「两个版本之间被删掉的文件」删掉。
+#   只解压覆盖的话旧文件会留在线上，而且完全不报错。
+git reset --hard "$TARGET_REF"
 NEXT="$(git rev-parse --short HEAD)"
 
 if [ "$PREV" = "$NEXT" ]; then
