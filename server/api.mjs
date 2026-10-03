@@ -17,6 +17,10 @@
  */
 import { generateCode, SETTING_MAX_PER_USER, pickMaxPerUser } from './repository.mjs';
 import {
+  saveImage, deleteImage, imageExists, imageUrlOf,
+  MAX_IMAGE_BYTES, MAX_IMAGE_BASE64, PROD_IMAGE_DIR,
+} from './images.mjs';
+import {
   ROLE_LABEL, isRole, canManage, canRedeem,
   checkRoleChange, checkOwnerTransfer,
 } from './roles.mjs';
@@ -50,6 +54,9 @@ export const ITEM_QUOTA_MAX = 9999;
  * 拿 length 当上限的话一个 emoji 就把两个字的位置占满了。
  */
 export const ITEM_EMOJI_MAX = 2;
+
+/** 图片太大时的提示。抽出来是因为它出现在两个地方，措辞必须一致。 */
+const TOO_BIG_MSG = `图片不能超过 ${Math.round(MAX_IMAGE_BYTES / 1024)}KB，请压缩后再传`;
 
 /**
  * 物品图标可用的底色。
@@ -92,6 +99,7 @@ export function createApi({
   startedAt = Date.now(), now = Date.now,
   makeCode = generateCode,
   maxItemsPerUser = 0,          // 每个账号在本次活动内最多预定几件；0 或负数 = 不限
+  imageDir = PROD_IMAGE_DIR,    // 物品照片存在哪
 }) {
   if (!repo) throw new Error('createApi 需要 repo');
   if (!signToken) throw new Error('createApi 需要 signToken');
@@ -142,6 +150,21 @@ export function createApi({
     const s = v.trim();
     if ([...s].length > max) return { ok: false };
     return { ok: true, value: s || null };
+  };
+
+  /**
+   * 物品照片。三态：不传（undefined）= 不动；null / '' = 清掉；文件名 = 换成它。
+   *
+   * 传的必须是**上传接口返回的那个文件名**，不是路径也不是 URL ——
+   * 文件名由服务端生成（`img_<32位十六进制>.<扩展名>`），所以拼路径不可能跑出目录。
+   * 而且**只有文件真的在磁盘上才收**：库里存了名字但文件不在的话，
+   * 界面会显示一个破图标，还不会回落到 emoji（判断「有没有图」看的就是这个名字）。
+   */
+  const asStoredImage = (v) => {
+    if (v === undefined) return { ok: true, value: undefined };
+    if (v === null || v === '') return { ok: true, value: null };
+    if (!imageExists(v, imageDir)) return { ok: false };
+    return { ok: true, value: v };
   };
 
   /**
@@ -275,6 +298,7 @@ export function createApi({
           itemName: it ? it.name : null,
           emoji: it ? it.emoji : null,
           tint: it ? it.tint : null,
+          image: it ? it.image : null,
           stallName: stall ? stall.name : null,
           stallLoc: stall ? stall.loc : null,
         };
@@ -462,15 +486,24 @@ export function createApi({
           return fail('bad_request', 'quotaDelta 必须是整数', 400);
         }
       }
-      if (status === null && quotaDelta === 0) {
+      // 换图 / 清空图片。三态由 asStoredImage 负责区分（见它的注释）。
+      const image = asStoredImage(body?.image);
+      if (!image.ok) return fail('bad_request', '图片不存在，请重新上传', 400);
+
+      if (status === null && quotaDelta === 0 && image.value === undefined) {
         return fail('bad_request', '没有要改的内容', 400);
       }
 
       const before = repo.getItem(itemId);
       if (!before) return fail('not_found', '物品不存在', 404);
 
-      const r = repo.updateItem({ itemId, status, quotaDelta });
+      const r = repo.updateItem({ itemId, status, quotaDelta, image: image.value });
       if (!r.ok) return fail(r.reason, r.message || '改不了', 200);
+
+      // 换掉或清掉之后，旧文件就成了没人引用的垃圾。
+      // ★ 只在**确实变了**的时候删 —— 而且放在数据改完之后：
+      //   万一删文件失败，也不会把「数据库已经改好」这件事回滚掉。
+      if (before.image && before.image !== r.item.image) deleteImage(before.image, imageDir);
 
       repo.writeAudit({
         actorId: user.id, action: 'item.update',
@@ -478,12 +511,66 @@ export function createApi({
         detail: {
           status: status === null ? undefined : status,
           quotaDelta,
-          before: { status: before.status, total: before.totalQuota, remaining: before.remainingQuota },
-          after: { status: r.item.status, total: r.item.totalQuota, remaining: r.item.remainingQuota },
+          image: image.value === undefined ? undefined : r.item.image,
+          before: {
+            status: before.status, total: before.totalQuota,
+            remaining: before.remainingQuota, image: before.image,
+          },
+          after: {
+            status: r.item.status, total: r.item.totalQuota,
+            remaining: r.item.remainingQuota, image: r.item.image,
+          },
         },
       });
 
       return ok({ item: r.item });
+    },
+
+    /**
+     * 上传一张物品照片。门槛和建/改物品一致（deputy 及以上）。
+     *
+     * ★ 为什么走 base64 的 JSON，而不是 multipart：
+     *   multipart 要在零依赖的前提下自己解析边界字符串、CRLF、分块和文件名编码 ——
+     *   那是整条上传链路里唯一真正麻烦的部分。走 base64 就只剩
+     *   `Buffer.from(s, 'base64')` 一行。代价是体积大 1/3，而图片在客户端已经
+     *   压到 100–300KB，这点代价可以忽略。
+     *
+     * ★ 类型只看**魔术字节**，不看客户端声明的 content-type —— 后者客户端说了算，
+     *   把 .exe 改名成 .jpg 就能骗过去。
+     * ★ `Buffer.from(..., 'base64')` 对非法字符是**静默跳过**、不抛错，
+     *   所以「能解码」完全不等于「是图片」，魔术字节那一步不能省。
+     */
+    adminUploadImage({ body, user }) {
+      if (!user) return fail('unauthorized', '请先登录', 401);
+      if (!isManager(user)) return fail('forbidden', '你没有管理权限', 403);
+
+      const raw = body?.image;
+      if (typeof raw !== 'string' || raw === '') {
+        return fail('bad_request', '缺少图片数据', 400);
+      }
+
+      // 容忍 data:image/jpeg;base64,xxx 这种前缀（有些前端库会带上）
+      const b64 = raw.startsWith('data:') ? raw.slice(raw.indexOf(',') + 1) : raw;
+
+      // 先按字符串长度拦一道：解码前就知道超没超，不必先把它吃进内存
+      if (b64.length > MAX_IMAGE_BASE64) return fail('too_large', TOO_BIG_MSG, 413);
+
+      const saved = saveImage(Buffer.from(b64, 'base64'), imageDir);
+
+      if (!saved.ok) {
+        if (saved.reason === 'too_large') return fail('too_large', TOO_BIG_MSG, 413);
+        if (saved.reason === 'empty') return fail('bad_request', '图片是空的', 400);
+        // 认不出类型时把「支持哪些」直接写出来，省一轮来回
+        return fail('not_image', '只支持 JPG / PNG / WebP / GIF 图片', 400);
+      }
+
+      repo.writeAudit({
+        actorId: user.id, action: 'image.upload',
+        targetType: 'image', targetId: saved.name,
+        detail: { bytes: saved.bytes, mime: saved.mime },
+      });
+
+      return ok({ image: saved.name, url: imageUrlOf(saved.name), bytes: saved.bytes });
     },
 
     /**
@@ -547,16 +634,21 @@ export function createApi({
         }
       }
 
+      // 照片是可选的：没传就是没有，界面回落到 emoji + 底色
+      const image = asStoredImage(body?.image);
+      if (!image.ok) return fail('bad_request', '图片不存在，请重新上传', 400);
+
       const item = repo.createItem({
         eventId: event.id, stallId,
         name, description: desc.value, emoji: emoji.value, tint,
+        image: image.value === undefined ? null : image.value,
         totalQuota: rawQuota, status: 'on_sale',
       });
 
       repo.writeAudit({
         actorId: user.id, action: 'item.create',
         targetType: 'item', targetId: item.id,
-        detail: { name, totalQuota: rawQuota, stallId, via: 'admin' },
+        detail: { name, totalQuota: rawQuota, stallId, image: item.image, via: 'admin' },
       });
 
       return ok({ item });

@@ -140,6 +140,7 @@ npm run set-owner <你的openid>       # 提成超管
 | 登录返回失败 | 没设 `DEV_FAKE_LOGIN=1`，且没配 `WX_APPID`/`WX_SECRET` |
 | 物品卡片没有背景色 | `tint` 和 `app.wxss` 里的色底类对不上（有测试挡这个） |
 | **某个接口报「接口不存在」（404），但代码里明明有** | 后端还是**改动之前启动的那个进程**。`npm start` 是普通 node，不会自己重载 —— 改完 `server/` 必须重启。 |
+| 物品照片在模拟器能看、真机空白 | 「downloadFile 合法域名」没配（模拟器勾了不校验，所以看不出来）。见 `docs/deploy-alicloud.md` §5.7 |
 
 最后一条单独说，因为它特别费时间：开发者工具里改小程序代码会自动重编译，
 很容易以为「都生效了」，但后端是另一个进程。判断办法是拿两个接口对一下 ——
@@ -165,4 +166,20 @@ DB_PATH=tmp/bazaar-dev.db npm run init-event -- deploy/event-config.example.json
 它是**可以重复运行**的（活动/摊位/物品按名字查重），所以往配置里追加几行再跑一次
 就是「补物品」。默认目标是线上库路径，本地跑**一定要带 `DB_PATH=`** ——
 屏幕第一行会把目标库打出来，跑之前先看一眼。
+
+### 物品照片放在哪
+
+和数据库同样的规矩（都在 `server/db.mjs` / `server/images.mjs` 里定义）：
+
+| | 数据库 | 照片 |
+| --- | --- | --- |
+| 本地 | `tmp/bazaar-dev.db` | `tmp/images/` |
+| 线上 | `/srv/bazaar/data/bazaar.db` | `/srv/bazaar/images/` |
+
+两个都由 `resolveRuntime(env)` 按 `DEV_FAKE_LOGIN` 决定，也可以用 `IMAGE_DIR` 显式覆盖。
+本地目录在已被 `.gitignore` 挡掉的 `tmp/` 下，不用管。
+
+照片是**普通文件**，不是数据库里的一坨 —— 所以在开发者工具里传完图，
+可以直接去 `tmp/images/` 看那个文件在不在。服务没起来时照片页会显示碎图，
+这是正常的（本地没有 nginx）。
 

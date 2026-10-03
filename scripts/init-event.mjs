@@ -34,9 +34,11 @@
  * 重复物品。义卖当天临时加东西也可以用这个办法（当然，界面上加更方便）。
  */
 import fs from 'node:fs';
+import path from 'node:path';
 import { openMigrated, PROD_DB_PATH } from '../server/db.mjs';
 import { createSqliteRepository } from '../server/repository.mjs';
 import { ITEM_NAME_MAX, ITEM_DESC_MAX, ITEM_QUOTA_MAX, ITEM_EMOJI_MAX, ITEM_TINTS } from '../server/api.mjs';
+import { validateImage, imageProblemText, saveImage, PROD_IMAGE_DIR } from '../server/images.mjs';
 
 /** 场次状态。和 server/db.mjs 里注释写的三个值一致。 */
 export const EVENT_STATUSES = ['draft', 'on_sale', 'ended'];
@@ -52,7 +54,8 @@ export const USAGE = `
   node scripts/init-event.mjs <配置文件.json> --yes    确认无误，真的写
 
 目标库取自环境变量 DB_PATH；不设就是线上路径 ${PROD_DB_PATH}。
-本地试跑：DB_PATH=tmp/bazaar-dev.db node scripts/init-event.mjs <配置文件>
+物品照片存在 IMAGE_DIR；不设就是线上路径 ${PROD_IMAGE_DIR}。
+本地试跑：DB_PATH=tmp/bazaar-dev.db IMAGE_DIR=tmp/images node scripts/init-event.mjs <配置文件>
 
 配置文件的格式见 deploy/event-config.example.json。
 `.trim();
@@ -201,7 +204,15 @@ export function parseConfig(raw) {
       }
     }
 
-    return { name, description, emoji, tint, totalQuota, stall };
+    // 照片：写**相对配置文件所在目录**的文件名，例如 "photos/曲奇.jpg"。
+    // 文件本身在 loadImages() 里读，这里只校验它是个字符串。
+    let image = null;
+    if (it.image !== undefined && it.image !== null && it.image !== '') {
+      image = asText(it.image);
+      if (!image) throw new Error(`items[${i}].image 要写成图片文件名`);
+    }
+
+    return { name, description, emoji, tint, totalQuota, stall, image };
   });
 
   const itemNames = new Set();
@@ -216,6 +227,50 @@ export function parseConfig(raw) {
     stalls,
     items,
   };
+}
+
+/* ============================================================
+   照片：一次性全部读进来验一遍
+   ============================================================ */
+
+/**
+ * 把配置里引用到的图片**全部读进内存并验一遍**，任何一张有问题就直接抛错。
+ *
+ * ★ 为什么必须在写库之前全部验完：applyInit 不是一个横跨全程的事务。
+ *   如果第 5 件的图有问题才报错，前面 4 件已经建好了 ——
+ *   留下一个「建了一半」的库是最难收拾的状态（活动建了、物品缺几件、
+ *   而报错信息只说了图片的问题）。
+ *
+ * 路径是**相对配置文件所在目录**解析的。这样 `cd` 到哪都不影响，
+ * 整个活动（配置 + photos/ 目录）可以一起打包搬走。
+ */
+export function loadImages(config, configDir) {
+  const out = new Map();
+
+  for (const it of config.items) {
+    if (!it.image || out.has(it.image)) continue;
+
+    const full = path.resolve(configDir, it.image);
+    let buf;
+    try {
+      buf = fs.readFileSync(full);
+    } catch {
+      throw new Error(`物品「${it.name}」的图片读不到：${it.image}（相对配置文件所在目录）`);
+    }
+
+    // 用和服务端上传完全同一套判断（validateImage），不另写一份 ——
+    // 两边不一致的症状是「界面传得上去，脚本却说不行」
+    const v = validateImage(buf);
+    if (!v.ok) {
+      throw new Error(
+        `物品「${it.name}」的图片「${it.image}」用不了：${imageProblemText(v.reason, v.limit)}`
+      );
+    }
+
+    out.set(it.image, buf);
+  }
+
+  return out;
 }
 
 /* ============================================================
@@ -247,14 +302,24 @@ export function planInit(repo, config) {
       : { action: 'create', name: s.name, loc: s.loc };
   });
 
-  const existingItemNames = new Set((target ? repo.listItems(target.id) : []).map((i) => i.name));
+  const existingItems = target ? repo.listItems(target.id) : [];
+  const itemByName = new Map(existingItems.map((i) => [i.name, i]));
 
-  const items = config.items.map((it) => ({
-    action: existingItemNames.has(it.name) ? 'skip' : 'create',
-    name: it.name,
-    stall: it.stall,
-    totalQuota: it.totalQuota,
-  }));
+  const items = config.items.map((it) => {
+    const hit = itemByName.get(it.name);
+
+    // 三种情况：
+    //   create —— 库里没有这件东西，建
+    //   image  —— 已经建过，但当时没配图，而配置里现在有图 → 只补图
+    //   skip   —— 已经建过，不动
+    // ★ 补图只在「库里有、但没有图」时发生。已经配过图的**不覆盖** ——
+    //   名字对不上（库里存的是服务端生成的随机名），没法判断是不是同一张，
+    //   贸然覆盖会把别人在界面上换过的图冲掉。要换图请用管理端的「换图」。
+    let action = 'create';
+    if (hit) action = (!hit.image && it.image) ? 'image' : 'skip';
+
+    return { action, name: it.name, stall: it.stall, totalQuota: it.totalQuota, image: it.image };
+  });
 
   return {
     event: target
@@ -295,11 +360,15 @@ export function formatPlan(plan, config) {
   }
 
   const skip = plan.items.filter((i) => i.action === 'skip').length;
-  lines.push(`物品（${plan.items.length}，其中 ${skip} 件已存在会跳过）：`);
+  const fill = plan.items.filter((i) => i.action === 'image').length;
+  lines.push(`物品（${plan.items.length}，其中 ${skip} 件已存在会跳过`
+    + `${fill ? `、${fill} 件只补图` : ''}）：`);
   if (!plan.items.length) lines.push('  （没有）');
   for (const it of plan.items) {
     const where = it.stall ? `  @ ${it.stall}` : '';
-    lines.push(`  [${it.action === 'create' ? '新建' : '跳过'}] ${it.name}  ${it.totalQuota} 份${where}`);
+    const pic = it.image ? `  🖼 ${it.image}` : '';
+    const tag = { create: '新建', skip: '跳过', image: '补图' }[it.action] || it.action;
+    lines.push(`  [${tag}] ${it.name}  ${it.totalQuota} 份${where}${pic}`);
   }
 
   if (plan.activeConflict) {
@@ -324,7 +393,7 @@ export function formatPlan(plan, config) {
  *
  * 顺序必须是活动 → 摊位 → 物品：物品要引用摊位的 id。
  */
-export function applyInit(repo, config) {
+export function applyInit(repo, config, { images = new Map(), imageDir = PROD_IMAGE_DIR } = {}) {
   const plan = planInit(repo, config);
 
   const eventId = plan.event.action === 'create'
@@ -340,11 +409,32 @@ export function applyInit(repo, config) {
     }
   }
 
+  /** 把已经验过的图片存进图片目录，拿到服务端生成的文件名 */
+  const store = (relPath) => {
+    const r = saveImage(images.get(relPath), imageDir);
+    if (!r.ok) {
+      // loadImages 已经验过一遍，走到这里基本只剩「磁盘满了」这类情况
+      throw new Error(`图片「${relPath}」存不下来：${imageProblemText(r.reason, r.limit)}`);
+    }
+    return r.name;
+  };
+
+  const existingByName = new Map(repo.listItems(eventId).map((i) => [i.name, i]));
   const created = [];
+  let imagesAdded = 0;
+
   // 按下标走：plan.items 和 config.items 是同序的（planInit 里就是 map 出来的），
   // 按名字反查既慢又要依赖「名字唯一」这个前提。
   config.items.forEach((it, i) => {
-    if (plan.items[i].action === 'skip') return;
+    const { action } = plan.items[i];
+    if (action === 'skip') return;
+
+    if (action === 'image') {
+      repo.updateItem({ itemId: existingByName.get(it.name).id, image: store(it.image) });
+      imagesAdded += 1;
+      return;
+    }
+
     created.push(repo.createItem({
       eventId,
       stallId: it.stall ? stallIdByName.get(it.stall) : null,
@@ -352,6 +442,7 @@ export function applyInit(repo, config) {
       description: it.description,
       emoji: it.emoji,
       tint: it.tint,
+      image: it.image ? store(it.image) : null,
       totalQuota: it.totalQuota,
       status: 'on_sale',
     }));
@@ -371,12 +462,13 @@ export function applyInit(repo, config) {
       stallsCreated,
       itemsCreated: created.length,
       itemsSkipped,
+      imagesAdded,
     },
   });
 
   return {
     eventId, eventAction: plan.event.action, stallsCreated, itemsCreated: created.length,
-    itemsSkipped, created,
+    itemsSkipped, imagesAdded, created,
   };
 }
 
@@ -417,6 +509,7 @@ export function run({ argv = [], env = {}, out = console.log, err = console.erro
   }
 
   const dbPath = env.DB_PATH || PROD_DB_PATH;
+  const imageDir = env.IMAGE_DIR || PROD_IMAGE_DIR;
 
   let config;
   try {
@@ -425,6 +518,16 @@ export function run({ argv = [], env = {}, out = console.log, err = console.erro
     if (e && e.code === 'ENOENT') err(`[x] 找不到配置文件：${args.file}`);
     else if (e instanceof SyntaxError) err(`[x] ${args.file} 不是合法的 JSON：${e.message}`);
     else err(`[x] 配置有问题：${e.message}`);
+    return 1;
+  }
+
+  // 照片在这一步全部读进来验完 —— 必须在碰数据库之前。
+  // 否则第 5 件的图有问题时，前 4 件已经建好了。
+  let images;
+  try {
+    images = loadImages(config, path.dirname(path.resolve(args.file)));
+  } catch (e) {
+    err(`[x] ${e.message}`);
     return 1;
   }
 
@@ -444,6 +547,7 @@ export function run({ argv = [], env = {}, out = console.log, err = console.erro
     // 「我在本地跑了一下怎么线上没变」和「我以为是本地结果写了线上」
     // 这两种事故，都是因为没看清这个路径。
     out(`目标库：${dbPath}${useMemory ? '（还没有这个库）' : ''}`);
+    if (images.size) out(`照片：  ${imageDir}（本次涉及 ${images.size} 张）`);
     out(`配置：  ${args.file}\n`);
     out(formatPlan(plan, config));
 
@@ -453,9 +557,10 @@ export function run({ argv = [], env = {}, out = console.log, err = console.erro
       return 0;
     }
 
-    const r = applyInit(repo, config);
+    const r = applyInit(repo, config, { images, imageDir });
     out(`\n✅ 已写入库：活动「${config.event.name}」（${r.eventAction === 'create' ? '新建' : '复用'}）`);
-    out(`   新建摊位 ${r.stallsCreated} 个 / 新建物品 ${r.itemsCreated} 件 / 跳过已存在 ${r.itemsSkipped} 件`);
+    out(`   新建摊位 ${r.stallsCreated} 个 / 新建物品 ${r.itemsCreated} 件`
+      + ` / 补图 ${r.imagesAdded} 件 / 跳过已存在 ${r.itemsSkipped} 件`);
     out('   小程序里下拉刷新就能看到了。');
     return 0;
   } finally {

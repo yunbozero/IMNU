@@ -12,6 +12,7 @@ set -euo pipefail
 APP_USER=bazaar
 APP_DIR=/srv/bazaar/app
 WWW_DIR=/srv/bazaar/www
+IMAGE_DIR=/srv/bazaar/images
 SERVICE=bazaar
 PORT=3000
 BRANCH="${BRANCH:-main}"
@@ -85,8 +86,31 @@ else
   warn "找不到 $SCRIPT_DIR/www/index.html，保留线上原来的页面"
 fi
 
+# ---------- 3.5 物品照片目录 ----------
+# 服务写、nginx 读。bootstrap.sh 建过它，但**已经在跑的服务器不会再跑 bootstrap**，
+# 所以升级到「有图片功能」这一版时必须在这里补上，否则传图会 500
+# （目录不存在）或图片全 404（目录权限不对，nginx 进不去）。
+#   install -d 是幂等的：已存在时只改权限和属主，不动里面的文件。
+log "确认照片目录 $IMAGE_DIR"
+install -d -m 755 -o "$APP_USER" -g "$APP_USER" "$IMAGE_DIR"
+
 # ---------- 4. 重启 ----------
 log "重启 $SERVICE"
+
+# ★ unit 文件也要跟着仓库走，和 www/index.html 一样「仓库是唯一事实来源」。
+#
+#   为什么必须这样：ReadWritePaths 里少了 /srv/bazaar/images，服务就写不了照片，
+#   而 ProtectSystem=strict 下这个错误表现为 EROFS，看起来完全不像权限问题。
+#   而 bootstrap.sh 只在最初装一次 unit —— 改了不同步的话，线上永远是旧的。
+#
+#   不做「先比对再决定」是因为那要额外依赖 diffutils。无条件装一遍 +
+#   daemon-reload 是幂等的，没变化时 daemon-reload 本身就是空操作。
+if [ -f "$SCRIPT_DIR/bazaar.service" ]; then
+  install -m 644 "$SCRIPT_DIR/bazaar.service" "/etc/systemd/system/${SERVICE}.service"
+  systemctl daemon-reload
+  log "已同步 systemd 单元文件"
+fi
+
 systemctl restart "$SERVICE"
 sleep 2
 

@@ -42,9 +42,13 @@ RestrictNamespaces=true
 LockPersonality=true
 
 # ProtectSystem=strict 会把整个文件系统挂成只读，
-# 这里显式开一个可写目录。SQLite 在 WAL 模式下会在同目录生成
-# -wal 和 -shm 文件，所以必须放行整个数据目录，而不只是那个 .db 文件。
-ReadWritePaths=/srv/bazaar/data
+# 这里显式开两个可写目录。
+#   data   —— SQLite 在 WAL 模式下会在同目录生成 -wal 和 -shm 文件，
+#             所以必须放行整个数据目录，而不只是那个 .db 文件。
+#   images —— 物品照片。★ 漏掉它的话，本地（没有 systemd 加固）怎么测都正常，
+#             一到线上传图就报 EROFS「只读文件系统」，而且报错在 Node 里，
+#             看起来完全不像权限问题。tests/deploy.test.mjs 有测试盯着这一条。
+ReadWritePaths=/srv/bazaar/data /srv/bazaar/images
 
 [Install]
 WantedBy=multi-user.target

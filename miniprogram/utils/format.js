@@ -1,6 +1,7 @@
 /**
  * 纯展示用的格式化函数。都是纯函数，方便单测。
  */
+import { BASE_URL } from '../config.js';
 
 /**
  * 取货码位数。
@@ -9,6 +10,19 @@
  *   两边一旦不一致，扫出来的码就会被判成「不是有效的取货码」。
  */
 export const PICKUP_CODE_LEN = 6;
+
+/**
+ * 物品照片的完整地址；没有照片时返回空字符串（界面要回落到 emoji）。
+ *
+ * ★ 用 BASE_URL 在这里拼，而不是让服务端返回完整 URL：
+ *   BASE_URL 已经按「跑在哪儿」选好了（模拟器 → 127.0.0.1:3000，真机 → 线上域名），
+ *   所以同一份数据在两边都对。让服务端返回完整 URL 的话，它就得知道自己
+ *   对外叫什么域名 —— 那是个容易配错、而且**只在真机上暴露**的错。
+ */
+export function imageUrl(item) {
+  const name = item && item.image;
+  return name ? `${BASE_URL}/images/${name}` : '';
+}
 
 /** '482913' → '482 913'，方便学生口报给志愿者 */
 export function groupCode(code) {

@@ -1,5 +1,5 @@
 import * as api from '../../../services/api.js';
-import { quotaText, quotaLevel, quotaPercent } from '../../../utils/format.js';
+import { quotaText, quotaLevel, quotaPercent, imageUrl } from '../../../utils/format.js';
 
 Page({
   data: {
@@ -31,6 +31,7 @@ Page({
         quotaText: quotaText(it),
         level: quotaLevel(it),
         percent: quotaPercent(it),
+        imageUrl: imageUrl(it),
       }));
       this.setData({ items, stalls: r.stalls || [], event: r.event });
       this.applyFilter();

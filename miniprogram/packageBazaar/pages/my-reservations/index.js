@@ -1,6 +1,6 @@
 import * as api from '../../../services/api.js';
 import * as session from '../../../services/session.js';
-import { statusText, statusClass, groupCode, timeText } from '../../../utils/format.js';
+import { statusText, statusClass, groupCode, timeText, imageUrl } from '../../../utils/format.js';
 
 const TABS = [
   { key: 'reserved', label: '待取货' },
@@ -39,6 +39,7 @@ Page({
         statusText: statusText(x.status),
         statusClass: statusClass(x.status),
         subText: this.subText(x),
+        imageUrl: imageUrl(x),
       }));
 
       this.setData({

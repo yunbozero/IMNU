@@ -99,7 +99,7 @@ const mapUser = (r) => (r ? {
 
 const mapItem = (r) => (r ? {
   id: r.id, eventId: r.event_id, stallId: r.stall_id, name: r.name,
-  description: r.description, emoji: r.emoji, tint: r.tint,
+  description: r.description, emoji: r.emoji, tint: r.tint, image: r.image,
   totalQuota: r.total_quota, remainingQuota: r.remaining_quota,
   status: r.status, createdAt: r.created_at,
 } : null);
@@ -212,13 +212,14 @@ export function createSqliteRepository(db) {
     },
 
     createItem({ eventId, stallId = null, name, description = null, emoji = null,
-                 tint = null, totalQuota, remainingQuota = null, status = 'on_sale' }) {
+                 tint = null, image = null, totalQuota, remainingQuota = null, status = 'on_sale' }) {
       const id = newId('it');
       const remaining = remainingQuota === null ? totalQuota : remainingQuota;
       db.prepare(`INSERT INTO items
-        (id,event_id,stall_id,name,description,emoji,tint,total_quota,remaining_quota,status,created_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
-        .run(id, eventId, stallId, name, description, emoji, tint, totalQuota, remaining, status, now());
+        (id,event_id,stall_id,name,description,emoji,tint,image,total_quota,remaining_quota,status,created_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
+        .run(id, eventId, stallId, name, description, emoji, tint, image,
+             totalQuota, remaining, status, now());
       return repo.getItem(id);
     },
 
@@ -490,17 +491,24 @@ export function createSqliteRepository(db) {
     },
 
     /**
-     * 改物品：上下架、增减名额。
+     * 改物品：上下架、增减名额、换图。
      *
      * 名额用增量而不是绝对值，并且会拦住两种会破坏账目的改法：
      *   - 把总数压到已锁定数量以下（已经有 10 个人预定了，总数不能设成 5）
      *   - 把剩余名额改成负数
+     *
+     * ★ image 是**三态**：不传（undefined）= 不动；null = 清掉；文件名 = 换成它。
+     *   不能照抄 status 那种「null 表示不动」的写法 —— 对图片来说 null 是个
+     *   有意义的值（把图删掉，回落到 emoji）。
      */
-    updateItem({ itemId, status = null, quotaDelta = 0 }) {
+    updateItem({ itemId, status = null, quotaDelta = 0, image = undefined }) {
       if (status !== null && !['on_sale', 'off_shelf'].includes(status)) {
         throw new Error(`未知的物品状态：${status}`);
       }
       if (!Number.isInteger(quotaDelta)) throw new Error('quotaDelta 必须是整数');
+      if (image !== undefined && image !== null && typeof image !== 'string') {
+        throw new Error('image 要么是文件名、要么是 null，要么干脆不传');
+      }
 
       return inTransactionAbortable(db, () => {
         const it = db.prepare('SELECT * FROM items WHERE id = ?').get(itemId);
@@ -530,8 +538,10 @@ export function createSqliteRepository(db) {
           remaining = newRemaining;
         }
 
-        db.prepare(`UPDATE items SET status = ?, total_quota = ?, remaining_quota = ? WHERE id = ?`)
-          .run(status === null ? it.status : status, total, remaining, itemId);
+        db.prepare(`UPDATE items SET status = ?, total_quota = ?, remaining_quota = ?, image = ?
+                     WHERE id = ?`)
+          .run(status === null ? it.status : status, total, remaining,
+               image === undefined ? it.image : image, itemId);
 
         return { ok: true, item: repo.getItem(itemId), quotaDelta };
       });

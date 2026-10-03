@@ -16,6 +16,7 @@ import {
   TINTS, EMOJI_SUGGESTIONS, NAME_MAX, DESC_MAX, QUOTA_MAX,
   stallOptions, buildCreateBody,
 } from '../../utils/item-form.js';
+import { pickAndUploadImage, reportImageResult } from '../../utils/image-upload.js';
 
 Page({
   data: {
@@ -29,6 +30,11 @@ Page({
     emoji: '',
     tint: TINTS[0].key,
     totalQuota: '',
+
+    // 照片：image 是服务端生成的文件名（保存时带上），
+    // imagePreview 是本地临时路径 —— 用它预览比用远端地址快，也不依赖网络
+    image: null,
+    imagePreview: '',
 
     // 选项
     tints: TINTS,
@@ -83,6 +89,28 @@ Page({
   pickTint(e) { this.setData({ tint: e.currentTarget.dataset.key }); },
   onStall(e) { this.setData({ stallIndex: Number(e.detail.value) }); },
 
+  /**
+   * 选照片。
+   *
+   * ★ 选完**立刻上传**，而不是等提交时一起传。两个原因：
+   *   1. 传图要一两秒，放在提交里会让人以为卡住了；
+   *   2. 提前拿到文件名，提交时那个请求就还是几十字节的小请求。
+   *   代价是「选了图但没保存」会在服务器上留一张没人引用的图 ——
+   *   量很小，不值得为它做一套回滚。
+   */
+  async pickImage() {
+    const up = await pickAndUploadImage({ token: session.getToken() });
+    reportImageResult(up);
+    if (!up.ok) return;
+
+    this.setData({ image: up.image, imagePreview: up.previewPath });
+  },
+
+  /** 不要照片了 —— 回落到 emoji + 底色。已经传上去的那个文件就留在服务器上。 */
+  removeImage() {
+    this.setData({ image: null, imagePreview: '' });
+  },
+
   async submit() {
     if (this.data.submitting) return;   // 防连点：连点两下就是两件一模一样的物品
 
@@ -93,6 +121,7 @@ Page({
       tint: this.data.tint,
       totalQuota: this.data.totalQuota,
       stallIndex: this.data.stallIndex,
+      image: this.data.image,
     }, this.data.stalls);
 
     if (!built.ok) {

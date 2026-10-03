@@ -9,6 +9,29 @@
     <view class="card">
       <view class="card__title">新加一件物品</view>
 
+      <!-- 大预览：学生看到的就是这个样子。有照片显示照片，没照片显示 emoji + 底色。 -->
+      <view class="field">
+        <view class="field__k">照片（可不加）</view>
+        <view class="photo">
+          <view class="photo__box {{tint}}">
+            <image
+              wx:if="{{imagePreview}}"
+              class="thumb-img"
+              src="{{imagePreview}}"
+              mode="aspectFill"
+            />
+            <text wx:else class="photo__ph">{{emoji || '🎁'}}</text>
+          </view>
+          <view class="photo__ops">
+            <button class="op" bindtap="pickImage">{{imagePreview ? '换一张' : '选一张照片'}}</button>
+            <button wx:if="{{imagePreview}}" class="op" bindtap="removeImage">不要照片</button>
+            <view wx:if="{{!imagePreview}}" class="photo__hint">
+              不选也行 —— 会用下面的图标当占位
+            </view>
+          </view>
+        </view>
+      </view>
+
       <view class="field">
         <view class="field__k">名称</view>
         <input
@@ -21,17 +44,14 @@
       </view>
 
       <view class="field">
-        <view class="field__k">图标</view>
-        <view class="row">
-          <view class="preview {{tint}}">{{emoji || '🎁'}}</view>
-          <input
-            class="field__input grow"
-            maxlength="2"
-            placeholder="一个 emoji，或一两个字"
-            value="{{emoji}}"
-            bindinput="onEmoji"
-          />
-        </view>
+        <view class="field__k">没照片时显示什么</view>
+        <input
+          class="field__input"
+          maxlength="2"
+          placeholder="一个 emoji，或一两个字"
+          value="{{emoji}}"
+          bindinput="onEmoji"
+        />
         <view class="chips">
           <view
             wx:for="{{emojis}}"
@@ -88,7 +108,8 @@
 
     <view class="notice">
       <text class="notice__b">保存后这件物品立刻在售，学生马上就能预定。</text>
-      想先藏着就别建；建完想撤，回「物品名额」把它下架。
+      想先藏着就别建；建完想撤，回「物品名额」把它下架。照片传上去之后就确定了，
+      要换得回列表点「换图」。
     </view>
 
     <button

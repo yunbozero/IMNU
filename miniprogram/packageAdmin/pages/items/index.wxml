@@ -15,7 +15,10 @@
 
   <view wx:for="{{list}}" wx:key="id" class="it {{item.offShelf ? 'it--off' : ''}}">
     <view class="it__head">
-      <view class="it__thumb {{item.tint}}">{{item.emoji || '🎁'}}</view>
+      <view class="it__thumb {{item.tint}}">
+        <image wx:if="{{item.imageUrl}}" class="thumb-img" src="{{item.imageUrl}}" mode="aspectFill" />
+        <text wx:else>{{item.emoji || '🎁'}}</text>
+      </view>
       <view class="grow">
         <view class="it__name">{{item.name}}</view>
         <view class="it__stall">
@@ -56,6 +59,12 @@
         disabled="{{busyId === item.id}}"
         bindtap="customQuota"
       >改数量</button>
+      <button
+        class="op"
+        data-id="{{item.id}}"
+        disabled="{{busyId === item.id}}"
+        bindtap="changeImage"
+      >{{item.imageUrl ? '换图' : '配图'}}</button>
       <button
         class="op op--shelf"
         data-id="{{item.id}}"

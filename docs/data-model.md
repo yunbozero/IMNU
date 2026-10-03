@@ -78,6 +78,39 @@
 | `total_quota` | 总名额 |
 | `remaining_quota` | 剩余名额，**有 CHECK 约束保证非负** |
 | `status` | `on_sale` / `off_shelf` |
+| `emoji` / `tint` | 没有照片时的占位图：一个 emoji + 一块底色 |
+| `image` | 物品照片的**文件名**（`img_<32 位十六进制>.<扩展名>`），不是路径也不是 URL |
+
+**`image` 只存文件名**，完整地址由小程序用 `BASE_URL` 拼（见 `miniprogram/utils/format.js`）。
+让服务端返回完整 URL 的话，它就得知道自己对外叫什么域名 —— 那是个容易配错、
+而且**只在真机上暴露**的错。
+
+文件的读写规则（路径穿越、类型判断、落盘）全在 `server/images.mjs`，
+文件名**永远由服务端生成**，所以客户端传来的任何字符串都不会被拿去拼路径。
+
+### 改表结构：`ADDED_COLUMNS`（重要）
+
+`migrate()` 原本只是把 `CREATE TABLE IF NOT EXISTS …` 重跑一遍 ——
+**对已经存在的表它一个字也不做**。所以往 `items` 上加 `image` 列这件事，
+新库靠 SCHEMA 就有了，**老库必须 ALTER**，否则线上会报
+`no such column: image`，而报错位置在具体的查询里，看起来完全不像「表结构没跟上」。
+
+所以 `server/db.mjs` 里多了一份 `ADDED_COLUMNS`：建表之后再照着它补列。
+
+```js
+const ADDED_COLUMNS = [
+  { table: 'items', column: 'image', ddl: 'ALTER TABLE items ADD COLUMN image TEXT' },
+];
+```
+
+两条规则：
+
+- 只能加**可空**的列（SQLite 的 `ADD COLUMN` 不允许「非空且无默认值」）。
+- 判断依据是「**这一列在不在**」（`PRAGMA table_info`），不是版本号。
+  版本号一旦被人手工改库、或从备份恢复就会错位，而「列在不在」永远是真的。
+
+`tests/db-migration.test.mjs` 会拿一个**没有该列的、装着真实数据的**库跑一遍迁移，
+断言列出现了、数据一条不少。线上库里已经有真实预定了，这一步搞错的代价比改代码大得多。
 
 ### reservations — 预定
 

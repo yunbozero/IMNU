@@ -1,6 +1,6 @@
 import * as api from '../../../services/api.js';
 import * as session from '../../../services/session.js';
-import { quotaText, quotaLevel, quotaPercent, groupCode } from '../../../utils/format.js';
+import { quotaText, quotaLevel, quotaPercent, groupCode, imageUrl } from '../../../utils/format.js';
 
 Page({
   data: {
@@ -51,7 +51,7 @@ Page({
       const user = session.getUser();
 
       this.setData({
-        item,
+        item: { ...item, imageUrl: imageUrl(item) },
         stall: stalls.find((s) => s.id === item.stallId) || null,
         quotaText: quotaText(item),
         level: quotaLevel(item),

@@ -75,8 +75,9 @@ CREATE TABLE IF NOT EXISTS items (
   stall_id        TEXT REFERENCES stalls(id),
   name            TEXT NOT NULL,
   description     TEXT,
-  emoji           TEXT,                          -- 原型占位图；正式版换成图片列表
-  tint            TEXT,
+  emoji           TEXT,                          -- 图标：一个 emoji 或两个字
+  tint            TEXT,                          -- 图标底色，对应 app.wxss 里的 .t-*
+  image           TEXT,                          -- 物品照片的文件名（不是完整 URL），见 server/images.mjs
   total_quota     INTEGER NOT NULL CHECK (total_quota >= 0),
   remaining_quota INTEGER NOT NULL CHECK (remaining_quota >= 0),
   status          TEXT NOT NULL DEFAULT 'on_sale',   -- on_sale | off_shelf
@@ -173,9 +174,36 @@ export function openDatabase(file = ':memory:') {
   return db;
 }
 
-/** 建表（幂等，可重复执行） */
+/**
+ * 建表之后还要补的列。
+ *
+ * ★ 为什么必须单独有一份：SCHEMA 里全是 `CREATE TABLE IF NOT EXISTS` ——
+ *   对**已经存在**的表它一个字也不做。所以往 items 上加一列，
+ *   新库靠 SCHEMA 就有了，**老库必须 ALTER**，否则线上会报
+ *   `no such column: image`，而报错位置在具体的查询里，看起来完全不像
+ *   「表结构没跟上」，很容易往别处找原因。
+ *
+ * 规则：只能加**可空**的列（SQLite 的 ADD COLUMN 不允许「非空且无默认值」）。
+ * 每一项都必须可以重复执行 —— 判断依据是「这一列在不在」，不是版本号：
+ * 版本号一旦被人手工改库或从备份恢复就会错位，而「列在不在」永远是真的。
+ */
+const ADDED_COLUMNS = [
+  { table: 'items', column: 'image', ddl: 'ALTER TABLE items ADD COLUMN image TEXT' },
+];
+
+/** 某张表当前有哪些列。表不存在时返回空集合。 */
+function tableColumns(db, table) {
+  return new Set(db.prepare(`PRAGMA table_info(${table})`).all().map((r) => r.name));
+}
+
+/** 建表（幂等，可重复执行），并把老库缺的列补上 */
 export function migrate(db) {
   db.exec(SCHEMA);
+
+  for (const { table, column, ddl } of ADDED_COLUMNS) {
+    if (!tableColumns(db, table).has(column)) db.exec(ddl);
+  }
+
   return db;
 }
 

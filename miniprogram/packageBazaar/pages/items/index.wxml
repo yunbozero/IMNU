@@ -44,7 +44,8 @@
       hover-class="item--hover"
     >
       <view class="item__thumb {{item.tint}}">
-        <text>{{item.emoji || '🎁'}}</text>
+        <image wx:if="{{item.imageUrl}}" class="thumb-img" src="{{item.imageUrl}}" mode="aspectFill" />
+        <text wx:else>{{item.emoji || '🎁'}}</text>
         <view wx:if="{{item.remainingQuota <= 0}}" class="item__soldout">已约满</view>
       </view>
       <view class="item__name">{{item.name}}</view>

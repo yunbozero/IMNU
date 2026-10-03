@@ -249,14 +249,19 @@ Authorization: Bearer <token>
 
 ### `POST /api/admin/item`
 
-上下架、增减名额。
+上下架、增减名额、换图。
 
 ```json
 {"itemId": "it_...", "status": "off_shelf"}
 {"itemId": "it_...", "quotaDelta": 10}
+{"itemId": "it_...", "image": "img_3f2a…9c.jpg"}
+{"itemId": "it_...", "image": null}
 ```
 
 名额用**增量**而不是绝对值。会拦住两种破坏账目的改法：把总数压到已锁定数量以下（已有 10 人预定，总数不能设成 5）、把剩余改成负数。
+
+`image` 是**三态**：不传 = 不动它（改了别的字段时照片保持原样）；`null` = 清掉，回落到
+emoji；文件名 = 换成它。换成新图时会**顺手删掉旧文件**，免得磁盘上堆一堆没人引用的图。
 
 ### `POST /api/admin/item/create`
 
@@ -268,6 +273,7 @@ Authorization: Bearer <token>
   "description": "独立包装，一盒六块",
   "emoji": "🍪",
   "tint": "t-yellow",
+  "image": "img_3f2a…9c.jpg",
   "totalQuota": 12,
   "stallId": "st_..."
 }
@@ -280,12 +286,50 @@ Authorization: Bearer <token>
 | `description` | 可不填，≤40 字 |
 | `emoji` | 可不填，≤2 个**码点**（`🍪` 算 1 个，不是 2 个） |
 | `tint` | 可不填，只能是 `ITEM_TINTS` 里的值；不填给第一个 |
+| `image` | 可不填。必须先是 `POST /api/admin/image` 返回的那个文件名，**而且文件得在磁盘上** |
 | `stallId` | 可不填；给了就必须**属于当前活动** |
 
 - 物品一律建成 `on_sale`。想先藏着就别建，建完想撤就下架 —— 不设「草稿」状态，
   少一种「为什么学生看不到」的排查成本。
 - 没有在售活动时返回 `no_active_event`：建出来的物品谁也看不见，不如直接说清楚。
+- ★ **`image` 指向一个不存在的文件时返回 400**，而不是照存。界面判断「有没有照片」
+  看的就是这个字段，存了名字而文件不在会显示一个破图标，**而且不会回落到 emoji**。
 - 名额从 `totalQuota` 起算（满的）。审核记录写进 `audit_logs`（`item.create`）。
+
+### `POST /api/admin/image`
+
+上传一张物品照片。**副主任管理员及以上**。
+
+```json
+{"image": "<base64>"}
+```
+
+```json
+{"ok": true, "image": "img_3f2a…9c.jpg", "url": "/images/img_3f2a…9c.jpg", "bytes": 183420}
+```
+
+| 规则 | |
+| --- | --- |
+| 体积 | 解码后 ≤ **2MB**（客户端会压到 100–300KB） |
+| 类型 | 只收 **JPG / PNG / WebP / GIF**，看**魔术字节**，不看客户端声明的 content-type |
+| 失败 | `not_image`(400) / `too_large`(413) / `empty`(400) |
+
+- **为什么是 base64 的 JSON 而不是 multipart**：multipart 要在零依赖的前提下自己解析
+  边界字符串、CRLF、分块和文件名编码 —— 那是整条上传链路里唯一真正麻烦的部分。
+  走 base64 服务端只需要 `Buffer.from(s, 'base64')`。代价是体积大 1/3。
+- 也接受 `data:image/jpeg;base64,…` 这种带前缀的写法。
+- **文件名由服务端生成**（`img_<32 位十六进制>.<扩展名>`），客户端传的任何字符串都不会被拿去拼路径。
+- 上传后把返回的 `image` 交给 `POST /api/admin/item/create` 或 `POST /api/admin/item`。
+
+### `GET /images/<文件名>`
+
+取物品照片。**不需要登录**（和物品列表一样是公开内容），没有这个接口以外的读取方式。
+
+生产环境由 **nginx 直接发文件**，请求根本到不了 Node；Node 这边也实现了一份，
+给**本地开发**用 —— 开发者工具连的就是 Node 自己，没有 nginx。
+
+- 文件名不合规或文件不存在一律 **404**，不做 URL 解码（我们的文件名本来就不需要）。
+- `Cache-Control` 长缓存：文件名里带随机串，内容永不改变（换图是换一个**新文件名**）。
 
 ### `POST /api/admin/cancel`
 

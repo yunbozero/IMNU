@@ -12,13 +12,14 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { openMigrated } from '../server/db.mjs';
 import { createSqliteRepository } from '../server/repository.mjs';
 import { startServer } from '../server/http.mjs';
 import { createFakeSessionProvider } from '../server/auth.mjs';
 import { ITEM_TINTS } from '../server/api.mjs';
 import {
-  parseEventTime, parseConfig, planInit, formatPlan, applyInit, parseArgs, run,
+  parseEventTime, parseConfig, planInit, formatPlan, applyInit, parseArgs, run, loadImages,
 } from '../scripts/init-event.mjs';
 
 /** 一份合法配置。每个用例在它上面只改一处。 */
@@ -39,6 +40,16 @@ function sampleConfig(over = {}) {
 
 function withRepo(fn) {
   const db = openMigrated(':memory:');
+  try {
+    return fn(createSqliteRepository(db), db);
+  } finally {
+    db.close();
+  }
+}
+
+/** 打开一个**已经存在的库文件**，跑 fn，然后关掉 */
+function withRepoOpen(dbPath, fn) {
+  const db = openMigrated(dbPath);
   try {
     return fn(createSqliteRepository(db), db);
   } finally {
@@ -543,6 +554,184 @@ test('init-event：脚本建完，起服务就能查到，学生能直接预定'
 });
 
 /* ============================================================
+   照片：从配置导入
+   ============================================================ */
+
+/** 头部正确、后面填充的字节。服务端只认头部和大小，不解码。 */
+function fakeImage(kind = 'jpg', size = 64) {
+  const heads = {
+    jpg: [0xFF, 0xD8, 0xFF, 0xE0],
+    png: [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A],
+  };
+  const head = Buffer.from(heads[kind]);
+  return Buffer.concat([head, Buffer.alloc(Math.max(0, size - head.length), 7)]);
+}
+
+/** 配置 + 图片 + 目标库，都在同一个临时目录里 */
+function tempConfigWithImages(config, files = {}) {
+  const t = tempConfig(config);
+  for (const [name, buf] of Object.entries(files)) {
+    const full = path.join(t.dir, name);
+    fs.mkdirSync(path.dirname(full), { recursive: true });
+    fs.writeFileSync(full, buf);
+  }
+  t.imageDir = path.join(t.dir, 'images');
+  return t;
+}
+
+/** 带一张图的一件物品 */
+const oneItemWithImage = (image = 'photos/cookie.jpg') => sampleConfig({
+  items: [{ name: '手作黄油曲奇', totalQuota: 3, image }],
+});
+
+test('init-event：配置里的 image 必须是字符串', () => {
+  const cfg = parseConfig(sampleConfig({
+    items: [{ name: '曲奇', totalQuota: 1, image: 'photos/a.jpg' }],
+  }));
+  assert.equal(cfg.items[0].image, 'photos/a.jpg');
+
+  // 不写就是没有照片
+  assert.equal(parseConfig(sampleConfig({ items: [{ name: '曲奇', totalQuota: 1 }] })).items[0].image, null);
+
+  assert.throws(
+    () => parseConfig(sampleConfig({ items: [{ name: '曲奇', totalQuota: 1, image: 123 }] })),
+    /image 要写成图片文件名/
+  );
+});
+
+test('init-event：图片按配置文件所在目录解析，读不到要说清是哪件物品', () => {
+  const t = tempConfigWithImages(oneItemWithImage(), { 'photos/cookie.jpg': fakeImage('jpg') });
+  try {
+    const cfg = parseConfig(oneItemWithImage());
+    const images = loadImages(cfg, t.dir);
+
+    assert.equal(images.size, 1);
+    assert.deepEqual(images.get('photos/cookie.jpg'), fakeImage('jpg'));
+
+    // 换个不存在的文件名：报错里要有物品名和文件名，不然几十件里没法找
+    const bad = parseConfig(oneItemWithImage('photos/没有这个.jpg'));
+    assert.throws(() => loadImages(bad, t.dir), /手作黄油曲奇.*没有这个\.jpg/);
+  } finally { fs.rmSync(t.dir, { recursive: true, force: true }); }
+});
+
+test('init-event：不是图片的文件要在写库之前就被拦住', () => {
+  const t = tempConfigWithImages(oneItemWithImage('photos/fake.jpg'), {
+    'photos/fake.jpg': Buffer.from('<?php 我其实是个脚本 ?>'),
+  });
+  try {
+    const cfg = parseConfig(oneItemWithImage('photos/fake.jpg'));
+    assert.throws(() => loadImages(cfg, t.dir), /不是 JPG \/ PNG \/ WebP \/ GIF/);
+  } finally { fs.rmSync(t.dir, { recursive: true, force: true }); }
+});
+
+test('init-event：★ 有任何一张图有问题，就一个字节都不写', () => {
+  // 第二件的图是坏的 —— 关键在于**第一件也不能被建出来**
+  const cfg = sampleConfig({
+    items: [
+      { name: '好的那件', totalQuota: 1, image: 'photos/ok.jpg' },
+      { name: '坏的那件', totalQuota: 1, image: 'photos/bad.jpg' },
+    ],
+  });
+  const t = tempConfigWithImages(cfg, {
+    'photos/ok.jpg': fakeImage('jpg'),
+    'photos/bad.jpg': Buffer.from('这不是图片'),
+  });
+
+  try {
+    const lines = [];
+    const errs = [];
+    const code = run({
+      argv: [t.file, '--yes'],
+      env: { DB_PATH: t.dbPath, IMAGE_DIR: t.imageDir },
+      out: (s) => lines.push(s),
+      err: (s) => errs.push(s),
+    });
+
+    assert.equal(code, 1, '图片有问题时应当非零退出');
+    assert.match(errs.join('\n'), /坏的那件/);
+
+    // ★ 这才是重点：不能留下「建了一半」的库。
+    //   applyInit 不是一个横跨全程的事务，所以校验必须在写库之前全部做完。
+    assert.ok(!fs.existsSync(t.dbPath), '校验没过时连库文件都不该被建出来');
+    assert.ok(!fs.existsSync(t.imageDir) || fs.readdirSync(t.imageDir).length === 0,
+      '图片目录里也不该留下东西');
+  } finally { fs.rmSync(t.dir, { recursive: true, force: true }); }
+});
+
+test('init-event：带图建物品，文件落到图片目录，库里存的是服务端生成的名字', () => {
+  const t = tempConfigWithImages(oneItemWithImage(), { 'photos/cookie.jpg': fakeImage('png', 200) });
+  try {
+    const code = run({
+      argv: [t.file, '--yes'],
+      env: { DB_PATH: t.dbPath, IMAGE_DIR: t.imageDir },
+      out: () => {}, err: () => {},
+    });
+    assert.equal(code, 0);
+
+    const db = openMigrated(t.dbPath);
+    try {
+      const repo = createSqliteRepository(db);
+      const item = repo.listItems(repo.getActiveEvent().id)[0];
+
+      assert.ok(item.image, '物品应当带上图片');
+      assert.match(item.image, /^img_[0-9a-f]{32}\.png$/,
+        '库里存的必须是服务端生成的文件名，不是配置里那个路径');
+      assert.ok(fs.existsSync(path.join(t.imageDir, item.image)), '文件要真的在图片目录里');
+    } finally { db.close(); }
+  } finally { fs.rmSync(t.dir, { recursive: true, force: true }); }
+});
+
+test('init-event：已经建过的物品会被补图，而不是再建一件', () => {
+  const noImage = sampleConfig({ items: [{ name: '手作黄油曲奇', totalQuota: 3 }] });
+  const t = tempConfigWithImages(noImage, { 'photos/cookie.jpg': fakeImage('jpg') });
+
+  try {
+    // 先建一遍（没图）
+    assert.equal(run({ argv: [t.file, '--yes'], env: { DB_PATH: t.dbPath, IMAGE_DIR: t.imageDir }, out: () => {} }), 0);
+
+    // 配置里补上图，再跑
+    fs.writeFileSync(t.file, JSON.stringify(oneItemWithImage()), 'utf8');
+
+    withRepoOpen(t.dbPath, (repo) => {
+      const plan = planInit(repo, parseConfig(oneItemWithImage()));
+      assert.equal(plan.items[0].action, 'image', '已经建过但没图的，应当是「补图」');
+
+      const text = formatPlan(plan, parseConfig(oneItemWithImage()));
+      assert.match(text, /\[补图\]/, '计划里要能看出来这一步是补图');
+      assert.match(text, /photos\/cookie\.jpg/);
+    });
+
+    const lines = [];
+    assert.equal(run({
+      argv: [t.file, '--yes'],
+      env: { DB_PATH: t.dbPath, IMAGE_DIR: t.imageDir },
+      out: (s) => lines.push(s),
+    }), 0);
+    assert.match(lines.join('\n'), /补图 1 件/);
+
+    withRepoOpen(t.dbPath, (repo) => {
+      const items = repo.listItems(repo.getActiveEvent().id);
+      assert.equal(items.length, 1, '补图不该多出一件物品');
+      assert.ok(items[0].image, '图应当补上了');
+    });
+  } finally { fs.rmSync(t.dir, { recursive: true, force: true }); }
+});
+
+test('init-event：已经配过图的不会被配置覆盖（换图要用管理端）', () => {
+  const t = tempConfigWithImages(oneItemWithImage(), { 'photos/cookie.jpg': fakeImage('jpg') });
+  try {
+    assert.equal(run({ argv: [t.file, '--yes'], env: { DB_PATH: t.dbPath, IMAGE_DIR: t.imageDir }, out: () => {} }), 0);
+
+    withRepoOpen(t.dbPath, (repo) => {
+      // 库里存的是服务端生成的随机名，配置里是相对路径 —— 名字对不上，
+      // 没法判断是不是同一张。贸然覆盖会把别人在界面上换过的图冲掉。
+      const plan = planInit(repo, parseConfig(oneItemWithImage()));
+      assert.equal(plan.items[0].action, 'skip', '已经有图的应当跳过，不覆盖');
+    });
+  } finally { fs.rmSync(t.dir, { recursive: true, force: true }); }
+});
+
+/* ============================================================
    仓库里的示例配置必须能用
    ============================================================ */
 
@@ -555,4 +744,17 @@ test('init-event：仓库里的示例配置是合法的', () => {
 
   // 示例里出现的配色必须是真实存在的类，否则照抄的人第一步就错
   for (const it of cfg.items) assert.ok(ITEM_TINTS.includes(it.tint), it.tint);
+});
+
+test('init-event：★ 照抄示例配置就一定能跑通，不会缺文件', () => {
+  // 示例是给人抄的，抄完立刻跑就必须能过。
+  // 所以它引用的每个文件都得真的在仓库里 —— 这一条是加 image 字段时最容易踩的：
+  // 在示例里写一张 photos/xxx.jpg，而仓库里没有那个文件，
+  // 照抄的人会看到「图片读不到」，脚本直接拒绝运行。
+  const file = new URL('../deploy/event-config.example.json', import.meta.url);
+  const configDir = path.dirname(fileURLToPath(file));
+  const cfg = parseConfig(JSON.parse(fs.readFileSync(file, 'utf8')));
+
+  assert.doesNotThrow(() => loadImages(cfg, configDir),
+    '示例配置引用了仓库里不存在的文件');
 });

@@ -17,6 +17,7 @@ APP_DIR=/srv/bazaar/app
 DATA_DIR=/srv/bazaar/data
 BACKUP_DIR=/srv/bazaar/backup
 WWW_DIR=/srv/bazaar/www
+IMAGE_DIR=/srv/bazaar/images
 SERVICE=bazaar
 BACKUP_KEEP=14
 # Node 的最低版本要求见下面「2. Node.js」一节（MIN_NODE_MAJOR / MIN_NODE_MINOR）
@@ -92,10 +93,16 @@ fi
 
 # ---------- 5. 目录 ----------
 log "创建目录"
-mkdir -p "$APP_DIR" "$DATA_DIR" "$BACKUP_DIR" "$WWW_DIR"
+mkdir -p "$APP_DIR" "$DATA_DIR" "$BACKUP_DIR" "$WWW_DIR" "$IMAGE_DIR"
 chown -R "$APP_USER:$APP_USER" "$BASE_DIR"
 # 代码目录只读、数据目录可写，与 systemd 的 ProtectSystem=strict 呼应
 chmod 750 "$DATA_DIR" "$BACKUP_DIR"
+
+# 物品照片目录：服务写、nginx 读 —— 和 www 同样的道理。
+# nginx 的 worker 跑在 www-data 下，不是 $APP_USER，所以**必须 755**
+# （750 的话 nginx 连目录都进不去，图片全变 404，而服务端日志一切正常）。
+# 照片本身是 bazaar 按默认 umask 建的 644，nginx 读得到。
+chmod 755 "$IMAGE_DIR"
 
 # 网站根目录要留给 nginx 读：
 #   nginx 的 worker 跑在 www-data 下，不是 $APP_USER。

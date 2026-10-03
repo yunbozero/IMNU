@@ -4,7 +4,8 @@
 
   <block wx:if="{{item}}">
     <view class="hero {{item.tint}}">
-      <text class="hero__emoji">{{item.emoji || '🎁'}}</text>
+      <image wx:if="{{item.imageUrl}}" class="thumb-img" src="{{item.imageUrl}}" mode="aspectFill" />
+      <text wx:else class="hero__emoji">{{item.emoji || '🎁'}}</text>
     </view>
 
     <view class="title">{{item.name}}</view>
@@ -60,7 +61,10 @@
     <view class="sheet__title">确认预定</view>
 
     <view class="sheet__summary">
-      <view class="sheet__thumb {{item.tint}}">{{item.emoji || '🎁'}}</view>
+      <view class="sheet__thumb {{item.tint}}">
+        <image wx:if="{{item.imageUrl}}" class="thumb-img" src="{{item.imageUrl}}" mode="aspectFill" />
+        <text wx:else>{{item.emoji || '🎁'}}</text>
+      </view>
       <view class="grow">
         <view class="sheet__name">{{item.name}}</view>
         <view class="sheet__stall">{{stall.name}} · {{stall.loc}}</view>

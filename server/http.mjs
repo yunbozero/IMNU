@@ -22,11 +22,28 @@ import {
 } from './auth.mjs';
 import { openMigrated, PROD_DB_PATH, DEV_DB_PATH } from './db.mjs';
 import { createSqliteRepository } from './repository.mjs';
+import {
+  readImage, mimeOfName, MAX_IMAGE_BASE64,
+  PROD_IMAGE_DIR, DEV_IMAGE_DIR,
+} from './images.mjs';
 
 /** 请求体上限。义卖接口的 body 都是几十字节，64KB 已经很宽松。 */
 const MAX_BODY_BYTES = 64 * 1024;
 /** 超出这个量就直接断开，不再陪它把数据读完。 */
 const HARD_BODY_LIMIT = 1024 * 1024;
+
+/**
+ * 传图那条路的请求体上限：base64 之后的图片 + JSON 外壳的余量。
+ * 单列出来是因为它比普通接口大两个数量级 —— 拿 64KB 去卡它，
+ * 用户会看到「请求体过大」，而图片其实完全正常。
+ *
+ * ★ 导出是为了让部署测试能断言「nginx 的 client_max_body_size 必须比它大」：
+ *   反过来的话，超限请求会被 nginx 挡掉，用户看到的是 HTML 错误页而不是我们的提示。
+ */
+export const MAX_IMAGE_BODY_BYTES = MAX_IMAGE_BASE64 + 8 * 1024;
+
+/** 物品照片的 URL 前缀。生产环境 nginx 直接发它，Node 这边兜本地开发。 */
+const IMAGE_PREFIX = '/images/';
 
 /** 路由表。auth: none | register | user；rateLimit 只加在写操作上。 */
 export const ROUTES = {
@@ -45,6 +62,10 @@ export const ROUTES = {
   // 这里只保证「必须先登录」。
   'POST /api/admin/item': { handler: 'adminUpdateItem', auth: 'user' },
   'POST /api/admin/item/create': { handler: 'adminCreateItem', auth: 'user' },
+  // 传图：body 是 base64 的 JSON，所以上限要单独放宽
+  'POST /api/admin/image': {
+    handler: 'adminUploadImage', auth: 'user', maxBytes: MAX_IMAGE_BODY_BYTES,
+  },
   'POST /api/admin/cancel': { handler: 'adminCancel', auth: 'user' },
   'POST /api/admin/undo-redeem': { handler: 'adminUndoRedeem', auth: 'user' },
   'POST /api/admin/role': { handler: 'adminSetRole', auth: 'user' },
@@ -54,7 +75,15 @@ export const ROUTES = {
   'POST /api/admin/settings': { handler: 'adminSetSettings', auth: 'user' },
 };
 
-function readBody(req) {
+/**
+ * 读请求体。
+ *
+ * hardLimit 默认由 maxBytes 推出来（至少 1MB、且是 maxBytes 的两倍）——
+ * ★ 不能让传图那条路沿用固定的 1MB 硬上限：它的 maxBytes 是 2.8MB，
+ *   硬上限却停在 1MB 的话，一张正常的图会在 1MB 处被 destroy，
+ *   客户端收到「连接被重置」，而不是能看懂的 413。
+ */
+function readBody(req, { maxBytes = MAX_BODY_BYTES, hardLimit = Math.max(HARD_BODY_LIMIT, maxBytes * 2) } = {}) {
   return new Promise((resolve, reject) => {
     let size = 0;
     let tooLarge = false;
@@ -63,13 +92,13 @@ function readBody(req) {
     req.on('data', (c) => {
       size += c.length;
 
-      if (size > HARD_BODY_LIMIT) {
+      if (size > hardLimit) {
         reject(Object.assign(new Error('body too large'), { code: 'too_large' }));
         req.destroy();
         return;
       }
 
-      if (size > MAX_BODY_BYTES) {
+      if (size > maxBytes) {
         // ★ 超限但还不算离谱：把剩下的读完再回 413。
         //   直接 destroy 的话，客户端收到的是「连接被重置」而不是 413，
         //   小程序那边只能显示「网络错误」，根本看不出是请求太大了。
@@ -121,6 +150,36 @@ function sendRaw(res, status, contentType, text) {
 }
 
 /**
+ * 发一张物品照片。
+ *
+ * ★ 生产环境走不到这里：nginx 有 `/images/` 的 location，直接读同一个目录发文件，
+ *   比让 Node 读进内存再吐出去快得多。这个分支是给**本地开发**用的 ——
+ *   开发者工具连的是 Node 自己，没有 nginx，没有它整个界面都是碎图。
+ *
+ * ★ 名字不做 URL 解码，直接交给 readImage 校验。我们的文件名是纯十六进制加扩展名，
+ *   本来就不需要百分号编码；不去解码反而省掉了 `decodeURIComponent('%')` 抛异常
+ *   这个坑，凡是编码过的路径一律匹配不上、返回 404。
+ */
+function sendImage(res, pathname, imageDir) {
+  const buf = readImage(pathname.slice(IMAGE_PREFIX.length), imageDir);
+  if (!buf) {
+    send(res, 404, { ok: false, error: 'not_found', message: '图片不存在' });
+    return 404;
+  }
+
+  res.writeHead(200, {
+    'content-type': mimeOfName(pathname.slice(IMAGE_PREFIX.length)),
+    'content-length': buf.length,
+    // 文件名是随机串、内容永不改变，所以可以放心长缓存 ——
+    // 换图是换一个新文件名，不会出现「换了图但客户端还看旧的」
+    'cache-control': 'public, max-age=31536000, immutable',
+    'x-content-type-options': 'nosniff',
+  });
+  res.end(buf);
+  return 200;
+}
+
+/**
  * 从 token 解析出身份。
  * scope='register' 的 token 只能拿去注册；scope='user' 的必须能在库里查到人。
  */
@@ -153,13 +212,14 @@ export function createRequestHandler({
   log = () => {},
   makeCode,
   maxItemsPerUser = 0,
+  imageDir = PROD_IMAGE_DIR,
   rateLimiter = createRateLimiter({ limit: 10, windowMs: 10_000, now }),
 } = {}) {
   if (!repo) throw new Error('需要 repo');
   if (!secret) throw new Error('需要 SESSION_SECRET');
 
   const api = createApi({
-    repo, sessions, secret, signToken, startedAt, now, makeCode, maxItemsPerUser,
+    repo, sessions, secret, signToken, startedAt, now, makeCode, maxItemsPerUser, imageDir,
   });
 
   return async function handle(req, res) {
@@ -170,6 +230,12 @@ export function createRequestHandler({
     let uid = null;
 
     try {
+      // 物品照片：静态文件，不是接口，所以不进路由表（路由表是精确匹配的）
+      if (req.method === 'GET' && url.pathname.startsWith(IMAGE_PREFIX)) {
+        status = sendImage(res, url.pathname, imageDir);
+        return;
+      }
+
       const route = ROUTES[routeKey];
 
       if (!route) {
@@ -217,7 +283,7 @@ export function createRequestHandler({
       let body = {};
       if (isWrite) {
         try {
-          body = await readBody(req);
+          body = await readBody(req, { maxBytes: route.maxBytes || MAX_BODY_BYTES });
         } catch (e) {
           status = e.code === 'too_large' ? 413 : 400;
           send(res, status, {
@@ -321,6 +387,10 @@ export function resolveRuntime(env = {}) {
   const fakeLogin = env.DEV_FAKE_LOGIN === '1';
   const dbPath = env.DB_PATH || (fakeLogin ? DEV_DB_PATH : PROD_DB_PATH);
 
+  // 物品照片放哪。和 DB_PATH 同样的规矩：本地联调落在 tmp/ 下（已被 .gitignore 挡掉），
+  // 线上在 /srv/bazaar 下。两边都是「普通目录」，所以本地怎么测出来的行为线上一致。
+  const imageDir = env.IMAGE_DIR || (fakeLogin ? DEV_IMAGE_DIR : PROD_IMAGE_DIR);
+
   // 每个账号在本次活动内最多预定几件；0 = 不限。
   // 防囤货的软上限。默认 3，义卖当天可以改环境变量临时调整（改完重启服务）。
   const rawMax = env.MAX_ITEMS_PER_USER === undefined || env.MAX_ITEMS_PER_USER === ''
@@ -365,6 +435,7 @@ export function resolveRuntime(env = {}) {
     port: Number(env.PORT || 3000),
     host: env.HOST || '127.0.0.1',
     dbPath,
+    imageDir,
     secret,
     sessions,
     fakeLogin,
@@ -382,12 +453,13 @@ function main() {
     process.exit(1);
   }
 
-  const { port, host, dbPath, secret, sessions, warning, maxItemsPerUser } = runtime;
+  const { port, host, dbPath, imageDir, secret, sessions, warning, maxItemsPerUser } = runtime;
   if (warning) console.warn(warning);
 
-  startServer({ port, host, dbPath, secret, sessions, maxItemsPerUser }).then(async ({ server, close }) => {
+  startServer({ port, host, dbPath, imageDir, secret, sessions, maxItemsPerUser }).then(async ({ server, close }) => {
     console.log(`✅ bazaar-api 已启动 http://${host}:${port}`);
     console.log(`   DB ${dbPath}`);
+    console.log(`   物品照片 ${imageDir}`);
     console.log(`   每账号最多预定 ${maxItemsPerUser || '不限'} 件`);
 
     const shutdown = async (sig) => {

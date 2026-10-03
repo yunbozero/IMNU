@@ -400,6 +400,36 @@ sudo -u bazaar DB_PATH=/srv/bazaar/data/bazaar.db \
 > 后面日常加物品用管理端界面（「我的」→ 管理端 → 物品名额 → ＋新建物品）就够了，
 > 不必每次上服务器。这个脚本只在**开新活动**和**批量录入**时才需要。
 
+### 物品照片
+
+照片存在 `/srv/bazaar/images/`，**nginx 直接发文件**（不走 Node）。
+
+**升级到「有照片功能」这一版时，除了 `deploy.sh` 还要做两件事：**
+
+1. **小程序后台加一条域名**：开发管理 → 开发设置 → 服务器域名 → **「downloadFile 合法域名」**
+   加 `https://neishidemao.cn`（和 request 合法域名同一个域名，一行的事）。
+   > 不加会怎样：图片在**开发者工具里正常显示**（因为勾了「不校验合法域名」），
+   > **一到真机就全是空白**，控制台报 `downloadFile:fail url not in domain list`。
+   > 这一条只有真机能验出来。
+2. **确认照片目录的权限**是 `755`、属主 `bazaar`：
+   ```bash
+   ls -ld /srv/bazaar/images
+   # 期望：drwxr-xr-x … bazaar bazaar … /srv/bazaar/images
+   ```
+   `deploy.sh` 会自己 `install -d` 补上（幂等），所以正常发布一遍就够了。
+
+几个要知道的点：
+
+- **`ReadWritePaths` 里有照片目录**（`deploy/bazaar.service`）。`ProtectSystem=strict`
+  会把整个文件系统挂成只读，漏了它的话传图会报 `EROFS`——而本地没有 systemd 加固，
+  **怎么测都是正常的**。`deploy.sh` 现在会同步 unit 文件并 `daemon-reload`，
+  所以改了这一行也能随发布生效。
+- **照片不进备份**。`bazaar-backup` 只管数据库 —— 图片丢了重新传一遍就行，
+  为它把备份脚本改复杂不值得。
+- **照片目录不能是 750**。那是数据目录的权限；nginx 的 worker 跑在 `www-data` 下，
+  750 的话它连目录都进不去，图片全变 404，而服务端日志一切正常。
+- 义卖当天要临时加带图的物品，直接在管理端点「＋新建物品」选图即可，不用上服务器。
+
 ---
 
 ## 6. 验收清单
@@ -417,7 +447,7 @@ sudo -u bazaar DB_PATH=/srv/bazaar/data/bazaar.db \
 | **备份可用** | `sudo systemctl start bazaar-backup && sudo -u bazaar node /srv/bazaar/app/server/backup.mjs list` | 列表里有今天的一份 |
 | 端口没裸奔 | 阿里云安全组只放 22 / 80 / 443 | 3000 不对外 |
 
-**最后一步**：去微信公众平台 → 开发管理 → 开发设置 → 服务器域名，把 `https://你的域名` 加进 **request 合法域名**。这一步不做，小程序发不出请求。
+**最后一步**：去微信公众平台 → 开发管理 → 开发设置 → 服务器域名，把 `https://你的域名` 加进 **request 合法域名**（以及 **downloadFile 合法域名**，物品照片要用）。这一步不做，小程序发不出请求 / 图片显示不出来。
 
 ### 为什么根路径必须有一个页面
 

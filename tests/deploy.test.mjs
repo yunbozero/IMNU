@@ -11,6 +11,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { MAX_IMAGE_BODY_BYTES } from '../server/http.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DEPLOY = path.join(ROOT, 'deploy');
@@ -549,6 +550,82 @@ test('部署：网站根目录对 nginx 可读（worker 不是运行账号）', 
   // 目录要是 750 且属主是 bazaar，nginx 根本进不去 —— 表现是 403。
   assert.match(BOOTSTRAP(), /chmod 755 "\$WWW_DIR"/,
     'www 目录必须放行到 755，否则 nginx（www-data）读不到');
+});
+
+/* ============================================================
+   物品照片：三个文件必须指向同一个目录，权限也要对
+   ============================================================ */
+
+/** nginx.conf 里 /images/ 那段 location 的 alias */
+function nginxImageRoot() {
+  const m = /location \/images\/\s*\{[^}]*alias\s+([^;]+);/s.exec(NGINX());
+  assert.ok(m, 'nginx.conf 里没有 /images/ 的 alias');
+  return m[1].trim().replace(/\/$/, '');
+}
+
+test('部署：照片目录在 nginx、服务单元、bootstrap 三处必须一致', () => {
+  // 这三处各写一个路径，任何一处写错都会在线上表现成完全不同的症状：
+  //   nginx 错了 → 图片全 404，但服务端日志一切正常
+  //   单元文件漏了 → 传图 EROFS「只读文件系统」
+  //   bootstrap 错了 → 目录根本不存在
+  const root = nginxImageRoot();
+  assert.equal(root, '/srv/bazaar/images');
+
+  const rw = /^ReadWritePaths=(.+)$/m.exec(SERVICE())[1].trim().split(/\s+/);
+  assert.ok(rw.includes(root),
+    `ProtectSystem=strict 下服务只能写 ReadWritePaths 里的目录，` +
+    `照片目录 ${root} 不在里面 —— 传图会报 EROFS，而且看起来不像权限问题`);
+
+  assert.equal(shVar(BOOTSTRAP(), 'IMAGE_DIR'), root, 'bootstrap.sh 建的目录和 nginx 读的不是同一个');
+});
+
+test('部署：照片目录要对 nginx 可读（和 www 同样的道理）', () => {
+  // 750 的话 nginx（www-data）连目录都进不去，图片全变 404。
+  // 注意 data 目录是 750（只有服务自己用），照片目录不能照抄它。
+  assert.match(BOOTSTRAP(), /chmod 755 "\$IMAGE_DIR"/,
+    '照片目录必须放行到 755，否则 nginx 读不到');
+
+  const bootstrap = BOOTSTRAP();
+  assert.match(bootstrap, /mkdir -p[^\n]*"\$IMAGE_DIR"/, 'bootstrap.sh 没有创建照片目录');
+  assert.ok(!/chmod 750 "\$IMAGE_DIR"/.test(bootstrap),
+    '照片目录不能是 750 —— 那是 data 目录的权限，nginx 进不去');
+});
+
+test('部署：升级路径 —— 已装好的服务器也要能拿到照片目录', () => {
+  // bootstrap.sh 只在最初跑一次，已经在跑的服务器不会重跑它。
+  // 所以「加图片功能」这一版必须由 deploy.sh 补上目录和 unit 文件，
+  // 否则线上既没有目录、unit 里也没有 ReadWritePaths。
+  const d = DEPLOY_SH();
+
+  assert.match(d, /install -d[^\n]*"\$IMAGE_DIR"/,
+    'deploy.sh 要幂等地把照片目录建出来（bootstrap 不会再跑）');
+  assert.match(d, /755/, 'deploy.sh 建的目录也要是 755，nginx 才读得到');
+
+  // unit 文件同样要在发布时同步 —— 否则改了 ReadWritePaths 线上永远不生效
+  assert.match(d, /bazaar\.service/, 'deploy.sh 要同步 systemd 单元文件');
+  assert.match(d, /daemon-reload/, '换了 unit 文件必须 daemon-reload');
+});
+
+test('部署：nginx 的 body 上限必须大于应用自己的上限', () => {
+  // 反过来的话，超限请求会被 nginx 用一个 HTML 的 413 挡掉，
+  // 小程序那边只能显示「网络错误」，看不出是图太大。
+  // 让应用先接住，才能给出「图片不能超过 2048KB」这句人话。
+  const m = /client_max_body_size\s+(\d+)m/.exec(NGINX());
+  assert.ok(m, 'nginx 没有设置 client_max_body_size');
+
+  const nginxLimit = Number(m[1]) * 1024 * 1024;
+  assert.ok(nginxLimit > MAX_IMAGE_BODY_BYTES,
+    `nginx 的 ${m[1]}m 必须大于应用的 ${MAX_IMAGE_BODY_BYTES} 字节，` +
+    `否则用户看到的是 nginx 的 413 页面而不是我们的提示`);
+});
+
+test('部署：照片交给 nginx 直接发，不要反代到 Node', () => {
+  const block = /location \/images\/\s*\{[^}]*\}/s.exec(NGINX())[0];
+  assert.ok(!/proxy_pass/.test(block),
+    '照片是静态文件，让 Node 读进内存再吐出去纯属浪费，还会占住那个单线程');
+  assert.match(block, /expires\s+\d+d/, '文件名带随机串、内容不变，可以长缓存');
+  assert.ok(!/try_files/.test(block),
+    'try_files 和 alias 一起用是有名的坑：$uri 带着 /images/ 前缀会和 alias 再拼一次');
 });
 
 test('部署：检测域名占位符时必须锚定 server_name，不能扫整个文件', () => {

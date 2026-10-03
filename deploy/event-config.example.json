@@ -6,7 +6,15 @@
     "所以「再补几件物品」= 在 items 里追加几行，然后重跑。",
     "线上要放在仓库外面（deploy 会 git reset --hard，仓库里的改动会被冲掉），",
     "例如 /srv/bazaar/event.json，然后：",
-    "  sudo -u bazaar DB_PATH=/srv/bazaar/data/bazaar.db node /srv/bazaar/app/scripts/init-event.mjs /srv/bazaar/event.json --yes"
+    "  sudo -u bazaar DB_PATH=/srv/bazaar/data/bazaar.db IMAGE_DIR=/srv/bazaar/images \\",
+    "    node /srv/bazaar/app/scripts/init-event.mjs /srv/bazaar/event.json --yes",
+    "",
+    "★ 物品可以配照片，加一个 image 字段，写**相对本文件所在目录**的图片路径：",
+    "    { \"name\": \"手作黄油曲奇\", \"totalQuota\": 12, \"image\": \"photos/cookie.jpg\" }",
+    "  也就是 event.json 旁边放一个 photos/ 目录。只收 JPG / PNG / WebP / GIF，",
+    "  单张不超过 2MB，建议先在电脑上压到 800×800 左右（约 150KB）。",
+    "  这个示例里故意没写 image —— 照抄的人手上不一定有那张图，",
+    "  写了会让整个脚本因为「图片读不到」而拒绝运行。"
   ],
 
   "event": {

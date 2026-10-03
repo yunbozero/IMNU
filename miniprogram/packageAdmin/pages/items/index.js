@@ -14,7 +14,8 @@
  */
 import * as api from '../../../services/api.js';
 import * as session from '../../../services/session.js';
-import { quotaText, quotaLevel, quotaPercent } from '../../../utils/format.js';
+import { quotaText, quotaLevel, quotaPercent, imageUrl } from '../../../utils/format.js';
+import { pickAndUploadImage, reportImageResult } from '../../utils/image-upload.js';
 
 const STATUS_TEXT = { on_sale: '在售', off_shelf: '已下架' };
 
@@ -27,6 +28,7 @@ function decorate(it) {
     quotaText: quotaText(it),
     level: quotaLevel(it),
     percent: quotaPercent(it),
+    imageUrl: imageUrl(it),
   };
 }
 
@@ -76,6 +78,42 @@ Page({
   /** 去新建物品页。建完它自己会退回来，本页 onShow 会重新拉一次。 */
   goNew() {
     wx.navigateTo({ url: '/packageAdmin/pages/item-new/index' });
+  },
+
+  /**
+   * 换图 / 补图 / 清空。
+   *
+   * ★ 已建的物品没有别的办法改图 —— 而物品又删不掉（只能下架），
+   *   所以这张图一旦配错，没有这个按钮就永远错着。
+   */
+  async changeImage(e) {
+    const id = e.currentTarget.dataset.id;
+    const row = this.data.list.find((x) => x.id === id);
+    if (!row || this.data.busyId) return;
+
+    // 已经有图的，先问一句是要换还是要清掉 —— 否则「换图」没法表达「不要图了」
+    if (row.imageUrl) {
+      const pick = await new Promise((resolve) => {
+        wx.showActionSheet({
+          itemList: ['换一张', '不要图片了'],
+          success: (r) => resolve(r.tapIndex),
+          fail: () => resolve(-1),
+        });
+      });
+      if (pick === 1) return this.setImage(id, null);
+      if (pick !== 0) return undefined;
+    }
+
+    const up = await pickAndUploadImage({ token: session.getToken() });
+    reportImageResult(up);
+    if (!up.ok) return undefined;
+
+    return this.setImage(id, up.image);
+  },
+
+  /** 把图片字段同步到服务端，并用返回的那一行替换本地那一行 */
+  setImage(itemId, image) {
+    return this.patch(itemId, { image });
   },
 
   toggleShelf(e) {

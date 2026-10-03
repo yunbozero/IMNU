@@ -494,6 +494,7 @@ test('新建物品：本地的表单校验要拦在提交之前', () => {
     description: '独立包装，一盒六块',
     emoji: '🍪',
     tint: 't-blue',
+    image: null,                    // 没配照片就是 null，服务端认这个值
     totalQuota: 12,                 // 输入框给的是字符串，要转成数字
     stallId: 'st_1',
   });
@@ -592,4 +593,125 @@ test('新建物品：提交时打的是服务端真正有的那个接口', () =>
   // 权限判定不能只写在界面上，但界面上也必须有（不然学生点进去是一片空白表单）
   assert.match(js, /session\.isManager\(\)/, '页面要先自己判一次权限');
 });
+
+/* ============================================================
+   物品照片
+   ============================================================ */
+
+test('照片：小程序那边的体积上限必须和服务端一致', async () => {
+  const client = await import('../miniprogram/packageAdmin/utils/image-upload.js');
+  const server = await import('../server/images.mjs');
+
+  // 客户端也拦一道是为了省流量；两边不一致的话，
+  // 「客户端放行、服务端 413」会让用户白等一次上传
+  assert.equal(client.MAX_IMAGE_BYTES, server.MAX_IMAGE_BYTES, '体积上限两边不一致');
+  assert.equal(client.MAX_IMAGE_BASE64, server.MAX_IMAGE_BASE64, 'base64 上限两边不一致');
+});
+
+test('照片：图片地址在模拟器和真机上各自拼对', async () => {
+  const { imageUrl } = await import('../miniprogram/utils/format.js');
+  const { BASE_URL } = await import('../miniprogram/config.js');
+  const { pickBaseUrl } = await import('../miniprogram/config.js');
+
+  // 在 Node 里读不到 wx，所以 BASE_URL 保守取线上地址 —— 这正是设计意图
+  assert.equal(imageUrl({ image: 'img_abc.jpg' }), `${BASE_URL}/images/img_abc.jpg`);
+
+  // 没有照片时必须是空串，模板靠它决定回落 emoji（返回 null 会让 wx:if 也假，
+  // 但字符串拼接会拼出 "null" 来）
+  for (const item of [null, undefined, {}, { image: null }, { image: '' }]) {
+    assert.equal(imageUrl(item), '', `${JSON.stringify(item)} 应当没有图片地址`);
+  }
+
+  // ★ 地址是按「跑在哪儿」选的：模拟器连本机，真机连线上。
+  //   照片地址复用同一个 BASE_URL，所以不用额外配一遍。
+  assert.match(pickBaseUrl({ platform: 'devtools' }), /^http:\/\/127\.0\.0\.1:3000$/);
+  assert.match(pickBaseUrl({ platform: 'android' }), /^https:\/\//);
+});
+
+test('照片：界面确实把图片渲染出来了，而且没照片时回落 emoji', () => {
+  // 五处要显示物品图的地方，一个都不能漏 —— 漏掉的那一页会一直显示 emoji，
+  // 而且不报错，只有肉眼能发现
+  const sites = [
+    'packageBazaar/pages/items/index.wxml',
+    'packageBazaar/pages/detail/index.wxml',
+    'packageBazaar/pages/my-reservations/index.wxml',
+    'packageAdmin/pages/items/index.wxml',
+  ];
+  for (const f of sites) {
+    const src = read(path.join(MP, f));
+    assert.match(src, /item\.imageUrl/, `${f} 没有渲染图片`);
+    assert.match(src, /thumb-img/, `${f} 缺图片样式类`);
+    assert.match(src, /mode="aspectFill"/,
+      `${f} 要用 aspectFill —— 手机照片不是正方形，不裁会在卡片里被压扁`);
+  }
+
+  // 每一处都必须有回落分支，否则没配图的物品那一格就是空白
+  const detail = read(path.join(MP, 'packageBazaar/pages/detail/index.wxml'));
+  assert.match(detail, /wx:else[^>]*>\{\{item\.emoji \|\| '🎁'\}\}/s,
+    '没有照片时要回落到 emoji');
+
+  // 详情页的大图和小图都要换，只换一处的话弹层里还是 emoji
+  assert.equal((detail.match(/thumb-img/g) || []).length, 2,
+    '详情页的大图和确认弹层的小图都要显示照片');
+});
+
+test('照片：三个页面都算出了 imageUrl（模板不自己拼）', () => {
+  // 模板里做不了字符串拼接（BASE_URL 在 JS 里），所以每个渲染图片的页面
+  // 都要在 JS 里把 imageUrl 算好塞进 data
+  const pages = [
+    'packageBazaar/pages/items/index.js',
+    'packageBazaar/pages/detail/index.js',
+    'packageBazaar/pages/my-reservations/index.js',
+    'packageAdmin/pages/items/index.js',
+  ];
+  for (const f of pages) {
+    const src = read(path.join(MP, f));
+    assert.match(src, /imageUrl\(/, `${f} 没有算 imageUrl`);
+    assert.match(src, /imageUrl[^,}]*\n?\s*[,}]/, `${f} 算完没塞进 data`);
+  }
+});
+
+test('照片：选图压缩上传只写一遍，两个页面共用', () => {
+  const up = read(path.join(MP, 'packageAdmin/utils/image-upload.js'));
+
+  // 微信内置的三个 API，缺一不可
+  assert.match(up, /wx\.chooseMedia\(/, '要用 chooseMedia 选图');
+  assert.match(up, /sizeType:\s*\['compressed'\]/,
+    "★ 必须带 sizeType: ['compressed'] —— 让微信直接给压缩版，比任何补救都管用");
+  assert.match(up, /wx\.compressImage\(/, '要再压一道兜底');
+
+  // 取消不是错误：用户点了取消不该弹提示
+  assert.match(up, /cancelled:\s*true/, '取消要和失败区分开');
+
+  // 压缩失败不能变成「传不了图」
+  assert.match(up, /fail:\s*\(\)\s*=>\s*resolve\(src\)/, '压缩失败要回落到原图');
+
+  // 传图要转圈，不然一两秒没反馈像是点空了
+  assert.match(up, /wx\.showLoading\(/, '上传要有 loading');
+  assert.match(up, /wx\.hideLoading\(/, '别让 loading 留在屏幕上');
+
+  // 两张页面都要用它，不能各写一份选图逻辑
+  for (const f of ['packageAdmin/pages/item-new/index.js', 'packageAdmin/pages/items/index.js']) {
+    assert.match(read(path.join(MP, f)), /pickAndUploadImage/, `${f} 没有用共用的上传模块`);
+  }
+
+  // 新建物品页只负责把文件名透传给建物品接口，不自己拼 base64
+  const form = read(path.join(MP, 'packageAdmin/utils/item-form.js'));
+  assert.match(form, /image/, '表单要带上 image 字段');
+  assert.ok(!/base64/i.test(form), '表单模块不该碰 base64 —— 那是上传模块的事');
+});
+
+test('照片：已建的物品必须能换图', () => {
+  // 物品删不掉（只能下架），所以图一旦配错，没有换图按钮就永远错着
+  const js = read(path.join(MP, 'packageAdmin/pages/items/index.js'));
+  assert.match(js, /changeImage/, '物品名额页要有换图入口');
+  assert.match(js, /api|patch/, '换图要真的发出去');
+
+  const wxml = read(path.join(MP, 'packageAdmin/pages/items/index.wxml'));
+  assert.match(wxml, /bindtap="changeImage"/);
+
+  // 已经有图时要能选「不要图片了」—— 否则「换图」没法表达"删掉"
+  assert.match(js, /不要图片了|clearImage/, '要能清空图片');
+});
+
 

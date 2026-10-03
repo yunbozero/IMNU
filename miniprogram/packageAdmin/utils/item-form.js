@@ -81,6 +81,11 @@ export function buildCreateBody(form = {}, stalls = []) {
   // 配色认不出来就回落到第一个，而不是把非法值发给服务端 —— 那只会白挨一次 400
   const tint = TINTS.some((t) => t.key === form.tint) ? form.tint : TINTS[0].key;
 
+  // 照片**只透传文件名**，不做本地校验：文件是选图时就已经传上去的，
+  // 而「这个文件到底在不在」只有服务端说了算（它会查磁盘）。这里拦一道
+  // 反而会拦不住真正的问题，白让用户多挨一次错。
+  const image = form.image ? String(form.image) : null;
+
   return {
     ok: true,
     body: {
@@ -88,6 +93,7 @@ export function buildCreateBody(form = {}, stalls = []) {
       description,
       emoji,
       tint,
+      image,
       totalQuota,
       stallId: stallIdAt(stalls, form.stallIndex),
     },
