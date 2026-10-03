@@ -467,6 +467,26 @@ test('部署：内蒙古管局的额外要求记在手册里，别丢', () => {
   assert.match(doc, /与全国通用口径不同/, '要写明「不允许变更主体」与通用 FAQ 冲突');
 });
 
+test('部署：★ nginx 站点不会被自动覆盖，但照片 location 缺失时必须喊出来', () => {
+  // 这台机器上 certbot 已经接管了 /etc/nginx/sites-available/bazaar（加了证书和 443）。
+  // 所以 bootstrap.sh 每次都会**跳过**安装仓库里的 nginx.conf，deploy.sh 也从不碰它
+  // —— 仓库里 nginx.conf 的改动（比如新增 location /images/）永远到不了线上。
+  // 后果很隐蔽：nginx 的 location / 会先把 /images/ 接走，去 /srv/bazaar/www 找文件，
+  // **线上照片全部 404**，而本地和测试里一切正常。
+  const d = DEPLOY_SH();
+
+  // 不能自动覆盖 —— 那会抹掉 certbot 写进去的 HTTPS 配置
+  assert.ok(!/install[^\n]*nginx\.conf[^\n]*\$NGINX_SITE/.test(d),
+    'deploy.sh 不能把 nginx.conf 盖到线上 —— certbot 的证书配置就在那个文件里');
+  assert.ok(!/cp[^\n]*nginx\.conf/.test(d), '同上');
+
+  // 但必须检测 + 提示
+  assert.match(d, /location \/images\//, '要检测线上有没有 /images/ 的 location');
+  assert.match(d, /NGINX_SITE=/, '要指向 /etc/nginx/sites-available/$SERVICE');
+  assert.match(d, /nginx -t/, '要告诉用户改完怎么验证配置');
+  assert.match(d, /reload nginx/, '要告诉用户怎么让它生效');
+});
+
 test('部署：bootstrap.sh 不能冲掉 certbot 装好的 TLS 配置', () => {
   // certbot --nginx 改的是**安装后**的 /etc/nginx/sites-available/bazaar，
   // 而 bootstrap.sh 每次都从仓库装一份 HTTP-only 的 nginx.conf。

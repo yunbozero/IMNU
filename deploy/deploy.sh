@@ -115,6 +115,26 @@ else
   warn "找不到 $ENV_FILE —— 服务能起来，但登录一定失败"
 fi
 
+# ---------- 3.7 nginx 站点配置检查 ----------
+# ★ 这里**故意不自动覆盖** /etc/nginx/sites-available/$SERVICE。
+#   原因：`certbot --nginx` 会把证书和 443 的 server 块**直接写进那个文件**，
+#   拿仓库里这份 HTTP-only 的配置盖上去，HTTPS 配置会一起被抹掉 —— 网站当场变砖。
+#   （bootstrap.sh 里有同样的顾虑，所以它检测到 ssl_certificate 就跳过安装。）
+#   于是仓库里 nginx.conf 的改动**永远不会自动生效**，只能人工合并。
+#   那就至少要做到：改动没生效时，每次发布都喊出来。
+NGINX_SITE=/etc/nginx/sites-available/$SERVICE
+if [ -f "$NGINX_SITE" ]; then
+  if ! grep -q 'location /images/' "$NGINX_SITE"; then
+    warn "nginx 站点里没有 /images/ 的 location —— **线上物品照片会全部 404**"
+    warn "  （Node 那边其实实现了一份，但 location / 会先把 /images/ 接走，"
+    warn "    去 /srv/bazaar/www 找文件，轮到不 Node）"
+    warn "  修法：把 deploy/nginx.conf 里那段 location /images/ 合并进 $NGINX_SITE，然后"
+    warn "    sudo nginx -t && sudo systemctl reload nginx"
+  fi
+else
+  warn "找不到 $NGINX_SITE —— nginx 还在用默认站点？"
+fi
+
 # ---------- 4. 重启 ----------
 log "重启 $SERVICE"
 

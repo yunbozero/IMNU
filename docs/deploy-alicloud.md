@@ -465,8 +465,24 @@ sudo -u bazaar DB_PATH=/srv/bazaar/data/bazaar.db \
 
 照片存在 `/srv/bazaar/images/`，**nginx 直接发文件**（不走 Node）。
 
-升级到「有照片功能」这一版，`deploy.sh` 会自己把照片目录补上（`install -d`，幂等）。
-发布完确认一下权限就够：
+> ⚠️ **这一段 nginx 配置必须人工合并，不会自动生效。**
+> `certbot --nginx` 把证书和 443 的 server 块**直接写进了**
+> `/etc/nginx/sites-available/bazaar`，而 `bootstrap.sh` 检测到 `ssl_certificate`
+> 就会**跳过**安装仓库里的 `nginx.conf`（否则会把 HTTPS 配置一起抹掉，网站当场变砖）。
+> `deploy.sh` 也不会去碰它。
+>
+> 所以仓库里新增的 `location /images/` 到不了线上，后果是：
+> **nginx 的 `location /` 会先把 `/images/...` 接走**，去 `/srv/bazaar/www` 找文件，
+> **线上物品照片全部 404** —— 而本地和自动化测试里一切正常，Node 那个处理器根本轮不到。
+>
+> 合并方法：把 `deploy/nginx.conf` 里的 `location /images/ { … }` 整段
+> 贴进 `/etc/nginx/sites-available/bazaar`（放在 `location /api/` 旁边就行），然后
+> ```bash
+> sudo nginx -t && sudo systemctl reload nginx
+> ```
+> `deploy.sh` 每次发布都会检查这一段在不在，缺了就警告，所以不会忘。
+
+`deploy.sh` 会自己把照片目录补上（`install -d`，幂等）。发布完确认一下权限：
 
 ```bash
 ls -ld /srv/bazaar/images
