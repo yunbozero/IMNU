@@ -258,3 +258,28 @@ test('联调清单：文档在，里面的命令真实存在，关键警告没�
   assert.match(doc, /miniprogram/, '必须说明导入的是哪一层目录');
   assert.match(doc, /绝不可用|不能上线|绝不能上/, '必须警告假登录和种子数据不能上线');
 });
+
+test('联调：dev 带 --watch，start 绝不能带（线上是 systemd 起的）', () => {
+  // 这个坑踩过两次：改完 server/ 忘了重启，开发者工具里报「接口不存在」，
+  // 而代码明明是对的。所以本地开发给一个 `npm run dev`（node --watch）。
+  //
+  // ★ 但 `start` 必须保持普通 node —— 它是 bazaar.service 的 ExecStart。
+  //   在 systemd 下跑监听模式会导致重启风暴，而且看日志完全看不出原因。
+  const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+
+  assert.ok(pkg.scripts.dev, 'package.json 要有 dev（本地开发用它，改完 server/ 自动重启）');
+  assert.match(pkg.scripts.dev, /--watch/, 'dev 必须带 --watch，否则这个脚本就白加了');
+  assert.match(pkg.scripts.dev, /server\/http\.mjs/, 'dev 起的要和 start 是同一个入口');
+
+  assert.doesNotMatch(pkg.scripts.start, /--watch/,
+    'start 是 systemd 的 ExecStart，绝不能带 --watch');
+
+  // 文档也要指向它，否则没人知道有这个命令
+  const doc = fs.readFileSync(path.join(ROOT, 'docs', 'local-dev.md'), 'utf8');
+  assert.match(doc, /npm run dev/, '联调手册里要写明本地开发用 npm run dev');
+
+  // 单元文件起的必须还是那个不带 watch 的
+  const unit = fs.readFileSync(path.join(ROOT, 'deploy', 'bazaar.service'), 'utf8');
+  assert.match(unit, /ExecStart=.*server\/http\.mjs/, '单元文件要起 server/http.mjs');
+  assert.doesNotMatch(unit, /--watch/, '线上服务不能跑在监听模式下');
+});

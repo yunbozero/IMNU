@@ -7,6 +7,7 @@
   "scripts": {
     "test": "node tests/all.mjs",
     "start": "node server/http.mjs",
+    "dev": "node --watch server/http.mjs",
     "set-owner": "node scripts/set-owner.mjs",
     "set-role": "node scripts/set-role.mjs",
     "seed": "node scripts/seed-dev.mjs",
