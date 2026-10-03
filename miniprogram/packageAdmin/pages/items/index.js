@@ -119,9 +119,44 @@ Page({
     return this.setImage(id, up.image);
   },
 
-  /** 把图片字段同步到服务端，并用返回的那一行替换本地那一行 */
+  /**
+   * 把图片字段同步到服务端，并用返回的那一行替换本地那一行
+   */
   setImage(itemId, image) {
     return this.patch(itemId, { image });
+  },
+
+  /**
+   * 删除物品（软删除）。**删除后学生端就看不见了** —— 这是它和「下架」的区别：
+   * 下架只是不能预定，学生仍然看得到（灰掉那一张）。
+   *
+   * 走的是同一条改物品的接口（`status: 'deleted'`）。服务端会拦住
+   * 「还有待取货的预定」的情况，并把原因写在 message 里，直接弹出来即可 ——
+   * 不然学生定好的东西会从列表里凭空消失。
+   */
+  async removeItem(e) {
+    const id = e.currentTarget.dataset.id;
+    const row = this.data.list.find((x) => x.id === id);
+    if (!row || this.data.busyId) return undefined;
+
+    const ok = await new Promise((resolve) => {
+      wx.showModal({
+        title: `删除「${row.name}」？`,
+        content: '删除后学生端就看不到它了，小程序里没有「恢复」。'
+          + '如果已经有人预定，要先在名单里取消那几笔。',
+        confirmText: '删除',
+        confirmColor: '#C6432F',
+        success: (r) => resolve(!!r.confirm),
+        fail: () => resolve(false),
+      });
+    });
+    if (!ok) return undefined;
+
+    if (await this.patch(id, { status: 'deleted' })) {
+      // 删掉的这一行不该继续留在列表里（服务端已经不再返回它了）
+      this.setData({ list: this.data.list.filter((x) => x.id !== id) });
+    }
+    return undefined;
   },
 
   toggleShelf(e) {
@@ -153,8 +188,13 @@ Page({
     return this.patch(id, { quotaDelta: delta });
   },
 
+  /**
+   * 改物品的公共出口。**返回是否成功** —— 删除那一处要靠它决定
+   * 「要不要把这一行从列表里去掉」：失败时（比如还有待取货的预定被服务端拦下）
+   * 那一行必须留着，否则管理员会以为删成功了。
+   */
   async patch(itemId, body) {
-    if (this.data.busyId) return;      // 防连点：连点两下名额就多加一次
+    if (this.data.busyId) return false;   // 防连点：连点两下名额就多加一次
 
     this.setData({ busyId: itemId });
     try {
@@ -167,8 +207,10 @@ Page({
       this.setData({
         list: this.data.list.map((x) => (x.id === itemId ? decorate({ ...x, ...r.item }) : x)),
       });
+      return true;
     } catch (err) {
       session.handleError(err);
+      return false;
     } finally {
       this.setData({ busyId: '' });
     }

@@ -80,6 +80,12 @@
         disabled="{{busyId === item.id}}"
         bindtap="toggleShelf"
       >{{item.offShelf ? '重新上架' : '下架'}}</button>
+      <button
+        class="op op--del"
+        data-id="{{item.id}}"
+        disabled="{{busyId === item.id}}"
+        bindtap="removeItem"
+      >删除</button>
     </view>
   </view>
 

@@ -1104,6 +1104,32 @@ test('退出登录：文案不能说「退出后要重新登记」（那是假�
     '退出要真的清掉本机会话');
 });
 
+test('管理端物品页：删除物品要能到达，而且要说清它和下架的区别', () => {
+  const js = read(path.join(MP, 'packageAdmin/pages/items/index.js'));
+  const wxml = read(path.join(MP, 'packageAdmin/pages/items/index.wxml'));
+
+  assert.match(wxml, /bindtap="removeItem"/, '物品名额页要有删除入口');
+  assert.match(js, /removeItem/, '要真的实现');
+
+  // 删除是不可逆的（小程序里没有恢复），必须确认
+  const fn = /async removeItem\(e\)[\s\S]*?\n  \},/.exec(js);
+  assert.ok(fn, '找不到 removeItem');
+  assert.match(fn[0], /showModal/, '删除要弹确认');
+  assert.match(fn[0], /status: 'deleted'/, '走的是把状态改成 deleted（软删除）');
+  assert.match(fn[0], /学生端就看不到/, '要说清后果 —— 这正是「删除」和「下架」的区别');
+
+  // ★ patch 必须返回成功与否：删除失败时（比如还有待取货的预定被服务端拦下）
+  //   那一行还得留着，否则管理员会以为删成功了
+  assert.match(js, /async patch\(itemId, body\)[\s\S]*?return true;/, 'patch 成功要返回 true');
+  assert.match(js, /return false;/, 'patch 失败要返回 false');
+  assert.match(fn[0], /if \(await this\.patch\(/, '只有成功才把那一行从列表里移除');
+});
+
+test('管理端物品页：删除按钮要能一眼认出来（不可逆）', () => {
+  const wxss = read(path.join(MP, 'packageAdmin/pages/items/index.wxss'));
+  assert.match(wxss, /\.op--del\s*\{[^}]*var\(--danger\)/, '删除按钮要用警示色，别和普通操作长得一样');
+});
+
 /* ============================================================
    物品照片
    ============================================================ */

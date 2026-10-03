@@ -287,11 +287,20 @@ export function createSqliteRepository(db) {
 
     /* ---------------- 物品 ---------------- */
 
-    listItems(eventId, { onlyOnSale = false } = {}) {
-      const sql = onlyOnSale
-        ? `SELECT * FROM items WHERE event_id = ? AND status = 'on_sale' ORDER BY created_at`
-        : `SELECT * FROM items WHERE event_id = ? ORDER BY created_at`;
-      return db.prepare(sql).all(eventId).map(mapItem);
+    /**
+     * 物品列表。
+     *
+     * ★ 默认**排除已删除的**（status='deleted'）。
+     *   删除是软删除 —— 见 updateItem 的说明：预定记录通过外键指向物品，
+     *   真把行删掉，名单上的「物品名」就断了，学生已经定好的东西会凭空消失。
+     */
+    listItems(eventId, { onlyOnSale = false, includeDeleted = false } = {}) {
+      const where = ['event_id = ?'];
+      if (onlyOnSale) where.push("status = 'on_sale'");
+      else if (!includeDeleted) where.push("status != 'deleted'");
+
+      return db.prepare(`SELECT * FROM items WHERE ${where.join(' AND ')} ORDER BY created_at`)
+        .all(eventId).map(mapItem);
     },
 
     getItem(id) {
@@ -523,7 +532,7 @@ export function createSqliteRepository(db) {
     },
 
     /**
-     * 改物品：上下架、增减名额、换图。
+     * 改物品：上下架、增减名额、换图、软删除。
      *
      * 名额用增量而不是绝对值，并且会拦住两种会破坏账目的改法：
      *   - 把总数压到已锁定数量以下（已经有 10 个人预定了，总数不能设成 5）
@@ -532,9 +541,15 @@ export function createSqliteRepository(db) {
      * ★ image 是**三态**：不传（undefined）= 不动；null = 清掉；文件名 = 换成它。
      *   不能照抄 status 那种「null 表示不动」的写法 —— 对图片来说 null 是个
      *   有意义的值（把图删掉，回落到 emoji）。
+     *
+     * ★ status 里的 `deleted` 是**软删除**：行还在，只是从学生端和物品列表里消失。
+     *   为什么不真删行：reservations.item_id 是指向 items 的外键，
+     *   真删了之后名单上「物品名」那一列会变成空 —— 学生明明定过，
+     *   现场却查不出他定的是什么。已经核销过的记录更是对账凭据，不能断。
+     *   所以名字保留 `deleted`，而不是叫 `removed`：它描述的是状态，不是权限。
      */
     updateItem({ itemId, status = null, quotaDelta = 0, image = undefined }) {
-      if (status !== null && !['on_sale', 'off_shelf'].includes(status)) {
+      if (status !== null && !['on_sale', 'off_shelf', 'deleted'].includes(status)) {
         throw new Error(`未知的物品状态：${status}`);
       }
       if (!Number.isInteger(quotaDelta)) throw new Error('quotaDelta 必须是整数');

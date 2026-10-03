@@ -926,6 +926,111 @@ test('摊位：入参错误 / 重名 / 没有在售活动，都要说清楚', as
 });
 
 /* ============================================================
+   删除物品（软删除）
+   ============================================================ */
+
+const del = (ctx, token, itemId) => call(ctx, 'POST', '/api/admin/item', {
+  token, body: { itemId, status: 'deleted' },
+});
+
+test('删除物品：删完学生端就看不见了，也定不了', async () => {
+  const ctx = await startTestServer();
+  try {
+    assert.equal((await call(ctx, 'GET', '/api/items')).body.items.length, 1, '前提：它在列表里');
+
+    const r = await del(ctx, ctx.tokens['code-deputy'], ctx.ids.itemId);
+    assert.equal(r.body.ok, true, JSON.stringify(r.body));
+    assert.equal(r.body.item.status, 'deleted');
+
+    // ★ 学生端看不见 —— 这正是「删除」要的效果（下架做不到：下架学生还看得到，只是灰掉）
+    assert.equal((await call(ctx, 'GET', '/api/items')).body.items.length, 0);
+    assert.equal((await call(ctx, 'GET', '/api/event')).body.event.id, ctx.ids.eventId);
+
+    // 就算手上还开着旧页面，也定不了
+    const res = await call(ctx, 'POST', '/api/reserve', {
+      token: ctx.tokens['code-student'],
+      body: { itemId: ctx.ids.itemId, requestId: 'del-1' },
+    });
+    assert.equal(res.body.ok, false);
+
+    assert.equal(auditDetail(ctx, 'item.update').after.status, 'deleted');
+  } finally { await ctx.close(); }
+});
+
+test('删除物品：★ 还有待取货的预定时要拦住', async () => {
+  const ctx = await startTestServer();
+  try {
+    // 有人定了这件东西
+    await call(ctx, 'POST', '/api/reserve', {
+      token: ctx.tokens['code-student'],
+      body: { itemId: ctx.ids.itemId, requestId: 'del-pending' },
+    });
+
+    const r = await del(ctx, ctx.tokens['code-deputy'], ctx.ids.itemId);
+    assert.equal(r.body.ok, false);
+    assert.equal(r.body.error, 'item_has_pending');
+    assert.match(r.body.message, /先取消/, '要告诉他下一步做什么');
+    assert.equal((await call(ctx, 'GET', '/api/items')).body.items.length, 1,
+      '拒绝时不能真删掉');
+
+    // 取消那笔之后就能删了
+    const list = await call(ctx, 'GET', '/api/admin/reservations', {
+      token: ctx.tokens['code-deputy'],
+    });
+    await call(ctx, 'POST', '/api/admin/cancel', {
+      token: ctx.tokens['code-deputy'],
+      body: { reservationId: list.body.reservations[0].id, reason: '物品撤了' },
+    });
+    assert.equal((await del(ctx, ctx.tokens['code-deputy'], ctx.ids.itemId)).body.ok, true);
+  } finally { await ctx.close(); }
+});
+
+test('删除物品：已经核销过的不挡删除（那笔已经完成）', async () => {
+  const ctx = await startTestServer();
+  try {
+    const res = await call(ctx, 'POST', '/api/reserve', {
+      token: ctx.tokens['code-student'],
+      body: { itemId: ctx.ids.itemId, requestId: 'del-redeemed' },
+    });
+    await call(ctx, 'POST', '/api/redeem', {
+      token: ctx.tokens['code-vol'], body: { code: res.body.reservation.code },
+    });
+
+    assert.equal((await del(ctx, ctx.tokens['code-deputy'], ctx.ids.itemId)).body.ok, true);
+
+    // ★ 删完之后，那条核销记录里的物品名还得在 —— 对账凭据不能断
+    const list = await call(ctx, 'GET', '/api/admin/reservations', {
+      token: ctx.tokens['code-deputy'],
+    });
+    assert.equal(list.body.reservations[0].itemName, '手作黄油曲奇',
+      '软删除的意义就在这里：真删行的话这里是 null');
+    assert.equal(list.body.reservations[0].status, 'redeemed');
+  } finally { await ctx.close(); }
+});
+
+test('删除物品：学生和志愿者删不掉', async () => {
+  const ctx = await startTestServer();
+  try {
+    for (const code of ['code-student', 'code-vol']) {
+      const r = await del(ctx, ctx.tokens[code], ctx.ids.itemId);
+      assert.equal(r.status, 403, `${code} 不该能删物品`);
+    }
+    assert.equal((await call(ctx, 'GET', '/api/items')).body.items.length, 1);
+  } finally { await ctx.close(); }
+});
+
+test('删除物品：状态名写错要拒', async () => {
+  const ctx = await startTestServer();
+  try {
+    const r = await call(ctx, 'POST', '/api/admin/item', {
+      token: ctx.tokens['code-deputy'],
+      body: { itemId: ctx.ids.itemId, status: 'removed' },
+    });
+    assert.equal(r.status, 400, '只认 on_sale / off_shelf / deleted，不能有近义词');
+  } finally { await ctx.close(); }
+});
+
+/* ============================================================
    运行期设置：每账号预定上限
    ============================================================ */
 

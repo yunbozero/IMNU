@@ -156,6 +156,40 @@ export function describeRepositoryContract(label, makeRepo) {
     } finally { cleanup && cleanup(); }
   });
 
+  t('软删除：listItems 默认不返回已删除的，但行还在', () => {
+    const { repo, cleanup } = makeRepo();
+    try {
+      const { ev, item } = fixture(repo);
+      assert.equal(repo.updateItem({ itemId: item.id, status: 'deleted' }).ok, true);
+
+      assert.deepEqual(repo.listItems(ev.id).map((i) => i.id), [],
+        '默认不该返回已删除的物品（学生端就看不到了）');
+      assert.deepEqual(repo.listItems(ev.id, { onlyOnSale: true }).map((i) => i.id), []);
+      assert.deepEqual(repo.listItems(ev.id, { includeDeleted: true }).map((i) => i.id), [item.id],
+        '管理端/对账要能显式拿到它');
+
+      // ★ 行还在：预定记录通过外键指着它，真删了名单上的「物品名」就断了
+      assert.equal(repo.getItem(item.id).status, 'deleted');
+      assert.equal(repo.getItem(item.id).name, '手作黄油曲奇');
+      assert.throws(() => repo.updateItem({ itemId: item.id, status: '乱写' }), /未知的物品状态/);
+    } finally { cleanup && cleanup(); }
+  });
+
+  t('软删除：删掉之后就不能再预定了', () => {
+    const { repo, cleanup } = makeRepo();
+    try {
+      const { ev, item } = fixture(repo, { quota: 5 });
+      repo.updateItem({ itemId: item.id, status: 'deleted' });
+
+      const r = repo.tryReserve({
+        eventId: ev.id, itemId: item.id, userId: person(repo, 1).id, qty: 1,
+        requestId: 'del-1', code: code(),
+      });
+      assert.equal(r.ok, false);
+      assert.equal(repo.getItem(item.id).remainingQuota, 5, '失败时名额不动');
+    } finally { cleanup && cleanup(); }
+  });
+
   /* ============================================================
      预定：防超卖
      ============================================================ */

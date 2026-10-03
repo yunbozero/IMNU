@@ -64,6 +64,15 @@ export const STALL_LOC_MAX = 40;
 /** 场次的三个状态。和 server/db.mjs 里注释写的、以及 init-event.mjs 用的保持一致。 */
 export const EVENT_STATUSES = ['draft', 'on_sale', 'ended'];
 
+/**
+ * 物品状态。
+ * ★ `deleted` 是**软删除**：行还在，只是从学生端和物品列表里消失。
+ *   不真删行，是因为预定记录通过外键指向物品 —— 真删了，
+ *   名单上「物品名」那一列会变空，学生定过的东西现场查不出来。
+ *   `off_shelf`（下架）和它不同：下架只是不能预定，学生**还看得到**（灰掉）。
+ */
+export const ITEM_STATUSES = ['on_sale', 'off_shelf', 'deleted'];
+
 /** 图片太大时的提示。抽出来是因为它出现在两个地方，措辞必须一致。 */
 const TOO_BIG_MSG = `图片不能超过 ${Math.round(MAX_IMAGE_BYTES / 1024)}KB，请压缩后再传`;
 
@@ -678,7 +687,7 @@ export function createApi({
        管理端。门槛：deputy 及以上；改角色按 roles.mjs 的策略。
        ============================================================ */
 
-    /** 物品上下架 / 增减名额 */
+    /** 物品上下架 / 增减名额 / 换图 / 软删除 */
     adminUpdateItem({ body, user }) {
       if (!user) return fail('unauthorized', '请先登录', 401);
       if (!isManager(user)) return fail('forbidden', '你没有管理权限', 403);
@@ -687,8 +696,8 @@ export function createApi({
       if (!itemId) return fail('bad_request', '缺少 itemId', 400);
 
       const status = body?.status === undefined ? null : body.status;
-      if (status !== null && !['on_sale', 'off_shelf'].includes(status)) {
-        return fail('bad_request', '状态只能是 on_sale 或 off_shelf', 400);
+      if (status !== null && !ITEM_STATUSES.includes(status)) {
+        return fail('bad_request', `状态只能是 ${ITEM_STATUSES.join(' / ')}`, 400);
       }
 
       let quotaDelta = 0;
@@ -708,6 +717,20 @@ export function createApi({
 
       const before = repo.getItem(itemId);
       if (!before) return fail('not_found', '物品不存在', 404);
+
+      // ★ 还有待取货的预定时不许删。
+      //   「学生定好了、东西却从列表里消失」是最让人懵的一种状态；
+      //   正确的处理是先取消那几笔（管理端能取消，还得填原因），再删。
+      //   已经核销过的不管 —— 那笔交易已经完成，删物品不影响它。
+      if (status === 'deleted' && before.status !== 'deleted') {
+        const pending = repo.listEventReservations(before.eventId, { status: 'reserved' })
+          .filter((r) => r.itemId === itemId);
+        if (pending.length > 0) {
+          return fail('item_has_pending',
+            `还有 ${pending.length} 笔待取货的预定，先取消它们再删 —— `
+            + '不然学生定好的东西会从列表里凭空消失。');
+        }
+      }
 
       const r = repo.updateItem({ itemId, status, quotaDelta, image: image.value });
       if (!r.ok) return fail(r.reason, r.message || '改不了', 200);

@@ -36,3 +36,8 @@
   background: #fff; color: var(--brand);
   border: 3rpx solid var(--brand-soft);
 }
+/* 删除是不可逆的（小程序里没有恢复），所以给个一眼能认出来的样式 */
+.op--del {
+  background: #fff; color: var(--danger);
+  border: 3rpx solid #F2D8D3;
+}
