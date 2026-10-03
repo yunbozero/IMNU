@@ -43,6 +43,10 @@ const PEOPLE = {
   'code-student': { openid: 'op-s', name: '同学甲', role: 'student' },
   'code-volunteer': { openid: 'op-v', name: '志愿者', role: 'volunteer' },
   'code-deputy': { openid: 'op-d', name: '副主任', role: 'deputy' },
+  'code-admin': { openid: 'op-a', name: '一级管理员', role: 'admin' },
+  // 超管单独走 bootstrapOwner —— repo.setUserRole 拒绝直接设成 owner
+  // （reason: use_transfer），这是刻意的：超管身份只能转交。
+  'code-owner': { openid: 'op-o', name: '超管', role: 'owner' },
 };
 
 async function startTestServer({ cats: seed = [] } = {}) {
@@ -57,7 +61,8 @@ async function startTestServer({ cats: seed = [] } = {}) {
     p.id = repo.createUser({ openid: p.openid, name: p.name, role: 'student' }).user.id;
   }
   for (const p of Object.values(PEOPLE)) {
-    if (p.role !== 'student') repo.setUserRole(p.id, p.role);
+    if (p.role === 'owner') repo.bootstrapOwner(p.id);
+    else if (p.role !== 'student') repo.setUserRole(p.id, p.role);
   }
   const seeded = seed.map((c) => repo.createCat(c).cat);
   db.close();
@@ -130,21 +135,60 @@ test('图鉴：没登录也能读（tabBar 一级页面，谁打开都要看到�
   } finally { await ctx.close(); }
 });
 
-test('图鉴：学生和志愿者都不能改，副主任可以', async () => {
+test('图鉴：学生不能改，志愿者及以上可以（照片要能在校园里随手传）', async () => {
   const ctx = await startTestServer();
   try {
     const anon = await createCat(ctx, undefined, { name: '大橘' });
     assert.equal(anon.status, 401);
 
-    for (const who of ['code-student', 'code-volunteer']) {
-      const r = await createCat(ctx, ctx.tokens[who], { name: '大橘' });
-      assert.equal(r.status, 403, `${who} 不该能加猫`);
-      assert.equal(r.body.error, 'forbidden');
-    }
+    const stu = await createCat(ctx, ctx.tokens['code-student'], { name: '大橘' });
+    assert.equal(stu.status, 403, '学生不该能加猫');
+    assert.equal(stu.body.error, 'forbidden');
 
-    const ok = await createCat(ctx, ctx.tokens['code-deputy'], { name: '大橘' });
-    assert.equal(ok.status, 200, JSON.stringify(ok.body));
-    assert.equal(ok.body.cat.name, '大橘');
+    // ★ 志愿者**可以**：图鉴的门槛刻意比物品低一档。
+    //   照片是猫猫组的人在校园里拍的，他们不一定是副主任；
+    //   而图鉴改错了没有名额那种后果（不占预定、不影响名单）。
+    for (const who of ['code-volunteer', 'code-deputy']) {
+      const r = await createCat(ctx, ctx.tokens[who], { name: '测试猫' });
+      assert.equal(r.status, 200, `${who} 应当能加猫：${JSON.stringify(r.body)}`);
+      assert.equal(r.body.cat.name, '测试猫');
+    }
+  } finally { await ctx.close(); }
+});
+
+test('图鉴：传图也是志愿者及以上（否则志愿者配不了照片）', async () => {
+  // ★ 这条是「图鉴降到志愿者」的连带条件：照片走的是 /api/admin/image，
+  //   那个接口如果还是副主任+，志愿者就只能填文字、配不了图 ——
+  //   而配照片恰恰是这个功能存在的理由。
+  //
+  //   放宽是安全的：传上来的文件是**惰性的**，没人引用它就没有任何作用；
+  //   挂到物品上仍然要副主任+，挂到猫上要志愿者+。
+  const ctx = await startTestServer();
+  try {
+    const stu = await call(ctx, 'POST', '/api/admin/image', {
+      token: ctx.tokens['code-student'],
+      body: { image: Buffer.from([0xFF, 0xD8, 0xFF, 0xE0, 1, 2, 3, 4]).toString('base64') },
+    });
+    assert.equal(stu.status, 403, '学生还是不能传');
+
+    const vol = await uploadImage(ctx, ctx.tokens['code-volunteer']);
+    assert.ok(vol, '志愿者要能传图');
+  } finally { await ctx.close(); }
+});
+
+test('图鉴：物品那边的门槛没有被顺手带低（志愿者仍然不能改物品）', async () => {
+  // 降档只针对图鉴。降一个共享接口的时候最容易连坐 —— 这条专门盯着它。
+  const ctx = await startTestServer();
+  try {
+    const r = await call(ctx, 'POST', '/api/admin/item', {
+      token: ctx.tokens['code-volunteer'], body: { itemId: 'it_x', quotaDelta: 1 },
+    });
+    assert.equal(r.status, 403, '志愿者不该能改物品名额');
+
+    const del = await call(ctx, 'POST', '/api/admin/item/create', {
+      token: ctx.tokens['code-volunteer'], body: { name: '东西', totalQuota: 1 },
+    });
+    assert.equal(del.status, 403, '志愿者不该能新建物品');
   } finally { await ctx.close(); }
 });
 
@@ -311,6 +355,283 @@ test('图鉴：列表按录入顺序，不带分组', async () => {
     assert.deepEqual(r.body.cats.map((c) => c.name), ['甲', '乙', '丙'],
       '顺序就是录入顺序 —— 分组是界面的事，服务端不该插手');
   } finally { await ctx.close(); }
+});
+
+/* ============================================================
+   ★ 人员名单与提权（角色管理页靠这个接口）
+   ============================================================ */
+
+/**
+ * 提权/转交的测试环境。默认那套里就已经有一个超管（code-owner），
+ * 所以这里不需要再提谁 —— 直接复用。
+ */
+const startRoleServer = () => startTestServer();
+
+const listUsers = (ctx, token) => call(ctx, 'GET', '/api/admin/users', { token });
+
+test('人员名单：副主任及以上能看，学生不能', async () => {
+  const ctx = await startTestServer();
+  try {
+    assert.equal((await listUsers(ctx, undefined)).status, 401);
+    assert.equal((await listUsers(ctx, ctx.tokens['code-student'])).status, 403);
+    assert.equal((await listUsers(ctx, ctx.tokens['code-volunteer'])).status, 403);
+    assert.equal((await listUsers(ctx, ctx.tokens['code-deputy'])).status, 200);
+  } finally { await ctx.close(); }
+});
+
+test('人员名单：★ 不返回 openid（界面用 userId 就够，那是能定位到人的标识）', async () => {
+  const ctx = await startTestServer();
+  try {
+    const r = await listUsers(ctx, ctx.tokens['code-deputy']);
+    assert.ok(r.body.users.length >= 3);
+    for (const u of r.body.users) {
+      assert.equal(u.openid, undefined, `${u.name} 的 openid 不该出现在列表里`);
+      assert.ok(u.id && u.name && u.role && u.roleLabel, '该有的字段要有');
+    }
+  } finally { await ctx.close(); }
+});
+
+test('人员名单：★ 逐行算好「能改成哪些角色」，界面不用自己判断', async () => {
+  // 这是这一页最要紧的设计：权限规则只有 roles.mjs 一处，
+  // 界面拿到的就是「能点的按钮」。
+  const ctx = await startRoleServer();
+  const me = ctx.tokens['code-owner'];
+  try {
+    const r = await listUsers(ctx, me);
+    const by = (name) => r.body.users.find((u) => u.name === name);
+
+    // 超管自己那一行：一个按钮都没有
+    const self = by('超管');
+    assert.equal(self.role, 'owner');
+    assert.equal(self.isSelf, true);
+    assert.deepEqual(self.settable, [],
+      '★ 不能改自己的身份 —— 否则一次误点就把自己降级，系统从此没有超管');
+    assert.equal(self.canTransferOwner, false, '也不能把超管转交给自己');
+
+    // 一级管理员那一行：超管能改他，也能把身份交给他
+    const admin = by('一级管理员');
+    assert.equal(admin.canTransferOwner, true, '超管可以把身份转交给别人');
+    assert.ok(admin.settable.includes('deputy'), '超管能任命二级管理员');
+    assert.ok(admin.settable.includes('volunteer'));
+    assert.ok(admin.settable.includes('student'), '也要能撤销回学生');
+    assert.ok(!admin.settable.includes('admin'),
+      '他已经是一级了，「设为一级」是空操作，不该出现在按钮里');
+    assert.ok(!admin.settable.includes('owner'),
+      '★ 超管身份只能走「转交」，不能出现在普通改角色的按钮里');
+  } finally { await ctx.close(); }
+});
+
+test('人员名单：副主任那一档的按钮很窄（只能任命志愿者）', async () => {
+  // 服务端的 adminSetRole 门槛是副主任+，但真值表只给了他任命志愿者一项。
+  // 界面按 settable 画，所以副主任打开这一页几乎都是「你没有权限改这个人」。
+  const ctx = await startRoleServer();
+  try {
+    const r = await listUsers(ctx, ctx.tokens['code-deputy']);
+    const by = (name) => r.body.users.find((u) => u.name === name);
+
+    assert.deepEqual(by('同学甲').settable, ['volunteer'],
+      '副主任只能把学生提成志愿者 —— 别的都不该给他按钮');
+
+    assert.deepEqual(by('一级管理员').settable, [], '副主任动不了一级管理员');
+    assert.equal(by('一级管理员').canTransferOwner, false, '更不可能转交超管');
+    assert.deepEqual(by('超管').settable, [], '也动不了超管');
+
+    // 页面的门槛是一级管理员，所以这一档主要是服务端的保证 ——
+    // 但 settable 已经在界面上把它们画成「没有按钮」，不会误导人
+  } finally { await ctx.close(); }
+});
+
+test('提权走接口：改完立刻生效，并留审计日志', async () => {
+  const ctx = await startRoleServer();
+  try {
+    const before = await listUsers(ctx, ctx.tokens['code-owner']);
+    const stu = before.body.users.find((u) => u.name === '同学甲');
+
+    const r = await call(ctx, 'POST', '/api/admin/role', {
+      token: ctx.tokens['code-owner'], body: { userId: stu.id, role: 'volunteer' },
+    });
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.equal(r.body.to, 'volunteer');
+
+    const after = await listUsers(ctx, ctx.tokens['code-owner']);
+    assert.equal(after.body.users.find((u) => u.id === stu.id).role, 'volunteer');
+
+    const db = openMigrated(ctx.dbPath);
+    try {
+      const rows = db.prepare(
+        "SELECT action, target_id FROM audit_logs WHERE action = 'role.change'"
+      ).all();
+      assert.equal(rows.length, 1);
+      assert.equal(rows[0].target_id, stu.id);
+    } finally { db.close(); }
+  } finally { await ctx.close(); }
+});
+
+test('转交超管：换过去之后原来那个变成一级管理员，而且只剩一个超管', async () => {
+  const ctx = await startRoleServer();
+  const me = ctx.tokens['code-owner'];
+  try {
+    const list = await listUsers(ctx, me);
+    const admin = list.body.users.find((u) => u.name === '一级管理员');
+
+    const r = await call(ctx, 'POST', '/api/admin/transfer-owner', {
+      token: me, body: { userId: admin.id },
+    });
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.equal(r.body.to.role, 'owner');
+    assert.equal(r.body.from.role, 'admin', '★ 自己会降成一级管理员');
+
+    const db = openMigrated(ctx.dbPath);
+    try {
+      const owners = db.prepare("SELECT COUNT(*) AS c FROM users WHERE role = 'owner'").get().c;
+      assert.equal(owners, 1, '任何时刻都必须正好有一个超管');
+    } finally { db.close(); }
+  } finally { await ctx.close(); }
+});
+
+test('转交超管：不是超管就拒绝（一级管理员之间不能互相清洗）', async () => {
+  const ctx = await startRoleServer();
+  try {
+    const list = await listUsers(ctx, ctx.tokens['code-owner']);
+    const stu = list.body.users.find((u) => u.name === '同学甲');
+
+    for (const who of ['code-admin', 'code-deputy', 'code-student']) {
+      const r = await call(ctx, 'POST', '/api/admin/transfer-owner', {
+        token: ctx.tokens[who], body: { userId: stu.id },
+      });
+      assert.equal(r.status, 403, `${who} 不该能转交超管：${JSON.stringify(r.body)}`);
+      assert.equal(r.body.error, 'forbidden');
+    }
+  } finally { await ctx.close(); }
+});
+
+test('提权：一级管理员可以任命一级，但撤不掉另一个一级', async () => {
+  // roles.mjs 的真值表：GRANT.admin 含 admin（换届要多人干活），
+  // REVOKE.admin 不含 admin（多个一级之间不能互相清洗）。
+  const ctx = await startRoleServer();
+  try {
+    const list = await listUsers(ctx, ctx.tokens['code-owner']);
+    const stu = list.body.users.find((u) => u.name === '同学甲');
+
+    // 超管把学生提成一级 —— 现在有两个人是一级
+    const up = await call(ctx, 'POST', '/api/admin/role', {
+      token: ctx.tokens['code-owner'], body: { userId: stu.id, role: 'admin' },
+    });
+    assert.equal(up.status, 200, JSON.stringify(up.body));
+
+    // 一级管理员自己撤不掉另一个一级
+    const down = await call(ctx, 'POST', '/api/admin/role', {
+      token: ctx.tokens['code-admin'], body: { userId: stu.id, role: 'deputy' },
+    });
+    assert.equal(down.status, 403, JSON.stringify(down.body));
+    assert.match(down.body.message, /不能撤销/);
+
+    // 也任命不了别人当一级？—— 可以，这是明确允许的（换届要多人干活）
+    const other = list.body.users.find((u) => u.name === '志愿者');
+    const up2 = await call(ctx, 'POST', '/api/admin/role', {
+      token: ctx.tokens['code-admin'], body: { userId: other.id, role: 'admin' },
+    });
+    assert.equal(up2.status, 200, '一级管理员应当能任命一级：' + JSON.stringify(up2.body));
+  } finally { await ctx.close(); }
+});
+
+test('提权：名单里的 settable 和真正调接口的结果一致', async () => {
+  // ★ 这条防的是「界面显示能点、点了被拒」：按钮来自 settable，
+  //   而 settable 又是拿 checkRoleChange 算的 —— 两边必须是同一个判定。
+  //
+  //   每次尝试前**重新拉一次名单**：这条测试自己会改角色，
+  //   拿一开始那份快照去比就会读到过期的 settable（第一版就是这么错的）。
+  const ctx = await startRoleServer();
+  const me = ctx.tokens['code-owner'];
+  try {
+    const first = await listUsers(ctx, me);
+    const names = first.body.users.map((u) => u.name);
+    let checked = 0;
+
+    for (const name of names) {
+      const snapshot = await listUsers(ctx, me);
+      const u = snapshot.body.users.find((x) => x.name === name);
+
+      for (const role of ['student', 'volunteer', 'deputy', 'admin']) {
+        const r = await call(ctx, 'POST', '/api/admin/role', {
+          token: me, body: { userId: u.id, role },
+        });
+
+        if (role === u.role) {
+          // ★ 「设成同一个角色」这一格不进比较，原因值得写下来：
+          //   checkRoleChange 里「没变」走的是**撤销**分支（按当前角色查 REVOKE 表），
+          //   于是它的结果取决于谁在操作谁 —— 超管把学生设成学生是 403
+          //   （REVOKE.owner 里没有 student），而超管把一级设成一级是 200。
+          //   也就是说这一格本来就不统一。
+          //
+          //   但它**不可达**：settable 明确排除了当前角色，界面不会发出这种请求。
+          //   所以这里只断言「按钮不该出现」，不对接口的行为下结论 ——
+          //   为了一个界面永不发出的请求去改权限核心（roles.mjs）不划算。
+          assert.ok(!u.settable.includes(role),
+            `${u.name} 已经是 ${role}，不该给他「设为${role}」的按钮`);
+        } else {
+          const shouldPass = u.settable.includes(role);
+          // ★ 要比的是 body.ok，不是 HTTP 状态码：本仓库的约定是
+          //   「业务规则不允许 → 200 + ok:false + 能看懂的中文」，
+          //   只有「在编造请求」（reason === 'forbidden'）才给 403。
+          //   拿状态码比会漏掉一半的拒绝（超管改成学生就是 200 + ok:false）。
+          assert.equal(r.body.ok === true, shouldPass,
+            `${u.name}（${u.role}）改成 ${role}：`
+            + `settable 里${shouldPass ? '有' : '没有'}，接口却返回 ok=${r.body.ok}`
+            + `（${r.status} ${r.body.message || ''}）`);
+        }
+        checked += 1;
+
+        // 改成功了就还原，免得影响后面那些组合
+        if (r.body.ok === true && u.role !== role) {
+          const back = await call(ctx, 'POST', '/api/admin/role', {
+            token: me, body: { userId: u.id, role: u.role },
+          });
+          assert.equal(back.body.ok, true, `还原回 ${u.role} 失败：${JSON.stringify(back.body)}`);
+        }
+      }
+    }
+    assert.ok(checked >= 16, `组合太少（${checked}），这条测试就没守住什么`);
+  } finally { await ctx.close(); }
+});
+
+test('角色管理：换届的三条路必须条条通（这是踩过的坑）', () => {
+  // 这个坑值得单独钉一条：曾经三处文案都写着「换届走小程序里的转交超管」，
+  // 而那个界面**根本不存在**，同时
+  //   · set-role.mjs 的 ASSIGNABLE 排除了 owner，
+  //   · set-owner.mjs 在已有超管时直接 exit 1。
+  // 三条路全堵死 → 现任超管一毕业，系统永远卡在他身上。
+  //
+  // 现在 checkOwnerTransfer 这条接口早就有了，缺的一直是界面。
+  // 所以这里确认三件事都在，缺任何一件都要红。
+  const roleScript = read(path.join(ROOT, 'scripts', 'set-role.mjs'));
+  const ownerScript = read(path.join(ROOT, 'scripts', 'set-owner.mjs'));
+
+  // ① 界面里的转交入口（角色管理页）
+  const page = read(path.join(MP, 'packageAdmin', 'pages', 'roles', 'index.js'));
+  assert.match(page, /\/api\/admin\/transfer-owner/, '角色管理页要有转交超管的调用');
+  assert.match(page, /\/api\/admin\/role/, '也要能改角色');
+
+  // ② 两个脚本的提示不能再指向不存在的界面
+  for (const [name, src] of [['set-role.mjs', roleScript], ['set-owner.mjs', ownerScript]]) {
+    if (!/转交超管/.test(src)) continue;
+    assert.match(src, /管理端 · 角色管理/,
+      `${name} 提到了「转交超管」，就要把界面路径写全（我的 → 管理端 · 角色管理）`);
+  }
+
+  // ③ set-role 仍然不能设超管（这是刻意的：超管只能转交）
+  assert.match(roleScript, /ROLES\.filter\(\(r\) => r !== 'owner'\)/,
+    'set-role 必须继续排除 owner');
+
+  // 而服务端接口这一路是通的
+  assert.match(read(path.join(ROOT, 'server', 'http.mjs')), /api\/admin\/transfer-owner/);
+});
+
+test('角色管理：改完之后对方要重新进「我的」页才看得到新入口', () => {
+  // 角色是在进入那一页时才读的，停在旧页面上不会自己刷 ——
+  // 「给他开了权限他说没有」就是这么来的。界面上要写清楚。
+  const wxml = read(path.join(MP, 'packageAdmin', 'pages', 'roles', 'index.wxml'));
+  assert.match(wxml, /重新进一次「我的」页/, '要说清改完什么时候生效');
 });
 
 /* ============================================================
@@ -499,13 +820,15 @@ test('图鉴：表单校验能拦住每一条服务端也会拒的输入', () =>
   assert.equal(buildCatBody({ name: '猫', statusIndex: 99 }).body.status, CAT_STATUSES[0]);
 });
 
-test('图鉴：管理端页面齐全，门槛收在 session.js 里', () => {
+test('图鉴：管理端页面齐全，门槛是志愿者（收在 session.js 里）', () => {
   for (const rel of ['packageAdmin/pages/cats/index', 'packageAdmin/pages/cat-edit/index']) {
     for (const ext of ['.js', '.wxml', '.wxss', '.json']) {
       assert.ok(fs.existsSync(path.join(MP, rel + ext)), `${rel}${ext} 不存在`);
     }
     const js = read(path.join(MP, rel + '.js'));
-    assert.match(js, /isManager\(\)/, `${rel} 的门槛要收在 session.js 里`);
+    assert.match(js, /session\.isStaff\(\)/,
+      `${rel} 的门槛要是志愿者及以上（isStaff），而且收在 session.js 里`);
+    assert.doesNotMatch(js, /session\.isManager\(\)/, `${rel} 不该还留着副主任那一档`);
   }
 
   // 别的手写角色名不在这一页出现（由 miniprogram.test.mjs 全量守着）

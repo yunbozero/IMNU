@@ -51,7 +51,7 @@ try {
   const owners = repo.countOwners();
   if (owners > 0) {
     console.error(`[x] 当前已经有 ${owners} 个超管了，不能再用这个脚本设立。`);
-    console.error('    换届请让现任超管在小程序里走「转交超管」。');
+    console.error('    换届请让现任超管在小程序里走「我的 → 管理端 · 角色管理 → 转交超管」。');
     process.exit(1);
   }
 
@@ -75,7 +75,8 @@ try {
   });
 
   console.log(`✅ ${user.name} 已设为超级管理员`);
-  console.log('   之后请在小程序里用「转交超管」把身份交给学弟学妹，而不是再跑这个脚本。');
+  console.log('   之后换届请在小程序里走「我的 → 管理端 · 角色管理 → 转交超管」，');
+  console.log('   而不是再跑这个脚本（它只在「一个超管都没有」时才生效）。');
 } finally {
   db.close();
 }

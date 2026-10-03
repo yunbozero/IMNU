@@ -59,12 +59,22 @@
       <view class="entry__arrow">›</view>
     </view>
 
-    <!-- 图鉴：和物品照片同一档（副主任及以上）。改了不用发版。 -->
-    <view wx:if="{{isManager}}" class="entry entry--staff" bindtap="goAdminCats" hover-class="entry--hover">
+    <!-- 图鉴：志愿者就够 —— 照片要在校园里拍完就传，猫猫组的人不一定是副主任 -->
+    <view wx:if="{{isStaff}}" class="entry entry--staff" bindtap="goAdminCats" hover-class="entry--hover">
       <view class="entry__icon">🐱</view>
       <view class="grow">
         <view class="entry__title">管理端 · 图鉴管理</view>
         <view class="entry__desc">加猫、改资料、换照片，改完立刻生效</view>
+      </view>
+      <view class="entry__arrow">›</view>
+    </view>
+
+    <!-- 角色管理：一级管理员及以上。在这之前小程序里根本没有提权的入口 -->
+    <view wx:if="{{isSeniorManager}}" class="entry entry--staff" bindtap="goAdminRoles" hover-class="entry--hover">
+      <view class="entry__icon">🙋</view>
+      <view class="grow">
+        <view class="entry__title">管理端 · 角色管理</view>
+        <view class="entry__desc">给志愿者开核销权限、换届转交超管</view>
       </view>
       <view class="entry__arrow">›</view>
     </view>

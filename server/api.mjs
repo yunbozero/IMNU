@@ -863,7 +863,14 @@ export function createApi({
      */
     adminUploadImage({ body, user }) {
       if (!user) return fail('unauthorized', '请先登录', 401);
-      if (!isManager(user)) return fail('forbidden', '你没有管理权限', 403);
+      // ★ 传图本身是**志愿者及以上**：图鉴的照片要靠志愿者在校园里拍完就传，
+      //   而图鉴的门槛就是志愿者（猫猫组的人不一定是副主任）。
+      //
+      //   为什么敢把门槛放到这一档：传上来的文件是**惰性的** ——
+      //   它不会被任何东西引用，直到有人把它挂到物品或猫上，而那两步各有各的门槛
+      //   （物品是副主任+，图鉴是志愿者+）。所以这里放宽不会让谁多出别的能力，
+      //   最坏情况是往磁盘上留一张没人用的图。
+      if (!isStaff(user)) return fail('forbidden', '你没有管理权限', 403);
 
       const raw = body?.image;
       if (typeof raw !== 'string' || raw === '') {
@@ -915,7 +922,7 @@ export function createApi({
      */
     adminCreateCat({ body, user }) {
       if (!user) return fail('unauthorized', '请先登录', 401);
-      if (!isManager(user)) return fail('forbidden', '你没有管理权限', 403);
+      if (!isStaff(user)) return fail('forbidden', '你没有管理权限', 403);
 
       const name = asOptionalText(body?.name, CAT_NAME_MAX);
       if (!name.ok) return fail('bad_request', `名字不能超过 ${CAT_NAME_MAX} 个字`, 400);
@@ -943,7 +950,7 @@ export function createApi({
      */
     adminUpdateCat({ body, user }) {
       if (!user) return fail('unauthorized', '请先登录', 401);
-      if (!isManager(user)) return fail('forbidden', '你没有管理权限', 403);
+      if (!isStaff(user)) return fail('forbidden', '你没有管理权限', 403);
 
       const catId = typeof body?.catId === 'string' ? body.catId.trim() : '';
       if (!catId) return fail('bad_request', '缺少 catId', 400);
@@ -980,7 +987,7 @@ export function createApi({
     /** 删掉一只猫。真删（没有任何东西引用猫），同时清掉它的照片文件。 */
     adminDeleteCat({ body, user }) {
       if (!user) return fail('unauthorized', '请先登录', 401);
-      if (!isManager(user)) return fail('forbidden', '你没有管理权限', 403);
+      if (!isStaff(user)) return fail('forbidden', '你没有管理权限', 403);
 
       const catId = typeof body?.catId === 'string' ? body.catId.trim() : '';
       if (!catId) return fail('bad_request', '缺少 catId', 400);
@@ -1100,6 +1107,55 @@ export function createApi({
       });
 
       return ok({ reservation: r.reservation });
+    },
+
+    /**
+     * 人员名单 + **当前这个人能对他们做什么**。
+     *
+     * 门槛：副主任及以上（和 adminSetRole 一致）。
+     *
+     * ★ 为什么把「能改成哪些角色」在服务端算好、随列表一起返回：
+     *   权限规则（roles.mjs 的 GRANT / REVOKE 真值表 + 「不能动自己」+「超管只能转交」）
+     *   是整个系统里最该只有一处的东西。让界面自己判断一遍，就必然出现
+     *   「界面显示能点、点了被拒」或者反过来「明明能改却不显示按钮」——
+     *   而这两种都只在特定角色组合下出现，靠手测基本撞不到。
+     *   所以界面只负责画：把 settable 里的角色画成按钮，别的什么都不判断。
+     *
+     * ★ 不返回 openid：界面上改角色用的是 userId，不需要 openid，
+     *   而那是个可以定位到具体人的标识，没必要在列表里传。
+     *   （命令行脚本仍然会打出来 —— 那是给你提权用的唯一办法。）
+     */
+    adminListUsers({ user }) {
+      if (!user) return fail('unauthorized', '请先登录', 401);
+      if (!isManager(user)) return fail('forbidden', '你没有管理权限', 403);
+
+      // 可以设的目标角色。不含 owner —— 超管身份只能走「转交」，那条路是单独的接口。
+      const ASSIGNABLE = ['student', 'volunteer', 'deputy', 'admin'];
+
+      const users = repo.listUsers().map((u) => {
+        const verdictFor = (nextRole) => checkRoleChange({
+          actorRole: user.role, actorId: user.id,
+          targetRole: u.role, targetId: u.id, nextRole,
+        });
+
+        // 角色没变的那个不算「可设置」—— 按钮点上去什么都不做，摆着只会让人困惑
+        const settable = ASSIGNABLE.filter((r) => r !== u.role && verdictFor(r).ok);
+
+        return {
+          id: u.id,
+          name: u.name,
+          role: u.role,
+          roleLabel: ROLE_LABEL[u.role] || u.role,
+          isSelf: u.id === user.id,
+          settable,
+          settableLabels: settable.map((r) => ROLE_LABEL[r] || r),
+          canTransferOwner: checkOwnerTransfer({
+            actorRole: user.role, actorId: user.id, targetId: u.id,
+          }).ok,
+        };
+      });
+
+      return ok({ users, roles: ROLE_LABEL, assignable: ASSIGNABLE });
     },
 
     /** 任命 / 撤销管理员。策略全在 roles.mjs。 */

@@ -1,0 +1,46 @@
+/* 管理端 · 角色管理。样式只在这个分包里用。 */
+
+.u {
+  background: #fff; border-radius: 28rpx;
+  padding: 26rpx 30rpx; margin-top: 22rpx;
+  box-shadow: 0 4rpx 20rpx rgba(150, 90, 60, 0.06);
+}
+
+.u__head {
+  display: flex; align-items: center;
+  justify-content: space-between; gap: 18rpx;
+}
+.u__name { font-size: 31rpx; font-weight: 700; }
+.u__me {
+  font-size: 22rpx; font-weight: 400;
+  color: var(--text-3); margin-left: 10rpx;
+}
+
+.u__ops { display: flex; flex-wrap: wrap; gap: 16rpx; margin-top: 22rpx; }
+
+/* 一行按钮都没有时说清原因 —— 否则看起来像页面坏了 */
+.u__none {
+  margin-top: 18rpx;
+  font-size: 24rpx; color: var(--text-3); line-height: 1.5;
+}
+
+/* 小号按钮：不复用 .btn（那个是通栏宽度） */
+.op {
+  margin: 0; padding: 0 30rpx; line-height: 2.3;
+  font-size: 26rpx; font-weight: 600;
+  background: #F6EFEA; color: var(--text);
+  border: 0; border-radius: 22rpx;
+}
+.op::after { border: 0; }
+.op[disabled] { opacity: 0.45; }
+
+/* 撤销权限是不可逆的（对方的管理入口会立刻消失），给个收敛的样式 */
+.op--revoke {
+  background: #fff; color: var(--danger);
+  border: 3rpx solid #F2D8D3;
+}
+
+/* 转交超管是最重的一步：自己会降级，且撤不回来 */
+.op--owner {
+  background: var(--brand); color: #fff;
+}

@@ -56,6 +56,7 @@ Page({
       user,
       isStaff: session.isStaff(),
       isManager: session.isManager(),
+      isSeniorManager: session.isSeniorManager(),
       roleText: session.roleLabel(user),
       needRegister: !user,
     });
@@ -147,10 +148,16 @@ Page({
     wx.navigateTo({ url: '/packageAdmin/pages/event/index' });
   },
 
-  /** 图鉴管理。和物品照片同一档（副主任及以上），服务端也是这么卡的。 */
+  /** 图鉴管理。志愿者及以上（服务端也是这么卡的）—— 照片要能在校园里随手传。 */
   goAdminCats() {
-    if (!this.data.isManager) return;
+    if (!this.data.isStaff) return;
     wx.navigateTo({ url: '/packageAdmin/pages/cats/index' });
+  },
+
+  /** 角色管理。一级管理员及以上。 */
+  goAdminRoles() {
+    if (!this.data.isSeniorManager) return;
+    wx.navigateTo({ url: '/packageAdmin/pages/roles/index' });
   },
 
   goItems() {

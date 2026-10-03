@@ -813,27 +813,69 @@ test('图鉴：三个页面共用同一处展示逻辑，不各算一遍', () =>
   }
 });
 
-test('图鉴：「我的」页的入口要指向图鉴管理，而且只对管理员显示', () => {
+test('图鉴：「我的」页的入口对志愿者开，角色管理入口对一级管理员开', () => {
   // ★ 必须从 `<view` 开始匹配：wx:if 在 bindtap **前面**，
   //   从 goAdminCats 往后截窗口是看不到门槛的（第一版就是这么写错的）。
   const wxml = read(path.join(MP, 'pages', 'profile', 'index.wxml'));
-  const entry = /<view[^>]*goAdminCats[\s\S]{0,200}?管理端 · 图鉴管理/.exec(wxml);
-  assert.ok(entry, '「我的」页里没有图鉴管理的入口');
-  assert.match(entry[0], /wx:if="\{\{isManager\}\}"/, '入口要只对管理员显示');
+
+  const catsEntry = /<view[^>]*goAdminCats[\s\S]{0,200}?管理端 · 图鉴管理/.exec(wxml);
+  assert.ok(catsEntry, '「我的」页里没有图鉴管理的入口');
+  assert.match(catsEntry[0], /wx:if="\{\{isStaff\}\}"/,
+    '图鉴入口要对**志愿者**显示 —— 照片是猫猫组的人在校园里拍的，他们不一定是副主任');
+
+  const rolesEntry = /<view[^>]*goAdminRoles[\s\S]{0,200}?管理端 · 角色管理/.exec(wxml);
+  assert.ok(rolesEntry, '「我的」页里没有角色管理的入口（没有它换届就做不了）');
+  assert.match(rolesEntry[0], /wx:if="\{\{isSeniorManager\}\}"/,
+    '角色管理要对一级管理员及以上显示');
 
   const js = read(path.join(MP, 'pages', 'profile', 'index.js'));
-  assert.match(js, /goAdminCats[\s\S]{0,200}\/packageAdmin\/pages\/cats\/index/,
-    '入口要指向 packageAdmin 的图鉴管理页');
+  assert.match(js, /goAdminCats[\s\S]{0,220}\/packageAdmin\/pages\/cats\/index/,
+    '图鉴入口要指向 packageAdmin 的图鉴管理页');
+  assert.match(js, /goAdminRoles[\s\S]{0,220}\/packageAdmin\/pages\/roles\/index/,
+    '角色管理入口要指向 packageAdmin 的角色管理页');
+
+  // 两个入口的守卫都要用 session.js 的判定，别手写角色名
+  assert.match(js, /goAdminCats[\s\S]{0,120}isStaff/);
+  assert.match(js, /goAdminRoles[\s\S]{0,120}isSeniorManager/);
 });
 
-test('图鉴：管理端页面齐全，门槛收在 session.js 里', () => {
+test('图鉴：管理端页面齐全，门槛是志愿者（收在 session.js 里）', () => {
   for (const rel of ['packageAdmin/pages/cats/index', 'packageAdmin/pages/cat-edit/index']) {
     for (const ext of ['.js', '.wxml', '.wxss', '.json']) {
       assert.ok(exists(path.join(MP, rel + ext)), `${rel}${ext} 不存在`);
     }
     const js = read(path.join(MP, rel + '.js'));
-    assert.match(js, /isManager\(\)/, `${rel} 的门槛要收在 session.js 里`);
+    assert.match(js, /isStaff\(\)/, `${rel} 的门槛要是志愿者及以上，且收在 session.js 里`);
   }
+});
+
+test('角色管理：界面自己不判断权限，只用服务端算好的结果', () => {
+  // ★ 这是这一页最要紧的设计：允许改哪些角色由 /api/admin/users 逐行算好返回
+  //   （settable / canTransferOwner）。界面自己再判断一遍的话，必然出现
+  //   「显示了按钮但点了被拒」或者「明明能改却不显示」，而这两种都只在
+  //   特定角色组合下发生，手测基本撞不到。
+  const rel = 'packageAdmin/pages/roles/index';
+  for (const ext of ['.js', '.wxml', '.wxss', '.json']) {
+    assert.ok(exists(path.join(MP, rel + ext)), `${rel}${ext} 不存在`);
+  }
+
+  const js = read(path.join(MP, rel + '.js'));
+  assert.match(js, /\/api\/admin\/users/, '要读服务端算好的名单');
+  assert.match(js, /\/api\/admin\/role/, '改角色要走 adminSetRole');
+  assert.match(js, /\/api\/admin\/transfer-owner/, '转交超管要走专门的接口');
+
+  // 不许在界面里手写「哪一档能做哪件事」—— 那就是把 roles.mjs 的真值表抄第二遍
+  assert.doesNotMatch(js, /ROLES_CAN_|canGrant|canRevoke|checkRoleChange/,
+    '界面不该自己算权限；用服务端返回的 settable');
+
+  const wxml = read(path.join(MP, rel + '.wxml'));
+  assert.match(wxml, /item\.settable/, '按钮要用服务端给的 settable 渲染');
+  assert.match(wxml, /item\.canTransferOwner/, '转交按钮要用 canTransferOwner 判断');
+
+  // 入口要在 app.json 里登记，否则 wx.navigateTo 直接失败
+  const app = JSON.parse(read(path.join(MP, 'app.json')));
+  const admin = app.subPackages.find((p) => p.root === 'packageAdmin');
+  assert.ok(admin.pages.includes('pages/roles/index'), 'app.json 里没登记角色管理页');
 });
 
 

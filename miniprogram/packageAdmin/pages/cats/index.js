@@ -36,8 +36,8 @@ Page({
     try {
       await session.ensureSession();
 
-      if (!session.isManager()) {
-        this.setData({ error: '这个页面只有管理员能进' });
+      if (!session.isStaff()) {
+        this.setData({ error: '这个页面需要志愿者及以上' });
         return;
       }
 

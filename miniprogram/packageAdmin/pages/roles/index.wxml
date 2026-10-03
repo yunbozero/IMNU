@@ -1,0 +1,70 @@
+<view class="page">
+
+  <view wx:if="{{error}}" class="notice notice--strong" bindtap="load">
+    <text class="notice__b">打不开：</text>{{error}}（点一下重试）
+  </view>
+
+  <view wx:if="{{!loading && list.length === 0}}" class="empty">
+    <view class="empty__icon">🙋</view>
+    <view class="empty__text">还没有人登记</view>
+  </view>
+
+  <view wx:for="{{list}}" wx:key="id" class="u">
+    <view class="u__head">
+      <view class="u__name">
+        {{item.name}}
+        <text wx:if="{{item.isSelf}}" class="u__me">你自己</text>
+      </view>
+      <text class="tag {{item.role === 'owner' ? 'tag--green' : 'tag--grey'}}">{{item.roleLabel}}</text>
+    </view>
+
+    <!--
+      按钮完全由服务端给的 settable / canTransferOwner 决定。
+      界面不做任何权限判断 —— 规则只有 server/roles.mjs 那一处。
+    -->
+    <view wx:if="{{item.settable.length || item.canTransferOwner}}" class="u__ops">
+      <button
+        wx:for="{{item.settable}}"
+        wx:for-item="role"
+        wx:for-index="ri"
+        wx:key="*this"
+        class="op {{role === 'student' ? 'op--revoke' : ''}}"
+        data-id="{{item.id}}"
+        data-role="{{role}}"
+        data-name="{{item.name}}"
+        disabled="{{busyId === item.id}}"
+        bindtap="setRole"
+      >设为{{item.settableLabels[ri]}}</button>
+
+      <button
+        wx:if="{{item.canTransferOwner}}"
+        class="op op--owner"
+        data-id="{{item.id}}"
+        data-name="{{item.name}}"
+        disabled="{{busyId === item.id}}"
+        bindtap="transfer"
+      >转交超管</button>
+    </view>
+
+    <!-- 一行都不显示的时候要说清楚为什么，否则看起来像页面坏了 -->
+    <view wx:else class="u__none">
+      {{item.isSelf ? '不能改自己的身份（否则超管会把自己锁死）' : '你没有权限改这个人的角色'}}
+    </view>
+  </view>
+
+  <view class="notice">
+    <text class="notice__b">改完立刻生效。</text>
+    对方要重新进一次「我的」页才能看到新入口（那一页在进入时才读角色）。
+  </view>
+
+  <view wx:if="{{iAmOwner}}" class="notice notice--strong">
+    <text class="notice__b">超管身份只能「转交」，不能直接改。</text>
+    转交之后你自己会变成一级管理员。这是唯一一个撤不回来的操作，点之前把名字再看一遍。
+  </view>
+
+  <view wx:else class="notice">
+    <text class="notice__b">超管身份只能由现任超管转交。</text>
+    一级管理员之间不能互相撤销 —— 这是有意的，避免换届时互相清洗。
+  </view>
+
+</view>

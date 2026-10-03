@@ -42,7 +42,11 @@ export const USAGE = `
 ${ASSIGNABLE.map((r) => `  ${r.padEnd(10)} ${ROLE_LABEL[r]}`).join('\n')}
 
   超管（owner）**不能**在这里设：它只能由 scripts/set-owner.mjs 设立一次，
-  之后换届走小程序里的「转交超管」。
+  之后换届走小程序里的「我的 → 管理端 · 角色管理 → 转交超管」。
+
+  给志愿者开核销权限、任命二级/一级管理员，也可以在小程序里点
+  （一级管理员及以上能看到「角色管理」那一页）。这个脚本是给
+  「人都还没登记、或者你自己就是超管想直接改」的情况用的。
 
 线上：
   sudo -u bazaar DB_PATH=/srv/bazaar/data/bazaar.db \\

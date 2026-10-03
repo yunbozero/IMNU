@@ -80,6 +80,8 @@ export const ROUTES = {
   'POST /api/admin/cancel': { handler: 'adminCancel', auth: 'user' },
   'POST /api/admin/undo-redeem': { handler: 'adminUndoRedeem', auth: 'user' },
   'POST /api/admin/role': { handler: 'adminSetRole', auth: 'user' },
+  // 人员名单 + 当前这个人能对他们做什么（权限规则在服务端算，见 api.mjs）
+  'GET /api/admin/users': { handler: 'adminListUsers', auth: 'user' },
   'POST /api/admin/transfer-owner': { handler: 'adminTransferOwner', auth: 'user' },
   'GET /api/admin/reservations': { handler: 'adminReservations', auth: 'user' },
   'GET /api/admin/settings': { handler: 'adminGetSettings', auth: 'user' },
