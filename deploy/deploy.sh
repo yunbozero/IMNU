@@ -94,6 +94,27 @@ fi
 log "确认照片目录 $IMAGE_DIR"
 install -d -m 755 -o "$APP_USER" -g "$APP_USER" "$IMAGE_DIR"
 
+# ---------- 3.6 运行配置检查 ----------
+# ★ 「服务端没填小程序密钥」这种故障**不会让服务启动失败**：
+#   首页能访问、物品列表能看、猫猫图鉴正常 —— 只有登录接口一个人都过不去。
+#   在小程序里的表现是「填了昵称点提交没反应 / 提示登录失败」，
+#   看起来像网络问题或前端 bug，很容易查错方向。
+#   启动时其实往 journald 打过一行警告，但那要主动去翻日志才看得到，
+#   所以在**每次发布的输出里**也喊一声。
+ENV_FILE=/etc/bazaar/env
+if [ -f "$ENV_FILE" ]; then
+  for key in WX_APPID WX_SECRET; do
+    # 只判断「有没有值」，**绝不打印值本身** —— 那是 AppSecret，
+    # 打出来就会落进终端记录、CI 日志和你的聊天窗口。
+    if ! grep -qE "^${key}=.+" "$ENV_FILE"; then
+      warn "$ENV_FILE 里的 ${key} 是空的 —— 所有人都登录不了，"
+      warn "  小程序里的表现是「提交不了昵称」。修法见 docs/deploy-alicloud.md 5.5①"
+    fi
+  done
+else
+  warn "找不到 $ENV_FILE —— 服务能起来，但登录一定失败"
+fi
+
 # ---------- 4. 重启 ----------
 log "重启 $SERVICE"
 

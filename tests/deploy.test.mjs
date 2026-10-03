@@ -606,6 +606,25 @@ test('部署：升级路径 —— 已装好的服务器也要能拿到照片目
   assert.match(d, /daemon-reload/, '换了 unit 文件必须 daemon-reload');
 });
 
+test('部署：密钥没填要在发布时喊出来，而且不能把密钥本身打出来', () => {
+  // 真实的坑：服务端没填 WX_APPID / WX_SECRET，服务照常启动、首页和物品列表都正常，
+  // **只有登录接口一个人都过不去**。小程序里的表现是「填了昵称提交不了」，
+  // 看着像网络问题。启动时 journald 里有一行警告，但没人会主动去翻，
+  // 所以每次发布的输出里也要喊一声。
+  const d = DEPLOY_SH();
+
+  for (const key of ['WX_APPID', 'WX_SECRET']) {
+    assert.match(d, new RegExp(key), `deploy.sh 要检查 ${key}`);
+  }
+  assert.match(d, /warn[^\n]*\$\{key\}|warn[^\n]*空的/, '要用警告打出来，不能静默');
+
+  // ★ 这条最要紧：检查「有没有填」的时候如果顺手把值打出来，
+  //   AppSecret 就会落进终端记录、CI 日志和别人的聊天窗口。
+  assert.ok(!/echo[^\n]*\$WX_(APPID|SECRET)/.test(d), '不能 echo 密钥的值');
+  assert.ok(!/cat[^\n]*\$ENV_FILE/.test(d) && !/cat\s+\/etc\/bazaar\/env/.test(d),
+    '不能 cat 整个 env 文件 —— 里面就是 AppSecret');
+});
+
 test('部署：nginx 的 body 上限必须大于应用自己的上限', () => {
   // 反过来的话，超限请求会被 nginx 用一个 HTML 的 413 挡掉，
   // 小程序那边只能显示「网络错误」，看不出是图太大。

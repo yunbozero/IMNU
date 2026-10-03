@@ -242,14 +242,44 @@ sudo bash /srv/bazaar/app/deploy/deploy.sh
 
 ### ① 填小程序密钥
 
+**不填的后果，值得说清楚**：服务照常启动、首页能访问、物品列表和猫猫图鉴都正常，
+**只有登录一个人都过不去** —— 因为浏览类接口是公开的，需要身份的接口才走登录。
+在小程序里的表现是「**填了昵称点提交没反应 / 提示登录失败**」，
+看着像网络问题或前端 bug，很容易往错的方向查半天。
+
 ```bash
 sudo nano /etc/bazaar/env
 ```
 
-填上小程序后台「开发管理 → 开发设置」里的 **AppID** 和 **AppSecret**，然后重启：
+填上小程序后台「开发管理 → 开发设置」里的 **AppID** 和 **AppSecret**：
+
+```
+WX_APPID=wx..........          ← 必须和 miniprogram/project.private.config.json 里那个一致
+WX_SECRET=...................  ← AppSecret
+```
+
+> **AppSecret 只在公众平台显示一次**，没记下来就要在同一个页面点「重置」
+> （重置后旧的立即失效）。它**不要提交进 git、不要贴进聊天窗口、不要写进命令行** ——
+> 命令行会进 shell 历史。用编辑器改文件是唯一干净的做法。
+> 仓库里有一条密钥扫描测试守着，真提交了会红。
+
+改完重启：
 
 ```bash
 sudo systemctl restart bazaar
+```
+
+**怎么确认填对了**（这三条都不需要看到密钥本身）：
+
+```bash
+# 1. 启动警告应该消失（没填时会打「未配置 WX_APPID / WX_SECRET」）
+sudo journalctl -u bazaar -n 30 --no-pager | grep 密钥
+
+# 2. 看哪几项是空的 —— 只打印「已填 / 空」，不打印值
+sudo awk -F= '/^WX_APPID=|^WX_SECRET=/{print $1, (length($2)>0 ? "已填" : "空")}' /etc/bazaar/env
+
+# 3. 部署过带诊断的版本之后，健康检查会直接说
+curl -s https://你的域名/api/health      # {"ok":true,...,"wxConfigured":true}
 ```
 
 > `SESSION_SECRET` 是 `bootstrap.sh` 自动生成的随机值，**不要动它** —— 改了所有人都会掉登录。
