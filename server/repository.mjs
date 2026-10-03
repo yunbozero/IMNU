@@ -49,6 +49,9 @@ export const REPOSITORY_METHODS = [
   'getSetting',
   'setSetting',
   'clearSetting',
+  'listCatPhotos',
+  'setCatPhoto',
+  'clearCatPhoto',
   'writeAudit',
 ];
 
@@ -682,6 +685,38 @@ export function createSqliteRepository(db) {
     /** 删掉设置行 —— 效果是回落到默认值（环境变量那个） */
     clearSetting(key) {
       db.prepare('DELETE FROM settings WHERE key = ?').run(key);
+      return { ok: true };
+    },
+
+    /* ---------------- 图鉴照片的覆盖 ---------------- */
+
+    /**
+     * 所有被换过照片的猫。
+     *
+     * 只返回**有覆盖行**的 —— 没有行的猫用 cats.js 里那个文件名，
+     * 服务端不知道也不需要知道那些文件名是什么。
+     */
+    listCatPhotos() {
+      return db.prepare('SELECT cat_id, image, updated_at, actor_id FROM cat_photos ORDER BY cat_id')
+        .all()
+        .map((r) => ({
+          catId: r.cat_id, image: r.image, updatedAt: r.updated_at, actorId: r.actor_id,
+        }));
+    },
+
+    /** 给某只猫换照片（同 cat_id 覆盖）。 */
+    setCatPhoto({ catId, image, actorId = null }) {
+      db.prepare(`
+        INSERT INTO cat_photos (cat_id, image, updated_at, actor_id) VALUES (?, ?, ?, ?)
+        ON CONFLICT(cat_id) DO UPDATE SET
+          image = excluded.image, updated_at = excluded.updated_at, actor_id = excluded.actor_id
+      `).run(catId, image, now(), actorId);
+      return { ok: true };
+    },
+
+    /** 删掉覆盖行 —— 效果是回落到仓库里那张（assets/cats/）。 */
+    clearCatPhoto(catId) {
+      db.prepare('DELETE FROM cat_photos WHERE cat_id = ?').run(catId);
       return { ok: true };
     },
 

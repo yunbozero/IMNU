@@ -202,6 +202,19 @@ export function createApi({
   };
 
   /**
+   * 图鉴里一只猫的 id 长什么样。
+   *
+   * ★ 和 miniprogram/data/cats.js 里的 id 必须对得上，但**不 import 那个文件** ——
+   *   server/ 一旦依赖 miniprogram/ 就不能单独跑了（现在它可以是自足的）。
+   *   本仓库对这类「两边都需要的知识」的做法是各存一份 + 一条漂移测试，
+   *   tests/miniprogram.test.mjs 里那条会拿 CATS 的真实 id 来过这个正则。
+   */
+  const CAT_ID_RE = /^[a-z0-9][a-z0-9_-]{0,31}$/;
+
+  /** 覆盖用的照片只能是**上传接口产出的**文件名，不能是仓库里那张 cats/xxx.jpg。 */
+  const isUploadedImage = (name) => typeof name === 'string' && name.startsWith('img_');
+
+  /**
    * 生效中的「每账号最多预定几件」。
    * 规则和 repo.tryReserve 里那条是同一个函数（pickMaxPerUser），
    * 免得「设置页显示的值」和「实际拦人的值」不一致。
@@ -806,6 +819,86 @@ export function createApi({
       });
 
       return ok({ image: saved.name, url: imageUrlOf(saved.name), bytes: saved.bytes });
+    },
+
+    /**
+     * 图鉴照片的覆盖表。**公开**，不需要登录。
+     *
+     * 为什么公开：图鉴是 tabBar 上的一级页面，任何人打开都要能看到照片；
+     * 而且它本来就不是秘密（仓库里那份是公开的内容）。返回的只是一张
+     * 「哪只猫换了哪张图」的表，没有用户信息。
+     *
+     * 客户端拿到之后和 cats.js 里的 image 合并：**有覆盖就用覆盖，
+     * 没有就用仓库里那张**。请求失败时客户端继续用仓库那张，所以断网也能看图鉴。
+     */
+    listCatPhotos() {
+      const photos = {};
+      for (const r of repo.listCatPhotos()) photos[r.catId] = r.image;
+      return ok({ photos });
+    },
+
+    /**
+     * 给某只猫换照片（副主任及以上，和物品照片同一档）。
+     *
+     * body: { catId, image }，image 必须是上传接口返回的文件名；
+     * 传 null / '' 表示**恢复成仓库里那张**（删掉覆盖行，而不是存个空值）。
+     *
+     * ★ 换图之后要把旧的**上传文件**删掉，否则每换一次就在磁盘上留一张
+     *   谁也不引用的图，一年下来能攒出几百兆。
+     *   但绝不能删 `cats/xxx.jpg` —— 那是仓库同步过来的默认照片，
+     *   删掉等于把兜底也弄没了（而且下次发布又会同步回来，只是中间那段时间 404）。
+     */
+    adminSetCatPhoto({ body, user }) {
+      if (!user) return fail('unauthorized', '请先登录', 401);
+      if (!isManager(user)) return fail('forbidden', '你没有管理权限', 403);
+
+      const catId = typeof body?.catId === 'string' ? body.catId.trim() : '';
+      if (!CAT_ID_RE.test(catId)) return fail('bad_request', '不认识的猫', 400);
+
+      const before = repo.listCatPhotos().find((p) => p.catId === catId) || null;
+
+      // 清空：删覆盖行，回落到仓库里那张
+      if (body?.image === null || body?.image === '') {
+        if (!before) return ok({ catId, image: null, cleared: false });
+
+        repo.clearCatPhoto(catId);
+        if (isUploadedImage(before.image)) deleteImage(before.image, imageDir);
+        repo.writeAudit({
+          actorId: user.id, action: 'cat_photo.clear',
+          targetType: 'cat', targetId: catId, detail: { image: before.image },
+        });
+        return ok({ catId, image: null, cleared: true });
+      }
+
+      const image = asStoredImage(body?.image);
+      if (!image.ok) return fail('bad_request', '图片不存在，请重新上传', 400);
+      if (image.value === undefined || image.value === null) {
+        return fail('bad_request', '缺少图片', 400);
+      }
+
+      // ★ 覆盖值必须是**上传接口产出的**文件名（img_<hex>.jpg）。
+      //   仓库里那张（cats/xxx.jpg）是兜底，不能当覆盖写进来：
+      //     · 写进去之后「恢复默认」就没了意义 —— 它和默认值一模一样；
+      //     · 仓库那边换图时，这一行还指着旧文件名，谁也看不出是为什么。
+      //   想用仓库那张就传 null（= 删掉覆盖），语义只有这一条。
+      if (!isUploadedImage(image.value)) {
+        return fail('bad_request', '请重新上传一张照片，不能直接把默认照片设成覆盖', 400);
+      }
+
+      repo.setCatPhoto({ catId, image: image.value, actorId: user.id });
+
+      // 换了另一张上传图才删旧的；设置成同一张时什么都不动
+      if (before && before.image !== image.value && isUploadedImage(before.image)) {
+        deleteImage(before.image, imageDir);
+      }
+
+      repo.writeAudit({
+        actorId: user.id, action: 'cat_photo.set',
+        targetType: 'cat', targetId: catId,
+        detail: { image: image.value, replaced: before ? before.image : null },
+      });
+
+      return ok({ catId, image: image.value, replaced: before ? before.image : null });
     },
 
     /**

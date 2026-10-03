@@ -210,6 +210,16 @@ if [ -f "$NGINX_SITE" ]; then
     warn "  修法：把 deploy/nginx.conf 里那段 location /images/ 合并进 $NGINX_SITE，然后"
     warn "    sudo nginx -t && sudo systemctl reload nginx"
   fi
+
+  # ★ 图鉴照片那一段单独检查。缺了它不会 404（上面那个 location 会兜住），
+  #   但会**继承 30 天的缓存** —— 图鉴是同一个文件名换内容，
+  #   于是「换了照片，学生一个月都看到旧的」，而且现象极难联想到缓存。
+  #   这种「不报错但一直不对」的情况只能靠发布时喊一声。
+  if ! grep -q 'location /images/cats/' "$NGINX_SITE"; then
+    warn "nginx 站点里没有 /images/cats/ 的 location —— 图鉴照片会被缓存 30 天"
+    warn "  现象：换了 assets/cats/ 里的照片，手机上一整个月还是旧图"
+    warn "  修法：把 deploy/nginx.conf 里那段 location /images/cats/ 合并进 $NGINX_SITE（缓存 1h）"
+  fi
 else
   warn "找不到 $NGINX_SITE —— nginx 还在用默认站点？"
 fi

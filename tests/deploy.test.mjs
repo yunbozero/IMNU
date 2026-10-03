@@ -742,6 +742,48 @@ test('部署：图鉴照片过大要警告（手机上白等几十秒）', () =>
   assert.match(d, /warn[^\n]*KB/, '超了要警告，而且要给人话的 KB 数，不是字节数');
 });
 
+test('部署：图鉴照片的缓存期必须短于物品照片（同名换图不会被缓存挡住）', () => {
+  // ★ 这是一个「不报错但一直不对」的坑：图鉴的照片是**同一个文件名换内容**
+  //   （assets/cats/daju.jpg 换成新拍的），不像物品照片那样每次上传都是新名字。
+  //   沿用 30 天的话，换完图 nginx 和微信客户端都会继续发旧照片，
+  //   最长一个月 —— 现象是「我明明换了呀」，极难联想到缓存。
+  const n = NGINX();
+
+  // 物品照片那段：文件名带随机串，长期缓存是安全的
+  const itemLoc = /location \/images\/ \{[\s\S]*?\n    \}/.exec(n);
+  assert.ok(itemLoc, '找不到 location /images/ 那段');
+  assert.match(itemLoc[0], /expires 30d/);
+
+  // 图鉴那段：路径更长，会盖住上面那个（nginx 前缀匹配取最长）
+  const catLoc = /location \/images\/cats\/ \{[\s\S]*?\n    \}/.exec(n);
+  assert.ok(catLoc, 'nginx 里缺少 /images/cats/ 的 location');
+  assert.match(catLoc[0], /alias \/srv\/bazaar\/images\/cats\//,
+    'cats 那段要 alias 到同一个目录的 cats/ 下');
+
+  const catExpires = /expires (\d+)([smhd])/.exec(catLoc[0]);
+  assert.ok(catExpires, 'cats 那段没有设缓存期 —— 会继承 /images/ 的 30 天');
+  assert.notEqual(catExpires[0], 'expires 30d',
+    'cats 那段不能也是 30 天，否则换图一个月不生效');
+
+  // 时间要真的更短，不能靠肉眼比字符串
+  const unit = { s: 1, m: 60, h: 3600, d: 86400 };
+  const catSec = Number(catExpires[1]) * unit[catExpires[2]];
+  assert.ok(catSec <= 3600, `图鉴照片的缓存期应当不超过 1 小时，实际 ${catExpires[0]}`);
+  assert.ok(catSec > 0, '也不能设成 0 —— 那样每次打开图鉴都要重新下一遍');
+});
+
+test('部署：nginx 站点缺了 cats 那段缓存设置，发布时要喊出来', () => {
+  // 仓库里的 nginx.conf **永远不会自动生效**（certbot 会把证书写进站点文件，
+  // 覆盖它就等于把 HTTPS 一起抹掉），只能人工合并。所以缺了必须喊 ——
+  // 这一条缺了不报错，只是「换了照片一个月不生效」，最容易被漏掉。
+  const d = DEPLOY_SH();
+
+  assert.match(d, /grep[^\n]*location \/images\/cats\//,
+    'deploy.sh 要检查站点里有没有 /images/cats/ 这一段');
+  assert.match(d, /warn[^\n]*cats[^\n]*缓存|warn[^\n]*缓存[^\n]*30 天|warn[^\n]*30 天/,
+    '缺了要警告，而且要说清后果（缓存 30 天）');
+});
+
 test('部署：图鉴照片的中文名要在发布时喊出来（这是唯一看得到真实文件名的地方）', () => {
   // 服务端读到的是**已经百分号编码**的路径，它连原始文件名都看不见，
   // 所以「中文名 → 404 → 界面只剩 emoji」这件事不可能在运行时被拦住。

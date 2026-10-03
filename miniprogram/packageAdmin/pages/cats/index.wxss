@@ -1,0 +1,29 @@
+/* 管理端 · 图鉴照片。样式只在这个分包里用。 */
+
+.cat {
+  background: #fff; border-radius: 28rpx;
+  padding: 26rpx 30rpx; margin-top: 22rpx;
+  box-shadow: 0 4rpx 20rpx rgba(150, 90, 60, 0.06);
+}
+
+.cat__head { display: flex; align-items: center; gap: 22rpx; }
+.cat__thumb {
+  width: 96rpx; height: 96rpx; border-radius: 24rpx;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 46rpx; flex: 0 0 auto;
+  overflow: hidden;
+}
+.cat__name { font-size: 31rpx; font-weight: 700; line-height: 1.35; }
+.cat__src { font-size: 24rpx; color: var(--text-3); margin-top: 8rpx; }
+
+.cat__ops { display: flex; flex-wrap: wrap; gap: 16rpx; margin-top: 22rpx; }
+
+/* 小号按钮：不复用 .btn（那个是通栏宽度） */
+.op {
+  margin: 0; padding: 0 30rpx; line-height: 2.3;
+  font-size: 26rpx; font-weight: 600;
+  background: #F6EFEA; color: var(--text);
+  border: 0; border-radius: 22rpx;
+}
+.op::after { border: 0; }
+.op[disabled] { opacity: 0.45; }

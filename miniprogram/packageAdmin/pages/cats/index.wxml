@@ -1,0 +1,47 @@
+<view class="page">
+
+  <view wx:if="{{error}}" class="notice notice--strong" bindtap="load">
+    <text class="notice__b">打不开：</text>{{error}}（点一下重试）
+  </view>
+
+  <view wx:for="{{list}}" wx:key="id" class="cat">
+    <view class="cat__head">
+      <view class="cat__thumb {{item.tint}}">
+        <image
+          wx:if="{{item.imageUrl && !imageFailed[item.id]}}"
+          class="thumb-img"
+          src="{{item.imageUrl}}"
+          mode="aspectFill"
+          lazy-load
+          data-id="{{item.id}}"
+          binderror="onImageError"
+        />
+        <text wx:else>{{item.emoji}}</text>
+      </view>
+      <view class="grow">
+        <view class="cat__name">{{item.name}}</view>
+        <view class="cat__src">{{item.source}}</view>
+      </view>
+    </view>
+
+    <view class="cat__ops">
+      <button
+        class="op"
+        data-id="{{item.id}}"
+        disabled="{{busyId === item.id}}"
+        bindtap="changePhoto"
+      >{{item.imageUrl ? '换照片' : '配照片'}}</button>
+    </view>
+  </view>
+
+  <view class="notice">
+    <text class="notice__b">换照片不用发版，改完立刻生效。</text>
+    猫的名字、性格、状态这些写在代码里，改它们仍然要重新发布。
+  </view>
+
+  <view class="notice">
+    <text class="notice__b">「恢复默认」＝回到仓库里那张。</text>
+    没有换过照片的猫显示的是随发布一起上来的默认照片。
+  </view>
+
+</view>

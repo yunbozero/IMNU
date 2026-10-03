@@ -1,16 +1,19 @@
 /**
  * 猫猫图鉴（tabBar 页面，所以在主包）。
  *
- * 猫的**资料**是静态的，不发网络请求；但**照片**放在服务器上
- * （`assets/cats/` → 发布时同步到图片目录，nginx 直接发）。
+ * 猫的**资料**是静态的，不发网络请求；**照片**有两个来源：
+ *   · 仓库里的 `assets/cats/xxx.jpg`（兜底，跟着发布同步到服务器）
+ *   · 管理员在小程序里换的那张（存在数据库，见 services/cat-photos.js）
+ * 合并规则只有一条：有覆盖用覆盖，没有就用仓库那张。没有照片、或者照片加载
+ * 失败，一律回落 emoji + 底色 —— 所以**断网也能看图鉴**。
+ *
  * 为什么不把照片塞进包里：主包有 2MB 硬上限，十几张照片就顶满了，
  * 而主包每冷启动都要下载一遍 —— 仓库自己的原则也是「主包要尽量小」。
- * 照片没加载出来就回落 emoji + 底色，所以断网时图鉴仍然能看。
  *
  * 详情页在分包 packageCats 里。
  */
 import { CAT_LIST_GROUPS, catsByStatus, FEEDING_TIPS } from '../../data/cats.js';
-import { imageUrl } from '../../utils/format.js';
+import * as catPhotos from '../../services/cat-photos.js';
 
 Page({
   data: {
@@ -23,12 +26,24 @@ Page({
   },
 
   onLoad() {
+    // ★ 先用缓存同步渲染一次：图鉴原本是「零请求、断网也能看」的页面，
+    //   不能因为多了个覆盖表就让它首屏空一下。
+    this.photos = catPhotos.cached();
     this.switchTo('onCampus');
+    this.refreshPhotos();
+  },
+
+  /** 再异步拉一次覆盖表；拿不到就继续用缓存和仓库那张（不弹错、不显示加载态） */
+  async refreshPhotos() {
+    const photos = await catPhotos.fetch();
+    if (!photos) return;              // 没问到 ≠ 没有覆盖，什么都别动
+    this.photos = photos;
+    this.switchTo(this.data.active);
   },
 
   switchTo(key) {
     // 给每只猫算好完整地址（模板里拼不了 BASE_URL）
-    const cats = catsByStatus(key).map((c) => ({ ...c, photo: imageUrl(c) }));
+    const cats = catsByStatus(key).map((c) => catPhotos.withPhoto(c, this.photos));
     this.setData({ active: key, cats });
   },
 
@@ -49,3 +64,4 @@ Page({
     });
   },
 });
+

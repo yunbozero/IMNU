@@ -437,6 +437,166 @@ test('照片：图鉴的 cats/ 能通过 HTTP 取到，中文名取不到', asyn
   } finally { await ctx.close(); }
 });
 
+/* ============================================================
+   ★ 图鉴照片的覆盖
+   ============================================================ */
+
+const setCatPhoto = (ctx, token, catId, image) =>
+  call(ctx, 'POST', '/api/admin/cat-photo', { token, body: { catId, image } });
+
+test('图鉴照片：覆盖表是公开读的，谁都能拿到（图鉴是 tabBar 一级页面）', async () => {
+  const ctx = await startTestServer();
+  try {
+    // 没登录也要能读 —— 图鉴页对所有人开放，包括还没登记的人
+    const anon = await call(ctx, 'GET', '/api/cat-photos');
+    assert.equal(anon.status, 200, JSON.stringify(anon.body));
+    assert.deepEqual(anon.body.photos, {}, '还没有人换过照片时应当是空表，不是 null');
+
+    const up = await upload(ctx, ctx.tokens['code-deputy'], fakeImage('jpg'));
+    await setCatPhoto(ctx, ctx.tokens['code-deputy'], 'c1', up.body.image);
+
+    const after = await call(ctx, 'GET', '/api/cat-photos');
+    assert.equal(after.body.photos.c1, up.body.image);
+  } finally { await ctx.close(); }
+});
+
+test('图鉴照片：学生不能改，副主任可以', async () => {
+  const ctx = await startTestServer();
+  try {
+    const up = await upload(ctx, ctx.tokens['code-deputy'], fakeImage('jpg'));
+
+    const anon = await setCatPhoto(ctx, undefined, 'c1', up.body.image);
+    assert.equal(anon.status, 401);
+
+    const stu = await setCatPhoto(ctx, ctx.tokens['code-student'], 'c1', up.body.image);
+    assert.equal(stu.status, 403, '图鉴是门面，但不是谁都能改');
+    assert.equal(stu.body.error, 'forbidden');
+
+    const dep = await setCatPhoto(ctx, ctx.tokens['code-deputy'], 'c1', up.body.image);
+    assert.equal(dep.status, 200, JSON.stringify(dep.body));
+    assert.equal(dep.body.image, up.body.image);
+  } finally { await ctx.close(); }
+});
+
+test('图鉴照片：★ 只能挂上传接口产出的文件名，不能挂仓库那张', async () => {
+  const ctx = await startTestServer();
+  try {
+    // 仓库里同步过来的默认照片。删掉覆盖之后要回落到它，所以**不能被写进覆盖表**，
+    // 否则「恢复默认」就变成「把仓库那张当覆盖」，删掉覆盖反而没了照片。
+    fs.mkdirSync(path.join(ctx.imageDir, 'cats'), { recursive: true });
+    fs.writeFileSync(path.join(ctx.imageDir, 'cats', 'daju.jpg'), fakeImage('jpg'));
+
+    const r = await setCatPhoto(ctx, ctx.tokens['code-deputy'], 'c1', 'cats/daju.jpg');
+    assert.equal(r.status, 400, '仓库照片不该能当覆盖值');
+
+    // 不存在的文件名也拒 —— 库里存了名字但文件不在，界面会显示破图标
+    const missing = await setCatPhoto(ctx, ctx.tokens['code-deputy'], 'c1', 'img_00000000.jpg');
+    assert.equal(missing.status, 400);
+    assert.equal(missing.body.error, 'bad_request');
+
+    const noop = await call(ctx, 'POST', '/api/admin/cat-photo', {
+      token: ctx.tokens['code-deputy'], body: { catId: 'c1', image: null },
+    });
+    assert.equal(noop.status, 200, '清空也要能过（body 里 image 是 null）');
+    assert.equal(noop.body.cleared, false, '本来就没有覆盖，清空是空操作');
+  } finally { await ctx.close(); }
+});
+
+test('图鉴照片：catId 的形状不对要拒（避免挂到不存在的猫身上）', async () => {
+  const ctx = await startTestServer();
+  try {
+    const up = await upload(ctx, ctx.tokens['code-deputy'], fakeImage('jpg'));
+
+    for (const bad of ['', '  ', 'C1', '大橘', 'a'.repeat(40), null]) {
+      const r = await call(ctx, 'POST', '/api/admin/cat-photo', {
+        token: ctx.tokens['code-deputy'], body: { catId: bad, image: up.body.image },
+      });
+      assert.equal(r.status, 400, `catId=${JSON.stringify(bad)} 应当被拒`);
+    }
+
+    // 正常的 id 要过（小写字母数字、下划线、连字符）
+    for (const good of ['c1', 'cat_01', 'xiao-hei']) {
+      const r = await setCatPhoto(ctx, ctx.tokens['code-deputy'], good, up.body.image);
+      assert.equal(r.status, 200, `catId=${good} 应当放行`);
+    }
+  } finally { await ctx.close(); }
+});
+
+test('图鉴照片：换照片要删掉旧的上传文件，但不能碰仓库那张', async () => {
+  const ctx = await startTestServer();
+  try {
+    const first = await upload(ctx, ctx.tokens['code-deputy'], fakeImage('jpg', 200));
+    const second = await upload(ctx, ctx.tokens['code-deputy'], fakeImage('png', 200));
+
+    await setCatPhoto(ctx, ctx.tokens['code-deputy'], 'c1', first.body.image);
+    assert.equal(fs.existsSync(path.join(ctx.imageDir, first.body.image)), true);
+
+    const r = await setCatPhoto(ctx, ctx.tokens['code-deputy'], 'c1', second.body.image);
+    assert.equal(r.body.replaced, first.body.image);
+
+    // ★ 换掉的旧图要清掉：不清的话每换一次就在磁盘上留一张谁都不引用的图
+    assert.equal(fs.existsSync(path.join(ctx.imageDir, first.body.image)), false,
+      '换下来的旧图应当被删掉');
+    assert.equal(fs.existsSync(path.join(ctx.imageDir, second.body.image)), true,
+      '新图不能跟着一起删');
+
+    // ★ 恢复默认时也要清掉覆盖用过的上传图 ——
+    //   但仓库里那张 cats/ 必须原封不动（它是兜底；删掉就是 404 + 只剩 emoji，
+    //   而且要等下次发布才会同步回来）
+    fs.mkdirSync(path.join(ctx.imageDir, 'cats'), { recursive: true });
+    fs.writeFileSync(path.join(ctx.imageDir, 'cats', 'daju.jpg'), fakeImage('jpg'));
+
+    const cleared = await call(ctx, 'POST', '/api/admin/cat-photo', {
+      token: ctx.tokens['code-deputy'], body: { catId: 'c1', image: null },
+    });
+    assert.equal(cleared.body.cleared, true);
+    assert.equal(fs.existsSync(path.join(ctx.imageDir, second.body.image)), false,
+      '恢复默认后，被撤下来的上传图要删掉');
+    assert.equal(fs.existsSync(path.join(ctx.imageDir, 'cats', 'daju.jpg')), true,
+      '仓库里那张默认照片绝不能被删');
+
+    const after = await call(ctx, 'GET', '/api/cat-photos');
+    assert.deepEqual(after.body.photos, {}, '恢复默认之后覆盖表里不该还有这一行');
+  } finally { await ctx.close(); }
+});
+
+test('图鉴照片：换照片要留审计日志（换届时唯一的凭据）', async () => {
+  const ctx = await startTestServer();
+  try {
+    const up = await upload(ctx, ctx.tokens['code-deputy'], fakeImage('jpg'));
+    await setCatPhoto(ctx, ctx.tokens['code-deputy'], 'c1', up.body.image);
+    await call(ctx, 'POST', '/api/admin/cat-photo', {
+      token: ctx.tokens['code-deputy'], body: { catId: 'c1', image: null },
+    });
+
+    // 这个测试自己开一个连接读库，所以先用完再关（服务端那个连接还在）
+    const db = openMigrated(path.join(ctx.dir, 'bazaar.db'));
+    try {
+      const rows = db.prepare(
+        "SELECT action, target_id FROM audit_logs WHERE target_type = 'cat' ORDER BY id"
+      ).all();
+      assert.deepEqual(rows.map((r) => r.action), ['cat_photo.set', 'cat_photo.clear']);
+      assert.deepEqual(rows.map((r) => r.target_id), ['c1', 'c1']);
+    } finally { db.close(); }
+  } finally { await ctx.close(); }
+});
+
+test('图鉴照片：写进去的确实落库了（不是只返回给客户端看看）', async () => {
+  const ctx = await startTestServer();
+  try {
+    const up = await upload(ctx, ctx.tokens['code-deputy'], fakeImage('jpg'));
+    await setCatPhoto(ctx, ctx.tokens['code-deputy'], 'c2', up.body.image);
+
+    const db = openMigrated(path.join(ctx.dir, 'bazaar.db'));
+    try {
+      const row = db.prepare('SELECT cat_id, image, actor_id FROM cat_photos WHERE cat_id = ?')
+        .get('c2');
+      assert.equal(row.image, up.body.image);
+      assert.equal(row.actor_id, PEOPLE['code-deputy'].id, '要记下是谁换的');
+    } finally { db.close(); }
+  } finally { await ctx.close(); }
+});
+
 test('照片：建物品时可以带上图片', async () => {
   const ctx = await startTestServer();
   try {

@@ -59,6 +59,16 @@
       <view class="entry__arrow">›</view>
     </view>
 
+    <!-- 图鉴照片：和物品照片同一档（副主任及以上）。改的是图鉴，不用发版。 -->
+    <view wx:if="{{isManager}}" class="entry entry--staff" bindtap="goAdminCats" hover-class="entry--hover">
+      <view class="entry__icon">🐱</view>
+      <view class="grow">
+        <view class="entry__title">管理端 · 图鉴照片</view>
+        <view class="entry__desc">给猫换照片，改完立刻生效</view>
+      </view>
+      <view class="entry__arrow">›</view>
+    </view>
+
     <view class="card">
       <view class="card__title">活动规则</view>
       <view class="rule"><text class="rule__k">只登记名额：</text>小程序只登记预定名额，不占用其他同学的机会。</view>

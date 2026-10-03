@@ -839,7 +839,7 @@ test('图鉴：有照片时渲染 <image>，没有或加载失败回落 emoji', 
   }
 });
 
-test('图鉴：照片地址由 imageUrl() 拼，界面里不许出现裸域名', async () => {
+test('图鉴：照片地址只在一处拼，页面里不许出现裸域名', async () => {
   // 和物品照片同一套路：数据里只有文件名，base 在 config.js 一处收口。
   // 一旦有人在页面里写死 http://... ，换服务器时就会漏掉几处。
   const { CATS } = await import('../miniprogram/data/cats.js');
@@ -849,10 +849,70 @@ test('图鉴：照片地址由 imageUrl() 拼，界面里不许出现裸域名',
       `${cat.name} 的 image 写成了完整 URL —— 数据里只放文件名`);
   }
 
+  // ★ 覆盖表和仓库那张的合并规则收在 services/cat-photos.js 里，
+  //   所以拼地址这件事也**只有那一处**该做。页面自己去拼的话，
+  //   「覆盖优先」这条规则就会在列表页和详情页各有一份，迟早不一致。
+  const svc = read(path.join(MP, 'services', 'cat-photos.js'));
+  assert.match(svc, /imageUrl\(/, '照片地址要在 services/cat-photos.js 里用 imageUrl() 拼');
+
   for (const rel of ['pages/cats/index.js', 'packageCats/pages/detail/index.js']) {
     const js = read(path.join(MP, rel));
-    assert.match(js, /imageUrl\(/, `${rel} 应当用 imageUrl() 拼照片地址`);
-    assert.doesNotMatch(js, /https?:\/\//, `${rel} 里出现了写死的地址`);
+    assert.match(js, /catPhotos\.withPhoto\(/,
+      `${rel} 应当走 services/cat-photos.js 算照片地址，别自己拼`);
+
+    // ★ 只认「真的写了个地址」：引号后面直接跟 http。注释里提到 http
+    //   （比如解释为什么不能写死地址）不该被算进去 —— 否则正确的话说不出口。
+    assert.doesNotMatch(js, /['"`]https?:\/\//,
+      `${rel} 里出现了写死的地址`);
+
+    // 导入 BASE_URL 才是「自己去拼地址」的实锤。注释里提到它不算。
+    assert.doesNotMatch(js, /import[^;]*\bBASE_URL\b/,
+      `${rel} 不该 import BASE_URL —— 拼地址只有 services/cat-photos.js 那一处`);
+  }
+});
+
+test('图鉴：管理端只能改照片，改动要过覆盖表（不是改 cats.js）', () => {
+  // 「在小程序里换照片」这件事只能落在覆盖表上。如果有人图省事去
+  // 改 cats.js 里的 image 字段，那要重新发版 —— 而这个功能的全部意义
+  // 就是不发版。这里挡住那种退路。
+  const page = read(path.join(MP, 'packageAdmin', 'pages', 'cats', 'index.js'));
+
+  assert.match(page, /\/api\/admin\/cat-photo/, '要调换照片的接口');
+  assert.match(page, /\/api\/cat-photos/, '要读覆盖表');
+  assert.match(page, /isManager\(\)/, '门槛要收在 session.js 里（副主任及以上）');
+  assert.doesNotMatch(page, /require\(|\.wxss'\)/, '不该去 import 数据文件再改它');
+
+  // 入口要在「我的」页里，而且只在管理员看得到。
+  // ★ 必须从 `<view` 开始匹配：wx:if 在 bindtap **前面**，
+  //   从 goAdminCats 往后截窗口是看不到门槛的（第一版就是这么写错的）。
+  const wxml = read(path.join(MP, 'pages', 'profile', 'index.wxml'));
+  const entry = /<view[^>]*goAdminCats[\s\S]{0,200}?管理端 · 图鉴照片/.exec(wxml);
+  assert.ok(entry, '「我的」页里没有图鉴照片的入口');
+  assert.match(entry[0], /wx:if="\{\{isManager\}\}"/, '入口要只对管理员显示');
+
+  // 页面要在 app.json 里登记，否则 wx.navigateTo 直接失败
+  const app = JSON.parse(read(path.join(MP, 'app.json')));
+  const admin = app.subPackages.find((p) => p.root === 'packageAdmin');
+  assert.ok(admin.pages.includes('pages/cats/index'), 'app.json 里没登记这个页面');
+});
+
+test('图鉴：页面拿到 null 时要继续用现有照片，而且不弹错、不显示加载态', () => {
+  // 合并规则、缓存、失败返回 null 这些**行为**都由 tests/cat-photos.test.mjs
+  // 真跑一遍（用 platform 的假实现）—— 这里只管页面这一层：
+  // 它有没有把「没问到」当成「没有照片」，以及有没有为一个后台请求弹提示。
+  //
+  // 图鉴原来是「零网络请求、断网也能看」的页面。加了覆盖表之后，
+  // 只要页面把失败当成「没有照片」，断网时就会从「有仓库那张」变成「只剩 emoji」。
+  for (const rel of ['pages/cats/index.js', 'packageCats/pages/detail/index.js']) {
+    const js = read(path.join(MP, rel));
+
+    assert.match(js, /catPhotos\.cached\(\)/, `${rel} 要先用缓存同步渲染一次`);
+    assert.match(js, /if \(!photos\) return/,
+      `${rel} fetch 返回 null（没问到）时必须原样保留现有照片，别往下走`);
+
+    assert.doesNotMatch(js, /showToast[^\n]*照片/,
+      `${rel} 拿不到覆盖表不该弹提示 —— 图鉴回落 emoji 是正常状态`);
+    assert.doesNotMatch(js, /loading/i, `${rel} 不该为一个后台请求显示加载态`);
   }
 });
 

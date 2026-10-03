@@ -144,6 +144,35 @@ CREATE TABLE IF NOT EXISTS settings (
   value      TEXT NOT NULL,
   updated_at INTEGER NOT NULL
 );
+
+-- ============================================================
+-- 图鉴照片的覆盖
+--
+-- 猫的**资料**（名字/性格/状态）编译在小程序包里（miniprogram/data/cats.js），
+-- 不常改，改一次发一次版可以接受。但**照片**不一样：拍到了新照片就想马上换。
+--
+-- 所以这里只存「哪只猫换了哪张照片」：
+--   · 有行 → 用 image（管理员在小程序里传的，文件名形如 img_<hex>.jpg）
+--   · 没有行 → 回落 cats.js 里的 image（仓库里那张 assets/cats/xxx.jpg）
+-- 删掉这一行就等于「恢复成仓库里那张」。
+--
+-- ★ 为什么不把照片文件名直接写进 cats.js 就好：那样换一张图要发版审核，
+--   而且**同名替换**会被 nginx 的 expires 和微信的图片缓存挡住 —— URL 不变，
+--   学生最长一个月都看到旧照片。走上传每次生成新文件名，天生没这个问题。
+--
+-- cat_id 由服务端卡形状（server/api.mjs 的 CAT_ID_RE），管理端也只能从 CATS 里选，
+-- 所以出现「照片挂在一只不存在的猫身上」这条路是堵住的。
+-- 为什么服务端不去 import CATS 逐个核对：那样 server/ 就依赖 miniprogram/ 了。
+-- 本仓库对「两边都需要的知识」一贯是**各存一份 + 一条漂移测试**（见
+-- tests/miniprogram.test.mjs），不是跨目录 import —— 这里照同一个做法。
+-- 代价是手工调接口传一个不存在的 id 时会留下一行没人看的记录，无害。
+-- ============================================================
+CREATE TABLE IF NOT EXISTS cat_photos (
+  cat_id     TEXT PRIMARY KEY,
+  image      TEXT NOT NULL,                     -- 文件名，不是完整 URL
+  updated_at INTEGER NOT NULL,
+  actor_id   TEXT                               -- 谁换的（留个凭据，换届时有用）
+);
 `;
 
 /**

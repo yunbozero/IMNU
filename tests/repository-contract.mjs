@@ -736,6 +736,57 @@ export function describeRepositoryContract(label, makeRepo) {
     } finally { cleanup && cleanup(); }
   });
 
+  /* ============================================================
+     ★ 图鉴照片的覆盖
+     ============================================================ */
+
+  t('图鉴照片：没写过时是空表，不是 null', () => {
+    const { repo, cleanup } = makeRepo();
+    try {
+      assert.deepEqual(repo.listCatPhotos(), []);
+    } finally { cleanup && cleanup(); }
+  });
+
+  t('图鉴照片：写过之后读得到，同一只猫再写就是覆盖', () => {
+    const { repo, cleanup } = makeRepo();
+    try {
+      repo.setCatPhoto({ catId: 'c1', image: 'img_aa.jpg', actorId: 'u_1' });
+      repo.setCatPhoto({ catId: 'c2', image: 'img_bb.jpg' });
+
+      const list = repo.listCatPhotos();
+      assert.equal(list.length, 2);
+      // 按 cat_id 排序，方便对比，也不依赖插入顺序
+      assert.deepEqual(list.map((r) => r.catId), ['c1', 'c2']);
+      assert.equal(list[0].image, 'img_aa.jpg');
+      assert.equal(list[0].actorId, 'u_1', '要记住是谁换的');
+
+      // ★ 同一只猫再写不能变成两行 —— 那是「哪张才算数」的问题
+      repo.setCatPhoto({ catId: 'c1', image: 'img_cc.jpg', actorId: 'u_2' });
+      const again = repo.listCatPhotos();
+      assert.equal(again.length, 2, '同一只猫只该有一行');
+      assert.equal(again[0].image, 'img_cc.jpg', '新写的要覆盖旧的');
+      assert.equal(again[0].actorId, 'u_2');
+    } finally { cleanup && cleanup(); }
+  });
+
+  t('图鉴照片：删掉覆盖行 = 回到默认那张', () => {
+    const { repo, cleanup } = makeRepo();
+    try {
+      repo.setCatPhoto({ catId: 'c1', image: 'img_aa.jpg' });
+      repo.setCatPhoto({ catId: 'c2', image: 'img_bb.jpg' });
+
+      repo.clearCatPhoto('c1');
+
+      const list = repo.listCatPhotos();
+      assert.deepEqual(list.map((r) => r.catId), ['c2'], '只该删掉指定的那只');
+
+      // 删不存在的行不能报错 —— 界面上的「恢复默认」可能被点两下
+      assert.doesNotThrow(() => repo.clearCatPhoto('c1'));
+      assert.doesNotThrow(() => repo.clearCatPhoto('不存在的猫'));
+      assert.equal(repo.listCatPhotos().length, 1);
+    } finally { cleanup && cleanup(); }
+  });
+
   t('可以写审计日志', () => {
     const { repo, cleanup } = makeRepo();
     try {

@@ -38,6 +38,7 @@
         "pages/items/index",
         "pages/item-new/index",
         "pages/event/index",
+        "pages/cats/index",
         "pages/cancel/index"
       ]
     }
