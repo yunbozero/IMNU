@@ -59,12 +59,12 @@
       <view class="entry__arrow">›</view>
     </view>
 
-    <!-- 图鉴照片：和物品照片同一档（副主任及以上）。改的是图鉴，不用发版。 -->
+    <!-- 图鉴：和物品照片同一档（副主任及以上）。改了不用发版。 -->
     <view wx:if="{{isManager}}" class="entry entry--staff" bindtap="goAdminCats" hover-class="entry--hover">
       <view class="entry__icon">🐱</view>
       <view class="grow">
-        <view class="entry__title">管理端 · 图鉴照片</view>
-        <view class="entry__desc">给猫换照片，改完立刻生效</view>
+        <view class="entry__title">管理端 · 图鉴管理</view>
+        <view class="entry__desc">加猫、改资料、换照片，改完立刻生效</view>
       </view>
       <view class="entry__arrow">›</view>
     </view>

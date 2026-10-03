@@ -83,16 +83,23 @@ const TOO_BIG_MSG = `图片不能超过 ${Math.round(MAX_IMAGE_BYTES / 1024)}KB�
  */
 export const ITEM_TINTS = ['t-pink', 't-green', 't-blue', 't-yellow', 't-purple', 't-orange'];
 
+/* ---------------- 猫猫图鉴 ---------------- */
+
+export const CAT_NAME_MAX = 12;
+export const CAT_LOC_MAX = 30;
+export const CAT_PERSONALITY_MAX = 60;
+export const CAT_NOTE_MAX = 60;
+
 /**
- * 图鉴里一只猫的 id 长什么样。
- *
- * ★ 和 miniprogram/data/cats.js 里的 id 必须对得上，但**不 import 那个文件** ——
- *   server/ 一旦依赖 miniprogram/ 就不能单独跑了（现在它可以是自足的）。
- *   本仓库对这类「两边都需要的知识」的做法是各存一份 + 一条漂移测试，
- *   所以这里导出，让 tests/miniprogram.test.mjs 拿 CATS 的真实 id 来过它 ——
- *   两份规则不会各自漂走。
+ * 猫的状态。
+ * ★ 必须和 miniprogram/data/cats.js 的 CAT_STATUS 的键一致 —— 那边是中文文案，
+ *   这边是存储用的键，有测试比对两边（键少了会变成界面上「未知」的状态）。
+ *   `passed`（离世）不是删除：图鉴里要留着纪念，所以它是一个状态。
  */
-export const CAT_ID_RE = /^[a-z0-9][a-z0-9_-]{0,31}$/;
+export const CAT_STATUSES = ['onCampus', 'missing', 'passed'];
+
+/** 性别。做成枚举而不是自由文本，界面上就能用选择器，数据也不会五花八门。 */
+export const CAT_GENDERS = ['公', '母', '未知'];
 
 const ok = (body = {}) => ({ status: 200, body: { ok: true, ...body } });
 const fail = (error, message, status = 200) => ({ status, body: { ok: false, error, message } });
@@ -213,9 +220,72 @@ export function createApi({
   };
 
   /**
-   * 覆盖用的照片只能是**上传接口产出的**文件名，不能是仓库里那张 cats/xxx.jpg。
+   * 图鉴的一只猫，除名字以外的那些字段。
+   *
+   * ★ 只有**传了的**字段才会出现在结果里（undefined 不进对象）——
+   *   改猫那条路是局部更新，全填成 null 的话「只改性格」会把地点清空。
+   *   k 是请求里的字段名，v 是校验方式。
    */
-  const isUploadedImage = (name) => typeof name === 'string' && name.startsWith('img_');
+  const catFieldsFrom = (body) => {
+    const text = (key, max, label) => {
+      if (body?.[key] === undefined) return undefined;
+      const r = asOptionalText(body[key], max);
+      if (!r.ok) return { bad: `${label}不能超过 ${max} 个字` };
+      return r.value;
+    };
+
+    const values = {};
+    const put = (key, v) => {
+      if (v === undefined) return true;
+      if (v && typeof v === 'object' && 'bad' in v) return v.bad;
+      values[key] = v;
+      return true;
+    };
+
+    for (const [key, max, label] of [
+      ['location', CAT_LOC_MAX, '出没地点'],
+      ['personality', CAT_PERSONALITY_MAX, '性格'],
+      ['note', CAT_NOTE_MAX, '备注'],
+    ]) {
+      const r = put(key, text(key, max, label));
+      if (r !== true) return { ok: false, message: r };
+    }
+
+    // emoji：和物品同一个上限（一个 emoji 或两个字）
+    if (body?.emoji !== undefined) {
+      const r = asOptionalText(body.emoji, ITEM_EMOJI_MAX);
+      if (!r.ok) return { ok: false, message: `图标最多 ${ITEM_EMOJI_MAX} 个字` };
+      values.emoji = r.value;
+    }
+
+    if (body?.tint !== undefined) {
+      if (body.tint !== null && !ITEM_TINTS.includes(body.tint)) {
+        return { ok: false, message: '不认识的底色' };
+      }
+      values.tint = body.tint;
+    }
+
+    if (body?.status !== undefined) {
+      if (!CAT_STATUSES.includes(body.status)) {
+        return { ok: false, message: '不认识的状态' };
+      }
+      values.status = body.status;
+    }
+
+    if (body?.gender !== undefined) {
+      if (body.gender !== null && !CAT_GENDERS.includes(body.gender)) {
+        return { ok: false, message: `性别只能是 ${CAT_GENDERS.join(' / ')}` };
+      }
+      values.gender = body.gender;
+    }
+
+    // 照片：三态，和物品照片同一个约定（不传=不动 / null=清掉 / 文件名=换成它）
+    const image = asStoredImage(body?.image);
+    if (!image.ok) return { ok: false, message: '图片不存在，请重新上传' };
+    if (image.value !== undefined) values.image = image.value;
+
+    return { ok: true, values };
+  };
 
   /**
    * 生效中的「每账号最多预定几件」。
@@ -825,83 +895,108 @@ export function createApi({
     },
 
     /**
-     * 图鉴照片的覆盖表。**公开**，不需要登录。
+     * 图鉴全部猫。**公开**，不需要登录。
      *
-     * 为什么公开：图鉴是 tabBar 上的一级页面，任何人打开都要能看到照片；
-     * 而且它本来就不是秘密（仓库里那份是公开的内容）。返回的只是一张
-     * 「哪只猫换了哪张图」的表，没有用户信息。
+     * 为什么公开：图鉴是 tabBar 上的一级页面，任何人打开都要能看到；
+     * 而且它本来就没什么秘密。返回里没有任何用户信息。
      *
-     * 客户端拿到之后和 cats.js 里的 image 合并：**有覆盖就用覆盖，
-     * 没有就用仓库里那张**。请求失败时客户端继续用仓库那张，所以断网也能看图鉴。
+     * 不做分组：客户端自己按 status 分「在校 / 失踪 / 离世」——
+     * 那是界面文案，属于小程序（见 miniprogram/data/cats.js 的 CAT_LIST_GROUPS）。
      */
-    listCatPhotos() {
-      const photos = {};
-      for (const r of repo.listCatPhotos()) photos[r.catId] = r.image;
-      return ok({ photos });
+    listCats() {
+      return ok({ cats: repo.listCats() });
     },
 
     /**
-     * 给某只猫换照片（副主任及以上，和物品照片同一档）。
+     * 新建一只猫（副主任及以上，和物品照片同一档）。
      *
-     * body: { catId, image }，image 必须是上传接口返回的文件名；
-     * 传 null / '' 表示**恢复成仓库里那张**（删掉覆盖行，而不是存个空值）。
-     *
-     * ★ 换图之后要把旧的**上传文件**删掉，否则每换一次就在磁盘上留一张
-     *   谁也不引用的图，一年下来能攒出几百兆。
-     *   但绝不能删 `cats/xxx.jpg` —— 那是仓库同步过来的默认照片，
-     *   删掉等于把兜底也弄没了（而且下次发布又会同步回来，只是中间那段时间 404）。
+     * 为什么要有：图鉴原来是编译在包里的静态数据，加一只猫要发版审核（1–2 天）。
+     * 而图鉴是 tabBar 一级页面、内容会一直变 —— 组织者应该能自己加。
      */
-    adminSetCatPhoto({ body, user }) {
+    adminCreateCat({ body, user }) {
+      if (!user) return fail('unauthorized', '请先登录', 401);
+      if (!isManager(user)) return fail('forbidden', '你没有管理权限', 403);
+
+      const name = asOptionalText(body?.name, CAT_NAME_MAX);
+      if (!name.ok) return fail('bad_request', `名字不能超过 ${CAT_NAME_MAX} 个字`, 400);
+      if (!name.value) return fail('bad_request', '要给这只猫起个名字', 400);
+
+      const fields = catFieldsFrom(body);
+      if (!fields.ok) return fail('bad_request', fields.message, 400);
+
+      const r = repo.createCat({ name: name.value, ...fields.values });
+
+      repo.writeAudit({
+        actorId: user.id, action: 'cat.create',
+        targetType: 'cat', targetId: r.cat.id,
+        detail: { name: r.cat.name },
+      });
+
+      return ok({ cat: r.cat });
+    },
+
+    /**
+     * 改一只猫。传什么改什么（不传的字段不动）。
+     *
+     * ★ 换照片时要把**旧的上传文件**删掉，否则每换一次就在磁盘上留一张
+     *   谁也不引用的图，一年下来能攒出几百兆。物品那边也是这么做的。
+     */
+    adminUpdateCat({ body, user }) {
       if (!user) return fail('unauthorized', '请先登录', 401);
       if (!isManager(user)) return fail('forbidden', '你没有管理权限', 403);
 
       const catId = typeof body?.catId === 'string' ? body.catId.trim() : '';
-      if (!CAT_ID_RE.test(catId)) return fail('bad_request', '不认识的猫', 400);
+      if (!catId) return fail('bad_request', '缺少 catId', 400);
 
-      const before = repo.listCatPhotos().find((p) => p.catId === catId) || null;
+      const before = repo.getCat(catId);
+      if (!before) return fail('not_found', '找不到这只猫', 404);
 
-      // 清空：删覆盖行，回落到仓库里那张
-      if (body?.image === null || body?.image === '') {
-        if (!before) return ok({ catId, image: null, cleared: false });
-
-        repo.clearCatPhoto(catId);
-        if (isUploadedImage(before.image)) deleteImage(before.image, imageDir);
-        repo.writeAudit({
-          actorId: user.id, action: 'cat_photo.clear',
-          targetType: 'cat', targetId: catId, detail: { image: before.image },
-        });
-        return ok({ catId, image: null, cleared: true });
+      const fields = catFieldsFrom(body);
+      if (!fields.ok) return fail('bad_request', fields.message, 400);
+      if (body?.name !== undefined) {
+        const name = asOptionalText(body.name, CAT_NAME_MAX);
+        if (!name.ok) return fail('bad_request', `名字不能超过 ${CAT_NAME_MAX} 个字`, 400);
+        if (!name.value) return fail('bad_request', '名字不能留空', 400);
+        fields.values.name = name.value;
       }
 
-      const image = asStoredImage(body?.image);
-      if (!image.ok) return fail('bad_request', '图片不存在，请重新上传', 400);
-      if (image.value === undefined || image.value === null) {
-        return fail('bad_request', '缺少图片', 400);
-      }
+      const r = repo.updateCat(catId, fields.values);
 
-      // ★ 覆盖值必须是**上传接口产出的**文件名（img_<hex>.jpg）。
-      //   仓库里那张（cats/xxx.jpg）是兜底，不能当覆盖写进来：
-      //     · 写进去之后「恢复默认」就没了意义 —— 它和默认值一模一样；
-      //     · 仓库那边换图时，这一行还指着旧文件名，谁也看不出是为什么。
-      //   想用仓库那张就传 null（= 删掉覆盖），语义只有这一条。
-      if (!isUploadedImage(image.value)) {
-        return fail('bad_request', '请重新上传一张照片，不能直接把默认照片设成覆盖', 400);
-      }
-
-      repo.setCatPhoto({ catId, image: image.value, actorId: user.id });
-
-      // 换了另一张上传图才删旧的；设置成同一张时什么都不动
-      if (before && before.image !== image.value && isUploadedImage(before.image)) {
+      // 换了另一张图才删旧的；设成同一张、或只是改名字时什么都不动
+      if (fields.values.image !== undefined
+          && before.image && before.image !== fields.values.image) {
         deleteImage(before.image, imageDir);
       }
 
       repo.writeAudit({
-        actorId: user.id, action: 'cat_photo.set',
+        actorId: user.id, action: 'cat.update',
         targetType: 'cat', targetId: catId,
-        detail: { image: image.value, replaced: before ? before.image : null },
+        detail: { changed: Object.keys(fields.values) },
       });
 
-      return ok({ catId, image: image.value, replaced: before ? before.image : null });
+      return ok({ cat: r.cat });
+    },
+
+    /** 删掉一只猫。真删（没有任何东西引用猫），同时清掉它的照片文件。 */
+    adminDeleteCat({ body, user }) {
+      if (!user) return fail('unauthorized', '请先登录', 401);
+      if (!isManager(user)) return fail('forbidden', '你没有管理权限', 403);
+
+      const catId = typeof body?.catId === 'string' ? body.catId.trim() : '';
+      if (!catId) return fail('bad_request', '缺少 catId', 400);
+
+      const r = repo.deleteCat(catId);
+      if (!r.ok) return fail('not_found', '找不到这只猫', 404);
+
+      if (r.cat.image) deleteImage(r.cat.image, imageDir);
+
+      repo.writeAudit({
+        actorId: user.id, action: 'cat.delete',
+        targetType: 'cat', targetId: catId,
+        detail: { name: r.cat.name, image: r.cat.image },
+      });
+
+      return ok({ deleted: catId });
     },
 
     /**

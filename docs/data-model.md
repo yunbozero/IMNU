@@ -248,4 +248,10 @@ describeRepositoryContract('云开发', () => ({ repo: createCloudRepository(...
 - `images` 字段：现在是 `emoji` + `tint` 占位，正式版要换成图片列表
 - 取货码生成策略：目前是纯随机 6 位数字 + 撞码重试；如果要求"不可枚举"，改成自增序号 + Feistel 置换 + Base32
 - 分时段取货：如果要，`items` 需要加时段表
-- 猫猫图鉴：数据静态打包，不进这个库；将来若要动态化，另起一组表
+
+> 猫猫图鉴**已经进这个库了**（`cats` 表，见 `server/db.mjs`）。
+> 原来它是静态打包进小程序的，代价是加一只猫、改一句性格都要发版审核（1–2 天）；
+> 而图鉴是 tabBar 一级页面、内容会一直变，所以改成了服务端存。
+> 字段：`id / name / emoji / tint / image / status / gender / location / personality / note`。
+> 照片和物品共用 `server/images.mjs` 那套（上传生成 `img_<随机串>.<ext>`）。
+

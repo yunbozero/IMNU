@@ -147,7 +147,7 @@ Page({
     wx.navigateTo({ url: '/packageAdmin/pages/event/index' });
   },
 
-  /** 图鉴照片。和物品照片同一档（副主任及以上），服务端也是这么卡的。 */
+  /** 图鉴管理。和物品照片同一档（副主任及以上），服务端也是这么卡的。 */
   goAdminCats() {
     if (!this.data.isManager) return;
     wx.navigateTo({ url: '/packageAdmin/pages/cats/index' });

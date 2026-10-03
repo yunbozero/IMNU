@@ -773,206 +773,69 @@ test('照片：每张图都要有失败回退，列表图还要懒加载', () =>
 });
 
 /* ============================================================
-   ★ 猫猫图鉴的照片
+   ★ 猫猫图鉴（资料在服务端，见 tests/cats.test.mjs）
    ============================================================ */
 
-/** 图鉴照片的文件名规则：cats/ + 小写 ASCII + 白名单扩展名。 */
-const CAT_IMAGE_RE = /^cats\/[a-z0-9][a-z0-9_-]{0,40}\.(jpg|png|webp|gif)$/;
-
-test('图鉴：照片名必须是 cats/ 下的纯 ASCII（中文名会静默 404）', async () => {
-  // 这条是**最容易犯、又最难查**的错：把猫的照片命名成 `大橘.jpg` 传上去，
-  // 小程序会把它百分号编码，而服务端的静态服务故意不解码 → 404。
-  // 界面上因为「失败回落 emoji」连个报错都没有，看起来就跟「还没传照片」一样。
-  const { CATS } = await import('../miniprogram/data/cats.js');
-  assert.ok(Array.isArray(CATS) && CATS.length > 0, 'CATS 得是个非空数组');
-
-  const problems = [];
-  for (const cat of CATS) {
-    if (cat.image === null || cat.image === undefined) continue;
-    if (typeof cat.image !== 'string' || !CAT_IMAGE_RE.test(cat.image)) {
-      problems.push(`${cat.name}(${cat.id}): ${JSON.stringify(cat.image)}`);
-    }
-  }
-
-  assert.deepEqual(problems, [],
-    '这些图鉴照片名不合规。必须是 cats/ + 全小写 ASCII + .jpg/.png/.webp/.gif，'
-    + '不能有中文、空格、大写，也不能再往下一层目录：\n' + problems.join('\n'));
-});
-
-test('图鉴守卫自测：中文名、大写、绝对路径都得被抓到', () => {
-  assert.equal(CAT_IMAGE_RE.test('cats/daju.jpg'), true);
-  assert.equal(CAT_IMAGE_RE.test('cats/xiao-hei_2.webp'), true);
-  assert.equal(CAT_IMAGE_RE.test('cats/大橘.jpg'), false, '中文名必须被抓到');
-  assert.equal(CAT_IMAGE_RE.test('cats/DAJU.jpg'), false);
-  assert.equal(CAT_IMAGE_RE.test('cats/daju.bmp'), false);
-  assert.equal(CAT_IMAGE_RE.test('cats/a/b.jpg'), false, '不许再往下一层');
-  assert.equal(CAT_IMAGE_RE.test('/srv/bazaar/images/cats/daju.jpg'), false,
-    '写的应当是相对图片目录的路径，不是服务器绝对路径');
-  assert.equal(CAT_IMAGE_RE.test('daju.jpg'), false, '忘了 cats/ 前缀也取不到图');
-});
-
-test('图鉴：有照片时渲染 <image>，没有或加载失败回落 emoji', async () => {
-  const { CATS } = await import('../miniprogram/data/cats.js');
-  const withPhoto = CATS.filter((c) => c.image);
-  if (withPhoto.length === 0) return; // 还没配照片时这条没得测，由上面的命名测试兜着
-
-  // 列表页和详情页都得有「照片 + 回落」这一对，否则要么没照片、
-  // 要么照片挂了留一个空格子（比 emoji 还难看，而且看不出是加载失败）。
-  const sites = [
-    ['pages/cats/index.wxml', 'pages/cats/index.js'],
-    ['packageCats/pages/detail/index.wxml', 'packageCats/pages/detail/index.js'],
-  ];
-
-  for (const [wxml, js] of sites) {
-    const src = read(path.join(MP, wxml));
-    const tags = src.match(/<image[\s\S]*?\/>/g) || [];
-    assert.ok(tags.length >= 1, `${wxml} 里找不到 <image>`);
-
-    for (const tag of tags) {
-      assert.match(tag, /binderror="onPhotoError"/, `${wxml} 的照片没接失败回调`);
-      assert.match(tag, /mode="aspectFill"/, `${wxml} 的照片缺 aspectFill`);
-      assert.match(tag, /photoFailed/, `${wxml} 的 wx:if 要带上「失败过就别再显示」`);
-    }
-    assert.match(src, /wx:else/, `${wxml} 没有 emoji 回落分支`);
-    assert.match(src, /item\.emoji|cat\.emoji/, `${wxml} 的回落分支没用到 emoji`);
-    assert.match(read(path.join(MP, js)), /onPhotoError/, `${js} 没有实现 onPhotoError`);
-  }
-});
-
-test('图鉴：照片地址只在一处拼，页面里不许出现裸域名', async () => {
-  // 和物品照片同一套路：数据里只有文件名，base 在 config.js 一处收口。
-  // 一旦有人在页面里写死 http://... ，换服务器时就会漏掉几处。
-  const { CATS } = await import('../miniprogram/data/cats.js');
-  for (const cat of CATS) {
-    if (!cat.image) continue;
-    assert.doesNotMatch(cat.image, /^https?:\/\//,
-      `${cat.name} 的 image 写成了完整 URL —— 数据里只放文件名`);
-  }
-
-  // ★ 覆盖表和仓库那张的合并规则收在 services/cat-photos.js 里，
-  //   所以拼地址这件事也**只有那一处**该做。页面自己去拼的话，
-  //   「覆盖优先」这条规则就会在列表页和详情页各有一份，迟早不一致。
-  const svc = read(path.join(MP, 'services', 'cat-photos.js'));
-  assert.match(svc, /imageUrl\(/, '照片地址要在 services/cat-photos.js 里用 imageUrl() 拼');
-
+test('图鉴：列表页和详情页都要「先用缓存渲染，再拉接口」', () => {
+  // 图鉴原来是「零网络请求、断网也能看」的页面。改成读接口之后，
+  // 只要有一处把「没问到」当成「一只猫都没有」，断网时整页就空了 ——
+  // 那就把原来最大的优点弄丢了。
+  // 合并/缓存/失败返回 null 这些**行为**由 tests/cats.test.mjs 真跑一遍；
+  // 这里只管页面这一层有没有照着用。
   for (const rel of ['pages/cats/index.js', 'packageCats/pages/detail/index.js']) {
     const js = read(path.join(MP, rel));
-    assert.match(js, /catPhotos\.withPhoto\(/,
-      `${rel} 应当走 services/cat-photos.js 算照片地址，别自己拼`);
 
-    // ★ 只认「真的写了个地址」：引号后面直接跟 http。注释里提到 http
-    //   （比如解释为什么不能写死地址）不该被算进去 —— 否则正确的话说不出口。
-    assert.doesNotMatch(js, /['"`]https?:\/\//,
-      `${rel} 里出现了写死的地址`);
+    assert.match(js, /cats\.cached\(\)/, `${rel} 要先用缓存同步渲染一次`);
+    // 拿到 null 就**必须原样保留现有内容**，不能当成「一只猫都没有」
+    assert.match(js, /if \(!list\)[\s\S]{0,160}?return/,
+      `${rel} 拿到 null（没问到）时必须原样保留现有内容，别往下走`);
 
-    // 导入 BASE_URL 才是「自己去拼地址」的实锤。注释里提到它不算。
+    assert.doesNotMatch(js, /showToast[^\n]*猫[\s\S]{0,20}失败/,
+      `${rel} 拉不到图鉴不该弹提示 —— 回落 emoji / 显示缓存是正常状态`);
+    assert.doesNotMatch(js, /loading/i, `${rel} 不该为一个后台刷新显示加载态`);
+  }
+});
+
+test('图鉴：三个页面共用同一处展示逻辑，不各算一遍', () => {
+  // 列表页、详情页、管理端都要算「显示哪张照片、状态叫什么」。
+  // 各写一份的话，迟早出现「详情页有照片、列表页没有」这种自己跟自己对不上。
+  const svc = read(path.join(MP, 'services', 'cats.js'));
+  assert.match(svc, /export function decorate/, '展示逻辑要是 services/cats.js 的导出');
+  assert.match(svc, /imageUrl\(/, '照片地址要在 services/cats.js 里用 imageUrl() 拼');
+
+  for (const rel of ['pages/cats/index.js', 'packageCats/pages/detail/index.js',
+    'packageAdmin/pages/cats/index.js']) {
+    const js = read(path.join(MP, rel));
+    assert.match(js, /cats\.decorate\b/, `${rel} 应当走 cats.decorate()，别自己算`);
+    assert.doesNotMatch(js, /['"`]https?:\/\//, `${rel} 里出现了写死的地址`);
     assert.doesNotMatch(js, /import[^;]*\bBASE_URL\b/,
-      `${rel} 不该 import BASE_URL —— 拼地址只有 services/cat-photos.js 那一处`);
+      `${rel} 不该 import BASE_URL —— 拼地址只有 services/cats.js 那一处`);
   }
 });
 
-test('图鉴：CATS 的 id 必须被服务端认（否则照片永远挂不上去）', async () => {
-  // ★ 服务端不 import CATS（server/ 不该依赖 miniprogram/），两边各存一份规则，
-  //   靠这条测试盯着别漂走。所以这里**不重抄正则**，直接 import 服务端那个常量 ——
-  //   重抄一遍的话，服务端改了这边不会跟着改，测试反而变成假的保证。
-  const { CAT_ID_RE } = await import('../server/api.mjs');
-  const { CATS } = await import('../miniprogram/data/cats.js');
-
-  const bad = CATS.filter((c) => !CAT_ID_RE.test(String(c.id)));
-  assert.deepEqual(bad.map((c) => `${c.name}: ${JSON.stringify(c.id)}`), [],
-    '这些猫的 id 服务端不认 —— 管理员给它们换照片会被 400 打回来。'
-    + 'id 要满足 ' + String(CAT_ID_RE));
-
-  // id 也不能重复：覆盖表以 cat_id 为主键，重复的话两只猫会共用一张照片
-  const ids = CATS.map((c) => c.id);
-  assert.equal(new Set(ids).size, ids.length, `id 有重复：${ids.join(', ')}`);
-
-  // 自检：这个正则不是「什么都过」
-  assert.equal(CAT_ID_RE.test('C1'), false);
-  assert.equal(CAT_ID_RE.test('大橘'), false);
-  assert.equal(CAT_ID_RE.test(''), false);
-});
-
-test('图鉴：★ cats.js 里写的照片名必须和 assets/cats/ 里的文件名逐字对上', async () => {
-  // 这条防的是**手动放照片时最容易犯、又完全查不出来**的错：
-  // 文件名和 cats.js 里那串差一个字母、或者大小写不同 —— 结果是服务器 404、
-  // 界面回落 emoji，一句报错都没有，看起来就像「还没配照片」。
-  //
-  // ★ 必须拿目录里的**真实文件名**来比，不能用 fs.existsSync：
-  //   开发机是 Windows（大小写不敏感），`Daju.jpg` 写成 `cats/daju.jpg`
-  //   在本地一路绿灯，上了 Linux 服务器才 404 —— 那正是最坏的情况。
-  const { CATS } = await import('../miniprogram/data/cats.js');
-
-  const dir = path.join(ROOT, 'assets', 'cats');
-  assert.ok(exists(dir), 'assets/cats/ 目录不见了');
-  const onDisk = fs.readdirSync(dir).filter((f) => f !== 'README.md' && !f.startsWith('.'));
-
-  // ① cats.js 提到的每个文件都要真的在
-  const missing = [];
-  for (const cat of CATS) {
-    if (!cat.image) continue;
-    const name = String(cat.image).replace(/^cats\//, '');
-    if (!onDisk.includes(name)) {
-      missing.push(`${cat.name} 写的是 cats/${name}，但目录里没有这个名字`
-        + `（目录里有：${onDisk.join(', ') || '一个都没有'}）`);
-    }
-  }
-  assert.deepEqual(missing, [], '这些猫的照片名和实际文件名对不上：\n' + missing.join('\n'));
-
-  // ② 目录里也不该有没人引用的照片 —— 那通常是「放了图但忘了写进 cats.js」，
-  //    或者是上面 ① 那个错的镜像（照片叫 a.jpg，cats.js 里写的却是 b.jpg）
-  const referenced = new Set(CATS.filter((c) => c.image)
-    .map((c) => String(c.image).replace(/^cats\//, '')));
-  const orphans = onDisk.filter((f) => !referenced.has(f));
-  assert.deepEqual(orphans, [],
-    'assets/cats/ 里这些照片没有任何一只猫在用（放了图但忘了写进 cats.js？）：\n'
-    + orphans.join('\n'));
-});
-
-test('图鉴：管理端只能改照片，改动要过覆盖表（不是改 cats.js）', () => {
-  // 「在小程序里换照片」这件事只能落在覆盖表上。如果有人图省事去
-  // 改 cats.js 里的 image 字段，那要重新发版 —— 而这个功能的全部意义
-  // 就是不发版。这里挡住那种退路。
-  const page = read(path.join(MP, 'packageAdmin', 'pages', 'cats', 'index.js'));
-
-  assert.match(page, /\/api\/admin\/cat-photo/, '要调换照片的接口');
-  assert.match(page, /\/api\/cat-photos/, '要读覆盖表');
-  assert.match(page, /isManager\(\)/, '门槛要收在 session.js 里（副主任及以上）');
-  assert.doesNotMatch(page, /require\(|\.wxss'\)/, '不该去 import 数据文件再改它');
-
-  // 入口要在「我的」页里，而且只在管理员看得到。
+test('图鉴：「我的」页的入口要指向图鉴管理，而且只对管理员显示', () => {
   // ★ 必须从 `<view` 开始匹配：wx:if 在 bindtap **前面**，
   //   从 goAdminCats 往后截窗口是看不到门槛的（第一版就是这么写错的）。
   const wxml = read(path.join(MP, 'pages', 'profile', 'index.wxml'));
-  const entry = /<view[^>]*goAdminCats[\s\S]{0,200}?管理端 · 图鉴照片/.exec(wxml);
-  assert.ok(entry, '「我的」页里没有图鉴照片的入口');
+  const entry = /<view[^>]*goAdminCats[\s\S]{0,200}?管理端 · 图鉴管理/.exec(wxml);
+  assert.ok(entry, '「我的」页里没有图鉴管理的入口');
   assert.match(entry[0], /wx:if="\{\{isManager\}\}"/, '入口要只对管理员显示');
 
-  // 页面要在 app.json 里登记，否则 wx.navigateTo 直接失败
-  const app = JSON.parse(read(path.join(MP, 'app.json')));
-  const admin = app.subPackages.find((p) => p.root === 'packageAdmin');
-  assert.ok(admin.pages.includes('pages/cats/index'), 'app.json 里没登记这个页面');
+  const js = read(path.join(MP, 'pages', 'profile', 'index.js'));
+  assert.match(js, /goAdminCats[\s\S]{0,200}\/packageAdmin\/pages\/cats\/index/,
+    '入口要指向 packageAdmin 的图鉴管理页');
 });
 
-test('图鉴：页面拿到 null 时要继续用现有照片，而且不弹错、不显示加载态', () => {
-  // 合并规则、缓存、失败返回 null 这些**行为**都由 tests/cat-photos.test.mjs
-  // 真跑一遍（用 platform 的假实现）—— 这里只管页面这一层：
-  // 它有没有把「没问到」当成「没有照片」，以及有没有为一个后台请求弹提示。
-  //
-  // 图鉴原来是「零网络请求、断网也能看」的页面。加了覆盖表之后，
-  // 只要页面把失败当成「没有照片」，断网时就会从「有仓库那张」变成「只剩 emoji」。
-  for (const rel of ['pages/cats/index.js', 'packageCats/pages/detail/index.js']) {
-    const js = read(path.join(MP, rel));
-
-    assert.match(js, /catPhotos\.cached\(\)/, `${rel} 要先用缓存同步渲染一次`);
-    assert.match(js, /if \(!photos\) return/,
-      `${rel} fetch 返回 null（没问到）时必须原样保留现有照片，别往下走`);
-
-    assert.doesNotMatch(js, /showToast[^\n]*照片/,
-      `${rel} 拿不到覆盖表不该弹提示 —— 图鉴回落 emoji 是正常状态`);
-    assert.doesNotMatch(js, /loading/i, `${rel} 不该为一个后台请求显示加载态`);
+test('图鉴：管理端页面齐全，门槛收在 session.js 里', () => {
+  for (const rel of ['packageAdmin/pages/cats/index', 'packageAdmin/pages/cat-edit/index']) {
+    for (const ext of ['.js', '.wxml', '.wxss', '.json']) {
+      assert.ok(exists(path.join(MP, rel + ext)), `${rel}${ext} 不存在`);
+    }
+    const js = read(path.join(MP, rel + '.js'));
+    assert.match(js, /isManager\(\)/, `${rel} 的门槛要收在 session.js 里`);
   }
 });
+
 
 /* ============================================================
    ★ 管理端活动与摊位

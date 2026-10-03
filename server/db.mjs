@@ -146,33 +146,40 @@ CREATE TABLE IF NOT EXISTS settings (
 );
 
 -- ============================================================
--- 图鉴照片的覆盖
+-- 猫猫图鉴
 --
--- 猫的**资料**（名字/性格/状态）编译在小程序包里（miniprogram/data/cats.js），
--- 不常改，改一次发一次版可以接受。但**照片**不一样：拍到了新照片就想马上换。
+-- ★ 这一张表就是图鉴的**唯一事实来源**（原来是编译在小程序包里的
+--   miniprogram/data/cats.js）。搬进数据库是为了**改资料和加猫都不用发版** ——
+--   照片、性格、在不在校这些三天两头要动，而发一次版要等 1–2 天审核。
 --
--- 所以这里只存「哪只猫换了哪张照片」：
---   · 有行 → 用 image（管理员在小程序里传的，文件名形如 img_<hex>.jpg）
---   · 没有行 → 回落 cats.js 里的 image（仓库里那张 assets/cats/xxx.jpg）
--- 删掉这一行就等于「恢复成仓库里那张」。
+-- 代价（明确写下来，免得以后有人问「为什么不放包里」）：
+--   · 图鉴页从「零网络请求、断网也能看」变成要发一次请求 ——
+--     客户端先用本地缓存同步渲染，所以首屏不会白，断网仍显示上次的结果；
+--   · 加一只猫多了一次网络往返，不再随包一起下去。
+--   这两条换「不用发版」是值得的：图鉴是 tabBar 一级页面，内容会一直变。
 --
--- ★ 为什么不把照片文件名直接写进 cats.js 就好：那样换一张图要发版审核，
---   而且**同名替换**会被 nginx 的 expires 和微信的图片缓存挡住 —— URL 不变，
---   学生最长一个月都看到旧照片。走上传每次生成新文件名，天生没这个问题。
---
--- cat_id 由服务端卡形状（server/api.mjs 的 CAT_ID_RE），管理端也只能从 CATS 里选，
--- 所以出现「照片挂在一只不存在的猫身上」这条路是堵住的。
--- 为什么服务端不去 import CATS 逐个核对：那样 server/ 就依赖 miniprogram/ 了。
--- 本仓库对「两边都需要的知识」一贯是**各存一份 + 一条漂移测试**（见
--- tests/miniprogram.test.mjs），不是跨目录 import —— 这里照同一个做法。
--- 代价是手工调接口传一个不存在的 id 时会留下一行没人看的记录，无害。
+-- 没有软删除：没有任何东西引用猫（预定记录指向的是物品），
+-- 所以删就是真删。误删靠审计日志找回线索，界面上会二次确认。
+-- 离世是一个**状态**（status='passed'），不是删除 —— 图鉴里要留着纪念。
 -- ============================================================
-CREATE TABLE IF NOT EXISTS cat_photos (
-  cat_id     TEXT PRIMARY KEY,
-  image      TEXT NOT NULL,                     -- 文件名，不是完整 URL
-  updated_at INTEGER NOT NULL,
-  actor_id   TEXT                               -- 谁换的（留个凭据，换届时有用）
+CREATE TABLE IF NOT EXISTS cats (
+  id          TEXT PRIMARY KEY,
+  name        TEXT NOT NULL,
+  emoji       TEXT,                              -- 没照片时的图标，一个 emoji 或两个字
+  tint        TEXT,                              -- 图标底色，对应 app.wxss 里的 .t-*
+  image       TEXT,                              -- 照片文件名（不是完整 URL），见 server/images.mjs
+  status      TEXT NOT NULL DEFAULT 'onCampus',  -- onCampus | missing | passed
+  gender      TEXT,                              -- 公 | 母 | 未知
+  location    TEXT,                              -- 常在哪儿出没
+  personality TEXT,                              -- 性格
+  note        TEXT,                              -- 其它要提醒的（绝育、胆小、线索…）
+  created_at  INTEGER NOT NULL,
+  updated_at  INTEGER NOT NULL
 );
+-- 列表按录入顺序排（图鉴里在校猫的先后次序就是这个）。
+-- 没有「拖动排序」的界面：图鉴不是需要精排的内容，而做一个拖拽排序
+-- 在手机上既难用又难测。真想调顺序就改 created_at。
+CREATE INDEX IF NOT EXISTS ix_cats_status ON cats(status, created_at);
 `;
 
 /**

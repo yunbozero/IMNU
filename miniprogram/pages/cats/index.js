@@ -1,50 +1,59 @@
 /**
  * 猫猫图鉴（tabBar 页面，所以在主包）。
  *
- * 猫的**资料**是静态的，不发网络请求；**照片**有两个来源：
- *   · 仓库里的 `assets/cats/xxx.jpg`（兜底，跟着发布同步到服务器）
- *   · 管理员在小程序里换的那张（存在数据库，见 services/cat-photos.js）
- * 合并规则只有一条：有覆盖用覆盖，没有就用仓库那张。没有照片、或者照片加载
- * 失败，一律回落 emoji + 底色 —— 所以**断网也能看图鉴**。
- *
- * 为什么不把照片塞进包里：主包有 2MB 硬上限，十几张照片就顶满了，
- * 而主包每冷启动都要下载一遍 —— 仓库自己的原则也是「主包要尽量小」。
+ * 资料来自服务端（`/api/cats`，见 services/cats.js）。先用本地缓存**同步**
+ * 渲染一次，再异步拉一次刷新 —— 图鉴原来是「零请求、断网也能看」的页面，
+ * 不能因为改成读接口就让首屏空一下、或者断网时整页什么都没有。
  *
  * 详情页在分包 packageCats 里。
  */
-import { CAT_LIST_GROUPS, catsByStatus, FEEDING_TIPS } from '../../data/cats.js';
-import * as catPhotos from '../../services/cat-photos.js';
+import { CAT_LIST_GROUPS, FEEDING_TIPS } from '../../data/cats.js';
+import * as cats from '../../services/cats.js';
 
 Page({
   data: {
     groups: CAT_LIST_GROUPS,
     active: 'onCampus',
-    cats: [],
+    list: [],
     tips: FEEDING_TIPS,
     // 加载失败过的猫 id —— 那一格回落到 emoji
     photoFailed: {},
+    // 连缓存都没有、接口也没问到 —— 给一句人话，而不是一片空白
+    offline: false,
   },
 
   onLoad() {
-    // ★ 先用缓存同步渲染一次：图鉴原本是「零请求、断网也能看」的页面，
-    //   不能因为多了个覆盖表就让它首屏空一下。
-    this.photos = catPhotos.cached();
+    this.all = cats.cached();
     this.switchTo('onCampus');
-    this.refreshPhotos();
+    this.refresh();
   },
 
-  /** 再异步拉一次覆盖表；拿不到就继续用缓存和仓库那张（不弹错、不显示加载态） */
-  async refreshPhotos() {
-    const photos = await catPhotos.fetch();
-    if (!photos) return;              // 没问到 ≠ 没有覆盖，什么都别动
-    this.photos = photos;
+  onShow() {
+    // 从详情页/管理端回来时可能已经改了资料，重新拉一次
+    if (this.all) this.refresh();
+  },
+
+  onPullDownRefresh() {
+    this.refresh().finally(() => wx.stopPullDownRefresh());
+  },
+
+  /** 异步拉一次；拿不到就继续用缓存（不弹错、不显示加载态） */
+  async refresh() {
+    const list = await cats.fetchCats();
+    if (!list) {
+      // 没问到 ≠ 一只猫都没有：什么都别改，只在「也确实没有缓存」时提示一句
+      if (!this.all.length) this.setData({ offline: true });
+      return;
+    }
+    this.all = list;
+    this.setData({ offline: false });
     this.switchTo(this.data.active);
   },
-
   switchTo(key) {
-    // 给每只猫算好完整地址（模板里拼不了 BASE_URL）
-    const cats = catsByStatus(key).map((c) => catPhotos.withPhoto(c, this.photos));
-    this.setData({ active: key, cats });
+    this.setData({
+      active: key,
+      list: cats.byStatus(this.all, key).map(cats.decorate),
+    });
   },
 
   /** 照片加载失败 → 这一格回落到 emoji（按 id 记，切分组会重排） */
@@ -64,4 +73,3 @@ Page({
     });
   },
 });
-

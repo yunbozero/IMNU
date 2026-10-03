@@ -4,13 +4,20 @@
     <text class="notice__b">打不开：</text>{{error}}（点一下重试）
   </view>
 
+  <button wx:if="{{!error}}" class="btn newbtn" bindtap="goNew">＋ 新加一只猫</button>
+
+  <view wx:if="{{!loading && list.length === 0}}" class="empty">
+    <view class="empty__icon">🐈</view>
+    <view class="empty__text">图鉴里还没有猫</view>
+  </view>
+
   <view wx:for="{{list}}" wx:key="id" class="cat">
     <view class="cat__head">
       <view class="cat__thumb {{item.tint}}">
         <image
-          wx:if="{{item.imageUrl && !imageFailed[item.id]}}"
+          wx:if="{{item.photo && !imageFailed[item.id]}}"
           class="thumb-img"
-          src="{{item.imageUrl}}"
+          src="{{item.photo}}"
           mode="aspectFill"
           lazy-load
           data-id="{{item.id}}"
@@ -20,7 +27,10 @@
       </view>
       <view class="grow">
         <view class="cat__name">{{item.name}}</view>
-        <view class="cat__src">{{item.source}}</view>
+        <view class="cat__sub">
+          {{item.location || '没写地点'}}
+          <text class="tag {{item.status === 'onCampus' ? 'tag--green' : 'tag--grey'}}">{{item.statusText}}</text>
+        </view>
       </view>
     </view>
 
@@ -29,19 +39,26 @@
         class="op"
         data-id="{{item.id}}"
         disabled="{{busyId === item.id}}"
+        bindtap="goEdit"
+      >改资料</button>
+      <button
+        class="op"
+        data-id="{{item.id}}"
+        disabled="{{busyId === item.id}}"
         bindtap="changePhoto"
-      >{{item.imageUrl ? '换照片' : '配照片'}}</button>
+      >{{item.photo ? '换照片' : '配照片'}}</button>
+      <button
+        class="op op--del"
+        data-id="{{item.id}}"
+        disabled="{{busyId === item.id}}"
+        bindtap="removeCat"
+      >删除</button>
     </view>
   </view>
 
   <view class="notice">
-    <text class="notice__b">换照片不用发版，改完立刻生效。</text>
-    猫的名字、性格、状态这些写在代码里，改它们仍然要重新发布。
-  </view>
-
-  <view class="notice">
-    <text class="notice__b">「恢复默认」＝回到仓库里那张。</text>
-    没有换过照片的猫显示的是随发布一起上来的默认照片。
+    <text class="notice__b">「离世」是一个状态，不是删除。</text>
+    不在了的猫改成失踪或离世，图鉴里要留着纪念。
   </view>
 
 </view>

@@ -1,4 +1,6 @@
-/* 管理端 · 图鉴照片。样式只在这个分包里用。 */
+/* 管理端 · 图鉴管理。样式只在这个分包里用。 */
+
+.newbtn { margin-top: 26rpx; }
 
 .cat {
   background: #fff; border-radius: 28rpx;
@@ -14,7 +16,7 @@
   overflow: hidden;
 }
 .cat__name { font-size: 31rpx; font-weight: 700; line-height: 1.35; }
-.cat__src { font-size: 24rpx; color: var(--text-3); margin-top: 8rpx; }
+.cat__sub { font-size: 24rpx; color: var(--text-3); margin-top: 8rpx; }
 
 .cat__ops { display: flex; flex-wrap: wrap; gap: 16rpx; margin-top: 22rpx; }
 
@@ -27,3 +29,8 @@
 }
 .op::after { border: 0; }
 .op[disabled] { opacity: 0.45; }
+/* 删除是不可逆的（小程序里没有恢复），所以给个一眼能认出来的样式 */
+.op--del {
+  background: #fff; color: var(--danger);
+  border: 3rpx solid #F2D8D3;
+}

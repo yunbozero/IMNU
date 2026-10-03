@@ -737,53 +737,108 @@ export function describeRepositoryContract(label, makeRepo) {
   });
 
   /* ============================================================
-     ★ 图鉴照片的覆盖
+     ★ 猫猫图鉴
      ============================================================ */
 
-  t('图鉴照片：没写过时是空表，不是 null', () => {
+  t('图鉴：没加过猫时是空数组，不是 null', () => {
     const { repo, cleanup } = makeRepo();
     try {
-      assert.deepEqual(repo.listCatPhotos(), []);
+      assert.deepEqual(repo.listCats(), []);
+      assert.equal(repo.getCat('cat_nope'), null);
     } finally { cleanup && cleanup(); }
   });
 
-  t('图鉴照片：写过之后读得到，同一只猫再写就是覆盖', () => {
+  t('图鉴：加一只猫，字段能原样取回来', () => {
     const { repo, cleanup } = makeRepo();
     try {
-      repo.setCatPhoto({ catId: 'c1', image: 'img_aa.jpg', actorId: 'u_1' });
-      repo.setCatPhoto({ catId: 'c2', image: 'img_bb.jpg' });
+      const r = repo.createCat({
+        name: '大橘', emoji: '🐱', tint: 't-orange', status: 'onCampus',
+        gender: '公', location: '图书馆前', personality: '亲人', note: '已绝育',
+      });
+      assert.equal(r.ok, true);
+      assert.equal(r.cat.name, '大橘');
+      assert.equal(r.cat.note, '已绝育');
 
-      const list = repo.listCatPhotos();
-      assert.equal(list.length, 2);
-      // 按 cat_id 排序，方便对比，也不依赖插入顺序
-      assert.deepEqual(list.map((r) => r.catId), ['c1', 'c2']);
-      assert.equal(list[0].image, 'img_aa.jpg');
-      assert.equal(list[0].actorId, 'u_1', '要记住是谁换的');
-
-      // ★ 同一只猫再写不能变成两行 —— 那是「哪张才算数」的问题
-      repo.setCatPhoto({ catId: 'c1', image: 'img_cc.jpg', actorId: 'u_2' });
-      const again = repo.listCatPhotos();
-      assert.equal(again.length, 2, '同一只猫只该有一行');
-      assert.equal(again[0].image, 'img_cc.jpg', '新写的要覆盖旧的');
-      assert.equal(again[0].actorId, 'u_2');
+      const got = repo.getCat(r.cat.id);
+      assert.equal(got.location, '图书馆前');
+      assert.equal(got.gender, '公');
+      assert.equal(got.image, null, '没传照片时是 null（界面据此回落 emoji）');
+      assert.ok(got.createdAt > 0);
     } finally { cleanup && cleanup(); }
   });
 
-  t('图鉴照片：删掉覆盖行 = 回到默认那张', () => {
+  t('图鉴：id 是服务端生成的，不是调用方给的', () => {
+    // 让调用方定 id 的话，两个管理员同时加猫就可能撞成一只
     const { repo, cleanup } = makeRepo();
     try {
-      repo.setCatPhoto({ catId: 'c1', image: 'img_aa.jpg' });
-      repo.setCatPhoto({ catId: 'c2', image: 'img_bb.jpg' });
+      const a = repo.createCat({ name: '甲', id: 'cat_mine' });
+      const b = repo.createCat({ name: '乙', id: 'cat_mine' });
+      assert.notEqual(a.cat.id, b.cat.id, 'id 不能被调用方指定');
+      assert.equal(repo.listCats().length, 2);
+    } finally { cleanup && cleanup(); }
+  });
 
-      repo.clearCatPhoto('c1');
+  t('图鉴：列表按录入顺序（图鉴里的先后次序就是这个）', () => {
+    const { repo, cleanup } = makeRepo();
+    try {
+      for (const n of ['甲', '乙', '丙']) {
+        repo.createCat({ name: n, status: n === '乙' ? 'missing' : 'onCampus' });
+      }
+      assert.deepEqual(repo.listCats().map((c) => c.name), ['甲', '乙', '丙']);
+    } finally { cleanup && cleanup(); }
+  });
 
-      const list = repo.listCatPhotos();
-      assert.deepEqual(list.map((r) => r.catId), ['c2'], '只该删掉指定的那只');
+  t('图鉴：改一只猫只动传进来的字段', () => {
+    const { repo, cleanup } = makeRepo();
+    try {
+      const made = repo.createCat({ name: '大橘', personality: '亲人', note: '已绝育' });
+      const r = repo.updateCat(made.cat.id, { name: '橘座' });
 
-      // 删不存在的行不能报错 —— 界面上的「恢复默认」可能被点两下
-      assert.doesNotThrow(() => repo.clearCatPhoto('c1'));
-      assert.doesNotThrow(() => repo.clearCatPhoto('不存在的猫'));
-      assert.equal(repo.listCatPhotos().length, 1);
+      assert.equal(r.ok, true);
+      assert.equal(r.cat.name, '橘座');
+      assert.equal(r.cat.personality, '亲人', '没传的字段不能被清掉');
+      assert.equal(r.cat.note, '已绝育');
+
+      // ★ 但显式传 null 是「清掉」—— 要和「没传」区分开
+      const cleared = repo.updateCat(made.cat.id, { note: null });
+      assert.equal(cleared.cat.note, null);
+      assert.equal(cleared.cat.personality, '亲人');
+    } finally { cleanup && cleanup(); }
+  });
+
+  t('图鉴：改不存在的猫要说 not_found，而不是静默成功', () => {
+    const { repo, cleanup } = makeRepo();
+    try {
+      const r = repo.updateCat('cat_nope', { name: 'x' });
+      assert.equal(r.ok, false);
+      assert.equal(r.reason, 'not_found');
+    } finally { cleanup && cleanup(); }
+  });
+
+  t('图鉴：删猫是真删，并把原来的那只返回给调用方', () => {
+    // 调用方要拿 image 去删磁盘上的照片文件
+    const { repo, cleanup } = makeRepo();
+    try {
+      const made = repo.createCat({ name: '大橘', image: 'img_aa.jpg' });
+      const r = repo.deleteCat(made.cat.id);
+
+      assert.equal(r.ok, true);
+      assert.equal(r.cat.image, 'img_aa.jpg', '要把删掉的那只返回去，调用方才知道删哪张图');
+      assert.equal(repo.getCat(made.cat.id), null);
+      assert.deepEqual(repo.listCats(), []);
+
+      assert.equal(repo.deleteCat(made.cat.id).reason, 'not_found', '重复删除要说找不到');
+    } finally { cleanup && cleanup(); }
+  });
+
+  t('图鉴：离世是一个状态，不是删除', () => {
+    // 图鉴里要留着纪念，所以「不在了」必须能表达成状态
+    const { repo, cleanup } = makeRepo();
+    try {
+      const made = repo.createCat({ name: '小黑', status: 'missing' });
+      const r = repo.updateCat(made.cat.id, { status: 'passed' });
+      assert.equal(r.cat.status, 'passed');
+      assert.equal(repo.listCats().length, 1, '改了状态之后猫还在');
     } finally { cleanup && cleanup(); }
   });
 

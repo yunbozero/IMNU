@@ -49,9 +49,11 @@ export const REPOSITORY_METHODS = [
   'getSetting',
   'setSetting',
   'clearSetting',
-  'listCatPhotos',
-  'setCatPhoto',
-  'clearCatPhoto',
+  'listCats',
+  'getCat',
+  'createCat',
+  'updateCat',
+  'deleteCat',
   'writeAudit',
 ];
 
@@ -100,6 +102,14 @@ function uniqueTarget(e) {
 const mapUser = (r) => (r ? {
   id: r.id, openid: r.openid, sid: r.sid, name: r.name,
   role: r.role, createdAt: r.created_at,
+} : null);
+
+/** 图鉴的一只猫。字段名从 snake_case 转到小程序用的 camelCase。 */
+const mapCat = (r) => (r ? {
+  id: r.id, name: r.name, emoji: r.emoji, tint: r.tint, image: r.image,
+  status: r.status, gender: r.gender, location: r.location,
+  personality: r.personality, note: r.note,
+  createdAt: r.created_at, updatedAt: r.updated_at,
 } : null);
 
 const mapItem = (r) => (r ? {
@@ -688,36 +698,73 @@ export function createSqliteRepository(db) {
       return { ok: true };
     },
 
-    /* ---------------- 图鉴照片的覆盖 ---------------- */
+    /* ---------------- 猫猫图鉴 ---------------- */
 
     /**
-     * 所有被换过照片的猫。
+     * 图鉴全部猫，按**录入顺序**。
      *
-     * 只返回**有覆盖行**的 —— 没有行的猫用 cats.js 里那个文件名，
-     * 服务端不知道也不需要知道那些文件名是什么。
+     * ★ 必须按 rowid 排，不能按 created_at：时间戳只到毫秒，
+     *   一口气加进去的几只猫（或者从脚本里批量导入的十几只）会全部并列，
+     *   并列时的顺序就变成随机的了 —— 图鉴里猫的先后次序会莫名其妙地跳。
+     *   rowid 是 SQLite 自己维护的插入序号，天然递增。
+     *
+     * 不分组：调用方（小程序）自己按 status 分「在校 / 失踪 / 离世」。
+     * 分组规则是**界面文案**，属于小程序；服务端只负责存和取。
      */
-    listCatPhotos() {
-      return db.prepare('SELECT cat_id, image, updated_at, actor_id FROM cat_photos ORDER BY cat_id')
-        .all()
-        .map((r) => ({
-          catId: r.cat_id, image: r.image, updatedAt: r.updated_at, actorId: r.actor_id,
-        }));
+    listCats() {
+      return db.prepare('SELECT * FROM cats ORDER BY rowid').all().map(mapCat);
     },
 
-    /** 给某只猫换照片（同 cat_id 覆盖）。 */
-    setCatPhoto({ catId, image, actorId = null }) {
+    getCat(id) {
+      return mapCat(db.prepare('SELECT * FROM cats WHERE id = ?').get(id));
+    },
+
+    createCat({
+      name, emoji = null, tint = null, image = null, status = 'onCampus',
+      gender = null, location = null, personality = null, note = null,
+    }) {
+      const ts = now();
+      const id = newId('cat');
       db.prepare(`
-        INSERT INTO cat_photos (cat_id, image, updated_at, actor_id) VALUES (?, ?, ?, ?)
-        ON CONFLICT(cat_id) DO UPDATE SET
-          image = excluded.image, updated_at = excluded.updated_at, actor_id = excluded.actor_id
-      `).run(catId, image, now(), actorId);
-      return { ok: true };
+        INSERT INTO cats (id,name,emoji,tint,image,status,gender,location,personality,note,
+                          created_at,updated_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+      `).run(id, name, emoji, tint, image, status, gender, location, personality, note, ts, ts);
+      return { ok: true, cat: this.getCat(id) };
     },
 
-    /** 删掉覆盖行 —— 效果是回落到仓库里那张（assets/cats/）。 */
-    clearCatPhoto(catId) {
-      db.prepare('DELETE FROM cat_photos WHERE cat_id = ?').run(catId);
-      return { ok: true };
+    /**
+     * 改一只猫。**只改传进来的字段**（undefined = 不动），
+     * 和 updateItem 同一个约定 —— 界面上是「只改名字」这种局部编辑，
+     * 如果没传的字段一律当 null 写回去，只改名字会把性格清空。
+     */
+    updateCat(id, patch = {}) {
+      const existing = this.getCat(id);
+      if (!existing) return { ok: false, reason: 'not_found' };
+
+      const fields = ['name', 'emoji', 'tint', 'image', 'status', 'gender',
+        'location', 'personality', 'note'];
+      const sets = [];
+      const args = [];
+      for (const f of fields) {
+        if (patch[f] !== undefined) { sets.push(`${f} = ?`); args.push(patch[f]); }
+      }
+
+      // 一个字段都没传也算成功（幂等），但不必写库
+      if (sets.length) {
+        sets.push('updated_at = ?');
+        args.push(now(), id);
+        db.prepare(`UPDATE cats SET ${sets.join(', ')} WHERE id = ?`).run(...args);
+      }
+      return { ok: true, cat: this.getCat(id) };
+    },
+
+    /** 真删。没有任何东西引用猫，所以不需要软删除。 */
+    deleteCat(id) {
+      const existing = this.getCat(id);
+      if (!existing) return { ok: false, reason: 'not_found' };
+      db.prepare('DELETE FROM cats WHERE id = ?').run(id);
+      return { ok: true, cat: existing };
     },
 
     /* ---------------- 审计 ---------------- */

@@ -1,3 +1,5 @@
 {
-  "navigationBarTitleText": "猫猫图鉴"
+  "navigationBarTitleText": "猫猫图鉴",
+  "enablePullDownRefresh": true,
+  "backgroundTextStyle": "dark"
 }

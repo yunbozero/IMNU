@@ -196,48 +196,48 @@ test('图片：删一个不存在的文件不抛错（换图时删旧图必须�
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
-test('图片：图鉴照片走 cats/ 子目录，可读文件名也认', () => {
-  // 图鉴的照片是**跟着仓库走的静态资源**（assets/cats/，deploy.sh 同步过去），
-  // 文件名是人起的，不是服务端生成的 img_<hex>。
-  assert.equal(isImageName('cats/daju.jpg'), true);
-  assert.equal(isImageName('cats/cat_01.png'), true);
-  assert.equal(isImageName('cats/xiao-hei.webp'), true);
+test('图片：★ 只认服务端自己生成的那种文件名，别的形状一律不认', () => {
+  // ★ 这一条是**唯一**的命名规则，没有别的分支。
+  //   图鉴的照片以前还有一条「仓库里搬过来的可读文件名」（cats/daju.jpg），
+  //   那条路在把图鉴搬进数据库之后就没有调用方了，已经删掉。
+  //
+  //   留着它就是留一条没人走、但还得一直守着的岔路；而且可读文件名意味着
+  //   **同名替换**，会被 nginx 的 30 天缓存和微信客户端的图片缓存挡住
+  //   （换了照片一个月不生效）。随机文件名不会。
+  const ok = `img_${'a'.repeat(32)}.jpg`;
+  assert.equal(isImageName(ok), true);
+  assert.equal(isImageName(`img_${'0'.repeat(32)}.webp`), true);
 
-  // 但仍然卡得很紧：扩展名白名单、不许大写、不许再往下一层
-  for (const bad of [
-    'cats/daju.gif.exe', 'cats/DAJU.jpg', 'cats/.jpg', 'cats/a/b.jpg',
-    'cats/../secret.jpg', 'cats/', 'cats', 'cats/daju.BMP',
-  ]) {
-    assert.equal(isImageName(bad), false, `不该认成合法图鉴照片名：${bad}`);
+  const bad = [
+    'cats/daju.jpg',                       // ← 已经删掉的那条路
+    'daju.jpg',                            // 没有 img_ 前缀
+    `img_${'a'.repeat(31)}.jpg`,           // 随机串少一位
+    `img_${'a'.repeat(33)}.jpg`,           // 多一位
+    `img_${'A'.repeat(32)}.jpg`,           // 大写十六进制不收（生成的一定是小写）
+    `img_${'g'.repeat(32)}.jpg`,           // 不是十六进制
+    `img_${'a'.repeat(32)}.bmp`,           // 扩展名白名单外
+    `img_${'a'.repeat(32)}.JPG`,           // 大写扩展名
+    '../bazaar.db', 'a/b.jpg', 'cats/', '', 'img_a.jpg',
+  ];
+  for (const name of bad) {
+    assert.equal(isImageName(name), false, `不该认成合法图片名：${name}`);
+  }
+
+  // 非字符串一律不认（别让 undefined / 对象顺着拼进路径）
+  for (const v of [null, undefined, 123, {}, []]) {
+    assert.equal(isImageName(v), false, `isImageName(${JSON.stringify(v)}) 应当是 false`);
   }
 });
 
-test('图片：★ 图鉴照片名必须是纯 ASCII（中文名会静默 404）', () => {
-  // 小程序的 <image> 会把中文名做百分号编码，而我们的静态服务**故意不做
-  // URL 解码**（那是为了从一开始就不存在路径穿越）。两边一撞：
-  // /images/cats/大橘.jpg 会请求成 /images/cats/%E5%A4%A7... 直接 404，
-  // 而界面因为「失败回落 emoji」不报任何错 —— 只看到那只猫一直没照片。
-  assert.equal(isImageName('cats/大橘.jpg'), false, '中文名必须被拒，否则是静默 404');
-  assert.equal(isImageName('cats/daju 大橘.jpg'), false);
-  assert.equal(isImageName('cats/🐱.jpg'), false);
-});
-
-test('图片：cats/ 子目录能真的存取', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'imnu-catimg-'));
-  try {
-    const name = 'cats/daju.jpg';
-    fs.mkdirSync(path.join(dir, 'cats'), { recursive: true });
-    fs.writeFileSync(path.join(dir, 'cats', 'daju.jpg'), fakeImage('jpg', 128));
-
-    assert.deepEqual(readImage(name, dir), fakeImage('jpg', 128));
-    assert.equal(imageExists(name, dir), true);
-    assert.equal(mimeOfName(name), 'image/jpeg');
-    assert.equal(imageUrlOf(name), '/images/cats/daju.jpg');
-
-    // 删得掉，而且删不掉目录外的东西
-    assert.equal(deleteImage(name, dir), true);
-    assert.equal(imageExists(name, dir), false);
-  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+test('图片：图鉴那种「同名换图」的路径已经不存在了', () => {
+  // 反过来确认一遍：图鉴的可读名（cats/xxx）现在应该**取不到**。
+  // 它是「换了照片一个月不生效」那个坑的来源，删掉之后不该再有谁认它。
+  assert.equal(isImageName('cats/daju.jpg'), false);
+  assert.equal(imageUrlOf('cats/daju.jpg'), null,
+    'imageUrlOf 对不合法的名字要返回 null，别拼出一个取不到的地址');
+  // mimeOfName 的契约是「不认识就给 octet-stream」，不是 null ——
+  // 反正读文件那一步也会因为名字不合法而失败
+  assert.equal(mimeOfName('cats/daju.jpg'), 'application/octet-stream');
 });
 
 /* ============================================================
@@ -416,184 +416,77 @@ test('照片：静态服务拿不到目录外的文件', async () => {
   } finally { await ctx.close(); }
 });
 
-test('照片：图鉴的 cats/ 能通过 HTTP 取到，中文名取不到', async () => {
+test('照片：静态服务只发合法命名的文件，别的路径一律 404', async () => {
+  // 图鉴那种可读文件名（cats/daju.jpg）已经不认了，所以**即使目录里真有**这个文件，
+  // 也不该被发出去 —— 命名规则是唯一的通行证（见 isImageName）。
   const ctx = await startTestServer();
   try {
-    // 模拟 deploy.sh 把 assets/cats/ 同步过来的结果
     fs.mkdirSync(path.join(ctx.imageDir, 'cats'), { recursive: true });
-    const buf = fakeImage('jpg', 300);
-    fs.writeFileSync(path.join(ctx.imageDir, 'cats', 'daju.jpg'), buf);
+    fs.writeFileSync(path.join(ctx.imageDir, 'cats', 'daju.jpg'), fakeImage('jpg', 300));
 
-    const ok = await fetch(`${ctx.base}/images/cats/daju.jpg`);
-    assert.equal(ok.status, 200, '图鉴照片必须能取到，否则界面只剩 emoji');
-    assert.equal(ok.headers.get('content-type'), 'image/jpeg');
-    assert.deepEqual(Buffer.from(await ok.arrayBuffer()), buf);
+    const r = await fetch(`${ctx.base}/images/cats/daju.jpg`);
+    assert.equal(r.status, 404, '不合法命名的文件不该被发出去');
 
-    // ★ 反向对照：中文名会被小程序百分号编码，而静态服务不做 URL 解码
-    // （不解释放它是为了从根上杜绝路径穿越）。所以这条请求必须 404 ——
-    // 如果哪天有人「顺手加个 decodeURIComponent」，这个测试会先红。
-    const bad = await fetch(`${ctx.base}/images/cats/大橘.jpg`);
-    assert.equal(bad.status, 404, '中文名的图鉴照片是取不到的，命名必须用 ASCII');
+    // 对照：合法命名的能取到，说明上面那条不是因为静态服务整体坏了
+    const good = await upload(ctx, ctx.tokens['code-deputy'], fakeImage('jpg', 300));
+    const ok = await fetch(ctx.base + good.body.url);
+    assert.equal(ok.status, 200);
+    assert.deepEqual(Buffer.from(await ok.arrayBuffer()), fakeImage('jpg', 300));
+
+    // ★ 中文名会被小程序百分号编码，而静态服务不做 URL 解码
+    // （不解码是为了从根上杜绝路径穿越）。所以必须 404 ——
+    // 如果哪天有人「顺手加个 decodeURIComponent」，这条会先红。
+    const bad = await fetch(`${ctx.base}/images/%E5%A4%A7%E6%A9%98.jpg`);
+    assert.equal(bad.status, 404);
   } finally { await ctx.close(); }
 });
 
 /* ============================================================
-   ★ 图鉴照片的覆盖
+   ★ 图片地址的长期缓存靠什么成立
    ============================================================ */
 
-const setCatPhoto = (ctx, token, catId, image) =>
-  call(ctx, 'POST', '/api/admin/cat-photo', { token, body: { catId, image } });
-
-test('图鉴照片：覆盖表是公开读的，谁都能拿到（图鉴是 tabBar 一级页面）', async () => {
+test('照片：★ 两次上传必须得到不同的文件名（30 天缓存全靠这一条）', async () => {
+  // nginx 给 /images/ 设了 30 天缓存，微信客户端自己还会再缓存一层。
+  // 这件事**只有在一个前提下**才安全：图片目录里的文件永不原地修改 ——
+  // 换一张照片是生成一个全新的随机文件名，旧名字不会被复用。
+  //
+  // 一旦有人把它改成「覆盖同名文件」（图鉴曾经就是那样：照片从仓库同步、
+  // 同名替换），换完图学生最长一个月都看到旧照片，而现象是
+  // 「我明明换了呀」，极难联想到缓存。所以这条不变量要钉住。
   const ctx = await startTestServer();
   try {
-    // 没登录也要能读 —— 图鉴页对所有人开放，包括还没登记的人
-    const anon = await call(ctx, 'GET', '/api/cat-photos');
-    assert.equal(anon.status, 200, JSON.stringify(anon.body));
-    assert.deepEqual(anon.body.photos, {}, '还没有人换过照片时应当是空表，不是 null');
-
-    const up = await upload(ctx, ctx.tokens['code-deputy'], fakeImage('jpg'));
-    await setCatPhoto(ctx, ctx.tokens['code-deputy'], 'c1', up.body.image);
-
-    const after = await call(ctx, 'GET', '/api/cat-photos');
-    assert.equal(after.body.photos.c1, up.body.image);
-  } finally { await ctx.close(); }
-});
-
-test('图鉴照片：学生不能改，副主任可以', async () => {
-  const ctx = await startTestServer();
-  try {
-    const up = await upload(ctx, ctx.tokens['code-deputy'], fakeImage('jpg'));
-
-    const anon = await setCatPhoto(ctx, undefined, 'c1', up.body.image);
-    assert.equal(anon.status, 401);
-
-    const stu = await setCatPhoto(ctx, ctx.tokens['code-student'], 'c1', up.body.image);
-    assert.equal(stu.status, 403, '图鉴是门面，但不是谁都能改');
-    assert.equal(stu.body.error, 'forbidden');
-
-    const dep = await setCatPhoto(ctx, ctx.tokens['code-deputy'], 'c1', up.body.image);
-    assert.equal(dep.status, 200, JSON.stringify(dep.body));
-    assert.equal(dep.body.image, up.body.image);
-  } finally { await ctx.close(); }
-});
-
-test('图鉴照片：★ 只能挂上传接口产出的文件名，不能挂仓库那张', async () => {
-  const ctx = await startTestServer();
-  try {
-    // 仓库里同步过来的默认照片。删掉覆盖之后要回落到它，所以**不能被写进覆盖表**，
-    // 否则「恢复默认」就变成「把仓库那张当覆盖」，删掉覆盖反而没了照片。
-    fs.mkdirSync(path.join(ctx.imageDir, 'cats'), { recursive: true });
-    fs.writeFileSync(path.join(ctx.imageDir, 'cats', 'daju.jpg'), fakeImage('jpg'));
-
-    const r = await setCatPhoto(ctx, ctx.tokens['code-deputy'], 'c1', 'cats/daju.jpg');
-    assert.equal(r.status, 400, '仓库照片不该能当覆盖值');
-
-    // 不存在的文件名也拒 —— 库里存了名字但文件不在，界面会显示破图标
-    const missing = await setCatPhoto(ctx, ctx.tokens['code-deputy'], 'c1', 'img_00000000.jpg');
-    assert.equal(missing.status, 400);
-    assert.equal(missing.body.error, 'bad_request');
-
-    const noop = await call(ctx, 'POST', '/api/admin/cat-photo', {
-      token: ctx.tokens['code-deputy'], body: { catId: 'c1', image: null },
-    });
-    assert.equal(noop.status, 200, '清空也要能过（body 里 image 是 null）');
-    assert.equal(noop.body.cleared, false, '本来就没有覆盖，清空是空操作');
-  } finally { await ctx.close(); }
-});
-
-test('图鉴照片：catId 的形状不对要拒（避免挂到不存在的猫身上）', async () => {
-  const ctx = await startTestServer();
-  try {
-    const up = await upload(ctx, ctx.tokens['code-deputy'], fakeImage('jpg'));
-
-    for (const bad of ['', '  ', 'C1', '大橘', 'a'.repeat(40), null]) {
-      const r = await call(ctx, 'POST', '/api/admin/cat-photo', {
-        token: ctx.tokens['code-deputy'], body: { catId: bad, image: up.body.image },
-      });
-      assert.equal(r.status, 400, `catId=${JSON.stringify(bad)} 应当被拒`);
+    const seen = new Set();
+    for (let i = 0; i < 5; i++) {
+      const r = await upload(ctx, ctx.tokens['code-deputy'], fakeImage('jpg', 100 + i));
+      assert.equal(r.body.ok, true, JSON.stringify(r.body));
+      assert.equal(seen.has(r.body.image), false,
+        '第 ' + (i + 1) + ' 次上传拿到了重复的文件名 ' + r.body.image
+        + ' —— 后传的会盖掉先传的，而 30 天缓存会把旧内容继续发出去');
+      seen.add(r.body.image);
     }
+    assert.equal(seen.size, 5);
 
-    // 正常的 id 要过（小写字母数字、下划线、连字符）
-    for (const good of ['c1', 'cat_01', 'xiao-hei']) {
-      const r = await setCatPhoto(ctx, ctx.tokens['code-deputy'], good, up.body.image);
-      assert.equal(r.status, 200, `catId=${good} 应当放行`);
+    // 文件也确实是 5 个不同的文件（不是同一个名字写了 5 次）
+    const onDisk = fs.readdirSync(ctx.imageDir).filter((f) => f.startsWith('img_'));
+    assert.equal(onDisk.length, 5, '目录里应当有 5 个文件，实际 ' + onDisk.length);
+  } finally { await ctx.close(); }
+});
+
+test('照片：上传的名字全部是纯 ASCII（中文名会静默 404）', async () => {
+  // 图鉴那边曾经有过「文件名是人起的」这条路，于是中文名会让请求被百分号编码、
+  // 而静态服务故意不做 URL 解码 → 404，界面回落 emoji、一句报错都没有。
+  // 现在文件名一律由服务端生成，形状固定，这类问题从根上没有了。
+  //
+  // 这条是**反向守卫**：生成的名字里不可能出现非 ASCII，而且拼出来的地址
+  // 必须能原样取回来（不会被编码成别的东西）。
+  const ctx = await startTestServer();
+  try {
+    for (let i = 0; i < 3; i++) {
+      const r = await upload(ctx, ctx.tokens['code-deputy'], fakeImage('png', 80 + i));
+      assert.match(r.body.image, /^img_[0-9a-f]{32}\.(png|jpg|webp|gif)$/);
+      const got = await fetch(ctx.base + r.body.url);
+      assert.equal(got.status, 200, r.body.url + ' 取不回来');
     }
-  } finally { await ctx.close(); }
-});
-
-test('图鉴照片：换照片要删掉旧的上传文件，但不能碰仓库那张', async () => {
-  const ctx = await startTestServer();
-  try {
-    const first = await upload(ctx, ctx.tokens['code-deputy'], fakeImage('jpg', 200));
-    const second = await upload(ctx, ctx.tokens['code-deputy'], fakeImage('png', 200));
-
-    await setCatPhoto(ctx, ctx.tokens['code-deputy'], 'c1', first.body.image);
-    assert.equal(fs.existsSync(path.join(ctx.imageDir, first.body.image)), true);
-
-    const r = await setCatPhoto(ctx, ctx.tokens['code-deputy'], 'c1', second.body.image);
-    assert.equal(r.body.replaced, first.body.image);
-
-    // ★ 换掉的旧图要清掉：不清的话每换一次就在磁盘上留一张谁都不引用的图
-    assert.equal(fs.existsSync(path.join(ctx.imageDir, first.body.image)), false,
-      '换下来的旧图应当被删掉');
-    assert.equal(fs.existsSync(path.join(ctx.imageDir, second.body.image)), true,
-      '新图不能跟着一起删');
-
-    // ★ 恢复默认时也要清掉覆盖用过的上传图 ——
-    //   但仓库里那张 cats/ 必须原封不动（它是兜底；删掉就是 404 + 只剩 emoji，
-    //   而且要等下次发布才会同步回来）
-    fs.mkdirSync(path.join(ctx.imageDir, 'cats'), { recursive: true });
-    fs.writeFileSync(path.join(ctx.imageDir, 'cats', 'daju.jpg'), fakeImage('jpg'));
-
-    const cleared = await call(ctx, 'POST', '/api/admin/cat-photo', {
-      token: ctx.tokens['code-deputy'], body: { catId: 'c1', image: null },
-    });
-    assert.equal(cleared.body.cleared, true);
-    assert.equal(fs.existsSync(path.join(ctx.imageDir, second.body.image)), false,
-      '恢复默认后，被撤下来的上传图要删掉');
-    assert.equal(fs.existsSync(path.join(ctx.imageDir, 'cats', 'daju.jpg')), true,
-      '仓库里那张默认照片绝不能被删');
-
-    const after = await call(ctx, 'GET', '/api/cat-photos');
-    assert.deepEqual(after.body.photos, {}, '恢复默认之后覆盖表里不该还有这一行');
-  } finally { await ctx.close(); }
-});
-
-test('图鉴照片：换照片要留审计日志（换届时唯一的凭据）', async () => {
-  const ctx = await startTestServer();
-  try {
-    const up = await upload(ctx, ctx.tokens['code-deputy'], fakeImage('jpg'));
-    await setCatPhoto(ctx, ctx.tokens['code-deputy'], 'c1', up.body.image);
-    await call(ctx, 'POST', '/api/admin/cat-photo', {
-      token: ctx.tokens['code-deputy'], body: { catId: 'c1', image: null },
-    });
-
-    // 这个测试自己开一个连接读库，所以先用完再关（服务端那个连接还在）
-    const db = openMigrated(path.join(ctx.dir, 'bazaar.db'));
-    try {
-      const rows = db.prepare(
-        "SELECT action, target_id FROM audit_logs WHERE target_type = 'cat' ORDER BY id"
-      ).all();
-      assert.deepEqual(rows.map((r) => r.action), ['cat_photo.set', 'cat_photo.clear']);
-      assert.deepEqual(rows.map((r) => r.target_id), ['c1', 'c1']);
-    } finally { db.close(); }
-  } finally { await ctx.close(); }
-});
-
-test('图鉴照片：写进去的确实落库了（不是只返回给客户端看看）', async () => {
-  const ctx = await startTestServer();
-  try {
-    const up = await upload(ctx, ctx.tokens['code-deputy'], fakeImage('jpg'));
-    await setCatPhoto(ctx, ctx.tokens['code-deputy'], 'c2', up.body.image);
-
-    const db = openMigrated(path.join(ctx.dir, 'bazaar.db'));
-    try {
-      const row = db.prepare('SELECT cat_id, image, actor_id FROM cat_photos WHERE cat_id = ?')
-        .get('c2');
-      assert.equal(row.image, up.body.image);
-      assert.equal(row.actor_id, PEOPLE['code-deputy'].id, '要记下是谁换的');
-    } finally { db.close(); }
   } finally { await ctx.close(); }
 });
 

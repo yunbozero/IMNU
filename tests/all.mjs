@@ -16,7 +16,7 @@ import './api.test.mjs';
 import './api-admin.test.mjs';
 import './auth.test.mjs';
 import './backup.test.mjs';
-import './cat-photos.test.mjs';
+import './cats.test.mjs';
 import './deploy.test.mjs';
 import './db-migration.test.mjs';
 import './dev-runtime.test.mjs';

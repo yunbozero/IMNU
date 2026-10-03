@@ -1,31 +1,24 @@
 /**
- * 猫猫图鉴的静态数据。
+ * 猫猫图鉴的**界面文案和分组规则**。
  *
- * 刻意做成静态的：图鉴不常更新，没必要为它养一个后端。
- * 代价是改一次要发版（1–2 天审核），对图鉴这种低频内容可以接受。
+ * ★ 猫的**资料本身已经不在这里了** —— 它搬到了数据库（服务端的 cats 表），
+ *   由 `services/cats.js` 拉。这样加一只猫、改一张照片都不用发版，
+ *   而发一次版要等 1–2 天审核。
+ *
+ *   这里留下的是**只有界面才关心的东西**：
+ *     · CAT_STATUS  状态键 → 中文文案
+ *     · CAT_LIST_GROUPS  列表页顶部的分组
+ *     · FEEDING_TIPS  喂养提示（一段固定的说明文字，不是数据）
+ *   服务端存的是 `onCampus`/`missing`/`passed` 这些**键**，不存中文 ——
+ *   文案改了不用动数据库。CAT_STATUS 的键必须和服务端的 CAT_STATUSES
+ *   一一对应，有测试比对两边（缺了会显示成空白标签）。
  *
  * ⚠️ 这个文件必须放主包：**主包不能 require 分包的文件**，
  *    而图鉴列表页是 tabBar 页面、必须在主包。
  *    分包里的页面反过来可以 require 这里的（分包 → 主包是允许的）。
  *
- * ------------------------------------------------------------------
- * 照片怎么放
- * ------------------------------------------------------------------
- * 照片**不放包里**，放仓库的 `assets/cats/`，发布时 `deploy.sh` 同步到服务器的
- * 图片目录，nginx 直接发。为什么：
- *   · 主包有 2MB 硬上限，十几张照片就顶满了，而主包每次冷启动都要下载一遍
- *     （仓库自己的原则就是「主包要尽量小」，照片搬进来等于自打嘴巴）；
- *   · 放服务器上改一张图不用重新发版。
- * 这里只写**文件名**（如 `cats/daju.jpg`），完整地址由 `utils/format.js`
- * 的 `imageUrl()` 拼 —— 和物品照片同一个套路。
- *
- * ★ 文件名必须是**纯 ASCII**（小写字母/数字/下划线，见 `assets/cats/README.md`）。
- *   小程序的 `<image>` 会把中文名做百分号编码，而服务端的静态服务**故意不做
- *   URL 解码**（那是为了防路径穿越），于是 `cats/大橘.jpg` 会直接 404。
- *   有测试守着这一点。
- *
  * 没有照片、或者照片加载失败时，界面回落到 `emoji` + `tint` 那个色块 ——
- * 所以断网也能看图鉴。
+ * 所以图鉴仍然能看，不会出现空白。
  */
 
 export const CAT_STATUS = {
@@ -34,79 +27,11 @@ export const CAT_STATUS = {
   passed: '离世',
 };
 
-export const CATS = [
-  {
-    id: 'c1',
-    name: '大橘',
-    emoji: '🐱',
-    tint: 't-orange',
-    // ★ 有照片就写文件名（相对图片目录）：'cats/daju.jpg'。
-    //   文件名必须全小写 ASCII；没有照片就 null（界面回落 emoji + 底色）。
-    image: null,
-    status: 'onCampus',
-    gender: '公',
-    location: '图书馆前广场一带',
-    personality: '亲人，会主动蹭腿，看到拿吃的会一路跟着走。',
-    note: '已绝育。不要喂人类的零食和高盐食物。',
-  },
-  {
-    id: 'c2',
-    name: '奶牛',
-    emoji: '🐈‍⬛',
-    tint: 't-blue',
-    image: null,
-    status: 'onCampus',
-    gender: '母',
-    location: '学生活动中心门口',
-    personality: '警惕性高，不让人靠近，但每天固定时间会来吃饭。',
-    note: '已绝育。请勿追赶。',
-  },
-  {
-    id: 'c3',
-    name: '三花',
-    emoji: '🐈',
-    tint: 't-pink',
-    image: null,
-    status: 'onCampus',
-    gender: '母',
-    location: '三号教学楼连廊',
-    personality: '安静，喜欢趴在窗台上晒太阳。',
-    note: '胆小，看它的时候请放轻脚步。',
-  },
-  {
-    id: 'c4',
-    name: '小黑',
-    emoji: '🐈‍⬛',
-    tint: 't-purple',
-    image: null,
-    status: 'missing',
-    gender: '公',
-    location: '最后目击：体育馆西侧',
-    personality: '怕人，但认得喂它的同学。',
-    note: '2026 年 6 月后没有再出现。有线索请联系我们。',
-  },
-  {
-    id: 'c5',
-    name: '小橘白',
-    emoji: '🐱',
-    tint: 't-yellow',
-    image: null,
-    status: 'onCampus',
-    gender: '公',
-    location: '一号食堂后门',
-    personality: '活泼，爱玩逗猫棒。',
-    note: '2026 年春季新来的小猫。',
-  },
-];
-
 export const CAT_LIST_GROUPS = [
   { key: 'onCampus', label: '在校' },
   { key: 'missing', label: '失踪' },
   { key: 'passed', label: '离世' },
 ];
-
-export const findCat = (id) => CATS.find((c) => c.id === id) || null;
-export const catsByStatus = (status) => CATS.filter((c) => c.status === status);
 
 /** 喂养提示。和前端原型里的一致。 */
 export const FEEDING_TIPS = [

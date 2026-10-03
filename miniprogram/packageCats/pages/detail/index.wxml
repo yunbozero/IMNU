@@ -14,7 +14,7 @@
 
   <view class="name-row">
     <text class="name">{{cat.name}}</text>
-    <text class="tag {{cat.status === 'onCampus' ? 'tag--green' : 'tag--grey'}}">{{statusText}}</text>
+    <text class="tag {{cat.status === 'onCampus' ? 'tag--green' : 'tag--grey'}}">{{cat.statusText}}</text>
   </view>
 
   <view class="panel">
@@ -29,4 +29,12 @@
 
   <view class="notice" wx:if="{{cat.note}}">{{cat.note}}</view>
 
+</view>
+
+<!-- 这只猫已经不在图鉴里了（多半是被管理员删掉），别停在一片空白上 -->
+<view class="page" wx:elif="{{missing}}">
+  <view class="empty">
+    <view class="empty__icon">🐾</view>
+    <view class="empty__text">这只猫已经不在图鉴里了</view>
+  </view>
 </view>

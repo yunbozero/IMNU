@@ -17,16 +17,37 @@ import { createSqliteRepository } from '../server/repository.mjs';
 /**
  * 迁移前的 items 建表语句：把当前 SCHEMA 里那一行 image 去掉。
  *
- * ★ 那个逗号不能省。cat_photos 表里也有一列叫 image（写成 `TEXT NOT NULL,`），
- *   不写逗号的话这条自检会指着**另一张表**报错 —— 明明 items 那边删对了，
- *   报的却是「删完之后不该还留着 image 列」，方向完全错。
+ * ★ 那个逗号不能省。cats 表里也有一列叫 image（写成 `TEXT,` 后面还跟着逗号，
+ *   但列名和类型之间隔着空格和对齐），不写逗号的话这条自检可能指着**另一张表**
+ *   报错 —— 明明 items 那边删对了，报的却是「删完之后不该还留着 image 列」。
  */
 const IMAGE_COL_LINE = /^[ \t]*image[ \t]+TEXT,[^\n]*\n/m;
 
 function schemaWithoutImage() {
   const old = SCHEMA.replace(IMAGE_COL_LINE, '');
   assert.notEqual(old, SCHEMA, '没能从 SCHEMA 里删掉 image 那一行，这个测试就没意义了');
-  assert.ok(!IMAGE_COL_LINE.test(old), '删完之后 items 里不该还留着 image 列');
+  assert.ok(!/^[ \t]*image[ \t]+TEXT,/.test(old), '删完之后 items 里不该还留着 image 列');
+  return old;
+}
+
+/**
+ * 把某张表的建表语句从 SCHEMA 里抠掉，用来模拟「比这张表还老的库」。
+ *
+ * ★ 必须连**索引**一起抠掉。第一版只删了 CREATE TABLE，于是
+ *   `CREATE INDEX ... ON cats(...)` 留了下来 —— 在一个没有 cats 表的库上
+ *   执行它就报 `no such table: main.cats`，测试一开始就崩，
+ *   而且报错位置看起来完全不像「我的辅助函数漏了一段」。
+ *   所以索引的匹配用「提到这张表」来抓，不靠固定格式。
+ */
+function schemaWithoutTable(table) {
+  const tableRe = new RegExp(`^CREATE TABLE IF NOT EXISTS ${table} \\([\\s\\S]*?\\n\\);\\n`, 'm');
+  const indexRe = new RegExp(`^CREATE INDEX IF NOT EXISTS \\w+ ON ${table}\\([^\\n]*\\n`, 'm');
+
+  let old = SCHEMA.replace(tableRe, '');
+  assert.notEqual(old, SCHEMA, `没能从 SCHEMA 里删掉 ${table} 的建表语句，这个测试就没意义了`);
+  old = old.replace(indexRe, '');
+  assert.ok(!new RegExp(`ON ${table}\\(`).test(old), `索引里还留着 ${table}`);
+  assert.ok(!new RegExp(`CREATE TABLE IF NOT EXISTS ${table}\\b`).test(old));
   return old;
 }
 
@@ -112,36 +133,30 @@ test('迁移：补上的列能被 repository 正常读写（不是只加了个�
   } finally { db.close(); }
 });
 
-test('迁移：★ 老库跑一次 migrate 就长出 cat_photos 表（新表也是迁移的一部分）', () => {
+test('迁移：★ 老库跑一次 migrate 就长出 cats 表（新表也是迁移的一部分）', () => {
   // 加**列**要显式 ALTER，加**表**不用 —— SCHEMA 里全是 CREATE TABLE IF NOT EXISTS，
   // 老库上重跑一遍就建出来了。这条测的就是这个区别，免得以后有人以为
   // 「新表也只有新库才有」，跑去写一段多余的迁移代码。
-  //
-  // ★ 要模拟「比 cat_photos 还老的库」，得**把那张表从 SCHEMA 里抠掉**。
-  //   第一版只复用了 schemaWithoutImage()，那个只删 image 列、不删表，
-  //   于是「老库」里已经有 cat_photos 了 —— 前提断言当场就红。
   const db = openDatabase(':memory:');
   try {
-    const old = SCHEMA.replace(/CREATE TABLE IF NOT EXISTS cat_photos \([\s\S]*?\n\);\n/, '');
-    assert.notEqual(old, SCHEMA, '没能从 SCHEMA 里删掉 cat_photos，这个测试就没意义了');
-    assert.ok(!/CREATE TABLE IF NOT EXISTS cat_photos/.test(old));
-
-    db.exec(old);
+    db.exec(schemaWithoutTable('cats'));
 
     // 前提：这个「老库」确实还没有这张表
-    assert.throws(() => db.prepare('SELECT * FROM cat_photos').all(),
-      /no such table/i, '前提：老库里不该有 cat_photos');
+    assert.throws(() => db.prepare('SELECT * FROM cats').all(),
+      /no such table/i, '前提：老库里不该有 cats');
 
     migrate(db);
 
-    const cols = columnsOf(db, 'cat_photos');
-    assert.deepEqual(cols.sort(), ['actor_id', 'cat_id', 'image', 'updated_at']);
+    const cols = columnsOf(db, 'cats');
+    for (const c of ['id', 'name', 'emoji', 'tint', 'image', 'status',
+      'gender', 'location', 'personality', 'note', 'created_at', 'updated_at']) {
+      assert.ok(cols.includes(c), `cats 表缺列 ${c}`);
+    }
 
-    // 建出来就要能直接用，而且 cat_id 是主键（同一只猫只能有一行）
+    // 建出来就要能直接用
     const repo = createSqliteRepository(db);
-    repo.setCatPhoto({ catId: 'c1', image: 'img_aa.jpg' });
-    repo.setCatPhoto({ catId: 'c1', image: 'img_bb.jpg' });
-    assert.equal(repo.listCatPhotos().length, 1, '同一只猫只该有一行');
-    assert.equal(repo.listCatPhotos()[0].image, 'img_bb.jpg');
+    const r = repo.createCat({ name: '大橘', location: '图书馆前' });
+    assert.equal(r.cat.name, '大橘');
+    assert.equal(repo.listCats().length, 1);
   } finally { db.close(); }
 });

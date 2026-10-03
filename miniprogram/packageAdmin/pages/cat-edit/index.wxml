@@ -1,0 +1,140 @@
+<view class="page">
+
+  <view wx:if="{{error}}" class="notice notice--strong" bindtap="load">
+    <text class="notice__b">打不开：</text>{{error}}（点一下重试）
+  </view>
+
+  <block wx:if="{{!error}}">
+
+    <view class="card">
+      <view class="card__title">{{isNew ? '新加一只猫' : '改资料'}}</view>
+
+      <!-- 大预览：图鉴里看到的就是这个样子。有照片显示照片，没有就 emoji + 底色。 -->
+      <view class="field">
+        <view class="field__k">照片（可不加）</view>
+        <view class="photo">
+          <view class="photo__box {{tint}}">
+            <image
+              wx:if="{{imagePreview}}"
+              class="thumb-img"
+              src="{{imagePreview}}"
+              mode="aspectFill"
+            />
+            <text wx:else class="photo__ph">{{emoji || '🐱'}}</text>
+          </view>
+          <view class="photo__ops">
+            <button class="op" bindtap="pickImage">{{imagePreview ? '换一张' : '选一张照片'}}</button>
+            <button wx:if="{{imagePreview}}" class="op" bindtap="removeImage">不要照片</button>
+            <view wx:if="{{!imagePreview}}" class="photo__hint">
+              不选也行 —— 会用下面的图标当占位
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <view class="field">
+        <view class="field__k">名字</view>
+        <input
+          class="field__input"
+          maxlength="{{nameMax}}"
+          placeholder="比如：大橘"
+          value="{{name}}"
+          bindinput="onName"
+        />
+      </view>
+
+      <view class="field">
+        <view class="field__k">状态</view>
+        <picker mode="selector" range="{{statuses}}" range-key="label" value="{{statusIndex}}" bindchange="onStatus">
+          <view class="field__pick">{{statuses[statusIndex].label}}</view>
+        </picker>
+      </view>
+
+      <view class="field">
+        <view class="field__k">性别</view>
+        <picker mode="selector" range="{{genders}}" value="{{genderIndex}}" bindchange="onGender">
+          <view class="field__pick">{{genders[genderIndex]}}</view>
+        </picker>
+      </view>
+
+      <view class="field">
+        <view class="field__k">出没地点</view>
+        <input
+          class="field__input"
+          maxlength="{{locMax}}"
+          placeholder="比如：图书馆前广场一带"
+          value="{{location}}"
+          bindinput="onLoc"
+        />
+      </view>
+
+      <view class="field">
+        <view class="field__k">性格（可不填）</view>
+        <textarea
+          class="field__area"
+          maxlength="{{personalityMax}}"
+          placeholder="比如：亲人，会主动蹭腿"
+          value="{{personality}}"
+          bindinput="onPersonality"
+        />
+      </view>
+
+      <view class="field">
+        <view class="field__k">备注（可不填）</view>
+        <textarea
+          class="field__area"
+          maxlength="{{noteMax}}"
+          placeholder="比如：已绝育。不要喂人类的零食和高盐食物。"
+          value="{{note}}"
+          bindinput="onNote"
+        />
+      </view>
+
+      <view class="field">
+        <view class="field__k">没照片时显示什么</view>
+        <input
+          class="field__input"
+          maxlength="{{emojiMax}}"
+          placeholder="一个 emoji"
+          value="{{emoji}}"
+          bindinput="onEmoji"
+        />
+        <view class="chips">
+          <view
+            wx:for="{{emojis}}"
+            wx:key="*this"
+            class="chip"
+            data-emoji="{{item}}"
+            bindtap="pickEmoji"
+          >{{item}}</view>
+        </view>
+      </view>
+
+      <view class="field field--last">
+        <view class="field__k">底色</view>
+        <view class="chips">
+          <view
+            wx:for="{{tints}}"
+            wx:key="key"
+            class="swatch {{item.key}} {{tint === item.key ? 'swatch--on' : ''}}"
+            data-key="{{item.key}}"
+            bindtap="pickTint"
+          >{{item.label}}</view>
+        </view>
+      </view>
+    </view>
+
+    <view class="notice">
+      <text class="notice__b">保存后图鉴立刻更新，不用发版。</text>
+      不在了的猫不要删，改成「失踪」或「离世」留在图鉴里。
+    </view>
+
+    <button
+      class="btn save"
+      disabled="{{submitting}}"
+      bindtap="submit"
+    >{{submitting ? '保存中…' : (isNew ? '加上这只猫' : '保存')}}</button>
+
+  </block>
+
+</view>

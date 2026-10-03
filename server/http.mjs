@@ -50,8 +50,8 @@ export const ROUTES = {
   'GET /api/health': { handler: 'health', auth: 'none' },
   'GET /api/event': { handler: 'getEvent', auth: 'none' },
   'GET /api/items': { handler: 'listItems', auth: 'none' },
-  // 图鉴照片的覆盖表。公开：图鉴是 tabBar 一级页面，谁打开都要看到照片。
-  'GET /api/cat-photos': { handler: 'listCatPhotos', auth: 'none' },
+  // 猫猫图鉴。公开：图鉴是 tabBar 一级页面，谁打开都要看到。
+  'GET /api/cats': { handler: 'listCats', auth: 'none' },
   'POST /api/login': { handler: 'login', auth: 'none' },
   'POST /api/register': { handler: 'register', auth: 'register' },
   'GET /api/me': { handler: 'me', auth: 'user' },
@@ -69,8 +69,10 @@ export const ROUTES = {
   'POST /api/admin/event/status': { handler: 'adminSetEventStatus', auth: 'user' },
   'POST /api/admin/stall': { handler: 'adminCreateStall', auth: 'user' },
   'POST /api/admin/item/create': { handler: 'adminCreateItem', auth: 'user' },
-  // 图鉴照片。门槛（副主任及以上）在 api.mjs 里判断。
-  'POST /api/admin/cat-photo': { handler: 'adminSetCatPhoto', auth: 'user' },
+  // 图鉴。门槛（副主任及以上）在 api.mjs 里判断。
+  'POST /api/admin/cat/create': { handler: 'adminCreateCat', auth: 'user' },
+  'POST /api/admin/cat': { handler: 'adminUpdateCat', auth: 'user' },
+  'POST /api/admin/cat/delete': { handler: 'adminDeleteCat', auth: 'user' },
   // 传图：body 是 base64 的 JSON，所以上限要单独放宽
   'POST /api/admin/image': {
     handler: 'adminUploadImage', auth: 'user', maxBytes: MAX_IMAGE_BODY_BYTES,

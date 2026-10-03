@@ -709,248 +709,34 @@ test('部署：升级路径 —— 已装好的服务器也要能拿到照片目
   assert.match(d, /daemon-reload/, '换了 unit 文件必须 daemon-reload');
 });
 
-test('部署：图鉴照片要同步到图片目录的 cats/ 下', () => {
-  // 图鉴的照片放在仓库的 assets/cats/（**不进小程序包** —— 主包 2MB 上限，
-  // 十几张照片就顶满了）。所以 deploy.sh 必须把它们搬到 nginx 发的那个目录里，
-  // 路径要和 data/cats.js 里写的 `cats/xxx.jpg` 严丝合缝对上：
-  // 差一层目录，界面就只剩 emoji，而且**不会有任何报错**。
-  const d = DEPLOY_SH();
-
-  assert.match(d, /ASSETS_CATS="\$APP_DIR\/assets\/cats"/,
-    'deploy.sh 要指向仓库里的 assets/cats/');
-  assert.match(d, /install -d[^\n]*"\$IMAGE_DIR\/cats"/,
-    '要在 $IMAGE_DIR 下建 cats/ —— 这个前缀和数据里的 `cats/xxx.jpg` 是同一个');
-
-  // 建空目录不算数，得真的把文件一个个搬过去
-  assert.match(d, /for f in "\$ASSETS_CATS"\/\*/, '要遍历 assets/cats/ 里的每个文件');
-  assert.match(d, /install -m 6\d\d[^\n]*"\$IMAGE_DIR\/cats\/"/,
-    '每个文件都要 install 到 $IMAGE_DIR/cats/');
-
-  // 图鉴照片是仓库里搬的静态资源，不是服务端生成的 img_<hex>，
-  // 所以这里不需要（也不该）拿服务端那套命名规则去卡它。
-});
-
-test('部署：图鉴照片过大要警告（手机上白等几十秒）', () => {
-  // 图鉴照片没有上传接口把关（不是服务端生成的 img_<hex>），
-  // 有人塞一张相机原图（5MB+）进来就只有发布时才有机会发现。
-  // 手机上每张要白等好几秒，流量也是学生自己的。
-  const d = DEPLOY_SH();
-
-  const m = /\[\s*"\$size"\s+-gt\s+(\d+)\s*\]/.exec(d);
-  assert.ok(m, 'deploy.sh 没有对图鉴照片的字节数做判断');
-  assert.equal(m[1], '307200', '阈值应当是 300KB（307200 字节）');
-  assert.match(d, /warn[^\n]*KB/, '超了要警告，而且要给人话的 KB 数，不是字节数');
-});
-
-test('部署：图鉴照片的缓存期必须短于物品照片（同名换图不会被缓存挡住）', () => {
-  // ★ 这是一个「不报错但一直不对」的坑：图鉴的照片是**同一个文件名换内容**
-  //   （assets/cats/daju.jpg 换成新拍的），不像物品照片那样每次上传都是新名字。
-  //   沿用 30 天的话，换完图 nginx 和微信客户端都会继续发旧照片，
-  //   最长一个月 —— 现象是「我明明换了呀」，极难联想到缓存。
+test('部署：图片只有一个 location，而且敢设 30 天缓存是靠一条不变量', () => {
+  // ★ 30 天缓存不是随便设的：图片目录里的文件**永不原地修改** ——
+  //   换一张照片是上传接口生成一个全新的随机文件名，旧名字不会被复用。
+  //   （tests/images.test.mjs 有一条「两次上传名字必须不同」守着这条不变量。）
+  //
+  //   所以这里只需要保证：**没有第二个 /images/xxx 的 location**。
+  //   多一段通常意味着有人在搞「同名换图」—— 而那样 30 天的缓存
+  //   会把新照片挡住，现象是「我明明换了呀」，极难联想到缓存。
+  //   图鉴曾经就有过这么一段（照片从仓库同步、同名替换），已经跟着
+  //   「图鉴搬进数据库」一起删掉了。
   const n = NGINX();
+  const loc = /location \/images\/ \{[\s\S]*?\n    \}/.exec(n);
+  assert.ok(loc, '找不到 location /images/ 那段');
+  assert.match(loc[0], /expires 30d/);
+  assert.match(loc[0], /alias \/srv\/bazaar\/images\//);
 
-  // 物品照片那段：文件名带随机串，长期缓存是安全的
-  const itemLoc = /location \/images\/ \{[\s\S]*?\n    \}/.exec(n);
-  assert.ok(itemLoc, '找不到 location /images/ 那段');
-  assert.match(itemLoc[0], /expires 30d/);
-
-  // 图鉴那段：路径更长，会盖住上面那个（nginx 前缀匹配取最长）
-  const catLoc = /location \/images\/cats\/ \{[\s\S]*?\n    \}/.exec(n);
-  assert.ok(catLoc, 'nginx 里缺少 /images/cats/ 的 location');
-  assert.match(catLoc[0], /alias \/srv\/bazaar\/images\/cats\//,
-    'cats 那段要 alias 到同一个目录的 cats/ 下');
-
-  const catExpires = /expires (\d+)([smhd])/.exec(catLoc[0]);
-  assert.ok(catExpires, 'cats 那段没有设缓存期 —— 会继承 /images/ 的 30 天');
-  assert.notEqual(catExpires[0], 'expires 30d',
-    'cats 那段不能也是 30 天，否则换图一个月不生效');
-
-  // 时间要真的更短，不能靠肉眼比字符串
-  const unit = { s: 1, m: 60, h: 3600, d: 86400 };
-  const catSec = Number(catExpires[1]) * unit[catExpires[2]];
-  assert.ok(catSec <= 3600, `图鉴照片的缓存期应当不超过 1 小时，实际 ${catExpires[0]}`);
-  assert.ok(catSec > 0, '也不能设成 0 —— 那样每次打开图鉴都要重新下一遍');
+  const all = n.match(/location \/images[^\s{]*/g) || [];
+  assert.deepEqual(all, ['location /images/'],
+    '图片只该有这一个 location。再多一段多半是「同名换图」回来了，'
+    + '而那样缓存会把新图挡住');
 });
 
-test('部署：nginx 站点缺了 cats 那段缓存设置，发布时要喊出来', () => {
-  // 仓库里的 nginx.conf **永远不会自动生效**（certbot 会把证书写进站点文件，
-  // 覆盖它就等于把 HTTPS 一起抹掉），只能人工合并。所以缺了必须喊 ——
-  // 这一条缺了不报错，只是「换了照片一个月不生效」，最容易被漏掉。
+test('部署：图鉴的照片不再从仓库同步（图鉴已经搬进数据库）', () => {
+  // 这一条是**反向**的：删掉一段功能之后，最怕它被不知情地加回来。
+  // 图鉴搬进数据库之后，照片和物品一样走管理端上传 —— 仓库里没有照片了。
   const d = DEPLOY_SH();
-
-  assert.match(d, /grep[^\n]*location \/images\/cats\//,
-    'deploy.sh 要检查站点里有没有 /images/cats/ 这一段');
-  assert.match(d, /warn[^\n]*cats[^\n]*缓存|warn[^\n]*缓存[^\n]*30 天|warn[^\n]*30 天/,
-    '缺了要警告，而且要说清后果（缓存 30 天）');
-});
-
-test('部署：图鉴照片的中文名要在发布时喊出来（这是唯一看得到真实文件名的地方）', () => {
-  // 服务端读到的是**已经百分号编码**的路径，它连原始文件名都看不见，
-  // 所以「中文名 → 404 → 界面只剩 emoji」这件事不可能在运行时被拦住。
-  // 发布脚本是唯一能看到真实文件名、又能说话的一环。
-  const d = DEPLOY_SH();
-
-  assert.match(d, /case "\$name" in/, '要用 case 去卡文件名');
-  assert.match(d, /\*\[!a-z0-9\._-\]\*/, '要卡「存在小写字母/数字/._- 之外的字符」');
-  assert.match(d, /warn[^\n]*中文|warn[^\n]*404/,
-    '命中之后要给出人能懂的警告（提 404 或中文名）');
-
-  // README.md 之类的非照片不该被塞进对外目录
-  assert.match(d, /不是照片[^\n]*跳过|跳过[^\n]*不是照片/, '非照片文件要跳过');
-});
-
-test('部署：图鉴同步的筛选规则，把 shell 里的模式抠出来逐格验', () => {
-  // ★ 为什么还要这一条（上面那条 bash 版不是已经真跑了吗）：
-  //   bash 在受限沙箱里根本起不来（MSYS2 要命名管道），那条会永远 skip。
-  //   等于「本机天天跑的测试」里没有任何东西盯着这段筛选。
-  //   所以这里不重写一套规则，而是**把 shell 里的模式原文抠出来**，
-  //   机械地翻成 JS 正则再逐格验 —— 有人把 `[!...]` 写成 `[...]`、
-  //   或者往里加了 `.` 忘了转义，这里都会红。
-  const d = DEPLOY_SH();
-
-  // ① 扩展名白名单：`*.jpg|*.jpeg|*.png|*.webp|*.gif)`
-  const extCase = /case "\$name" in\n\s*(\*\.\w+(?:\|\*\.\w+)*)\)/.exec(d);
-  assert.ok(extCase, '找不到扩展名白名单那段 case（deploy.sh 改结构了？）');
-  const exts = extCase[1].split('|').map((p) => p.replace(/^\*/, ''));
-  assert.deepEqual(exts, ['.jpg', '.jpeg', '.png', '.webp', '.gif'],
-    '扩展名白名单变了 —— 确认是有意的，并同步 assets/cats/README.md');
-  const isPhoto = (n) => exts.some((e) => n.endsWith(e));
-
-  // ② 字符集限制：`*[!a-z0-9._-]*`
-  //    ★ 刻意连「少了 ! 」这种写法一起认下来，好让失败落在**语义**那一层，
-  //      而不是「找不到那段」—— 后者会让人以为是脚本被重构了，方向完全错。
-  //      机械翻译：`[!C]` = 「含有不属于 C 的字符」；`[C]` = 「含有属于 C 的字符」。
-  const clsCase = /case "\$name" in\n\s*\*(\[(!?)([^\]]+)\])\*\)/.exec(d);
-  assert.ok(clsCase, '找不到字符集那段 case（deploy.sh 改结构了？）');
-  const [, bracket, bang, cls] = clsCase;
-  const hasBadChar = bang === '!'
-    ? new RegExp(`[^${cls}]`)
-    : new RegExp(`[${cls}]`);
-
-  assert.equal(bang, '!',
-    `shell 里写的是 *${bracket}* —— 少了 ! 意思整个反了：`
-    + '现在会把**正常文件全跳过、只留坏名字**。要的是 *[!' + cls + ']*');
-  assert.ok(hasBadChar.test('大橘.jpg'), '中文名必须被判为不合规');
-  assert.ok(hasBadChar.test('DAJU.JPG'), '大写必须被判为不合规');
-  assert.ok(hasBadChar.test('daju 1.jpg'), '空格必须被判为不合规');
-  assert.ok(hasBadChar.test('daju(1).jpg'), '括号必须被判为不合规');
-  assert.ok(!hasBadChar.test('daju.jpg'), '正常名字不能被误杀');
-  assert.ok(!hasBadChar.test('xiao-hei_2.webp'), '下划线、连字符、数字都该放行');
-
-  // ③ 两条规则合起来，就是「哪些文件会真的被发出去」
-  const willPublish = (n) => isPhoto(n) && !hasBadChar.test(n);
-  const table = {
-    'daju.jpg': true,
-    'xiao-hei_2.webp': true,
-    '大橘.jpg': false,        // 静默 404 的元凶
-    'DAJU.webp': false,       // 大写同样取不到
-    'daju.JPG': false,        // 扩展名大小写敏感：nginx 那边也是按扩展名给 MIME
-    'README.md': false,
-    'daju': false,            // 没扩展名
-  };
-  const wrong = Object.entries(table)
-    .filter(([n, want]) => willPublish(n) !== want)
-    .map(([n, want]) => `${n} 期望 ${want ? '发出' : '跳过'}`);
-  assert.deepEqual(wrong, [], '这段筛选的最终判定和预期不符');
-});
-
-test('部署：图鉴同步的逻辑真的按「只发 ASCII 照片」走一遍', (t) => {
-  // 光断言脚本里有几个字串是不够的 —— 条件反了、case 写错了都会绿。
-  // 这里把那段 for/case 抠出来，在一个假目录上**真跑一遍**：
-  // 正常的照片要发出去，中文名的、大写名的、README 都不许出现，而且都要出声。
-  const bash = findBash();
-  if (!bash) return t.skip('机器上找不到 bash');
-  if (!bashUsable(bash)) {
-    return t.skip('bash 在当前沙箱里起不来（MSYS2 需要命名管道），普通终端里可以正常跑');
-  }
-
-  const d = DEPLOY_SH();
-  const start = d.indexOf('ASSETS_CATS="$APP_DIR/assets/cats"');
-  assert.ok(start > 0, '找不到图鉴同步那段（deploy.sh 改结构了？）');
-  const end = d.indexOf('# ---------- 4.', start);
-  assert.ok(end > start, '找不到图鉴同步那段的结尾');
-  const block = d.slice(start, end);
-
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'imnu-catsync-'));
-  try {
-    // ★ 目录名必须和脚本里的 `$APP_DIR/assets/cats` 逐字一致。
-    //   本测试第一版写成了 `assets-cats`（连字符）—— 于是 `[ -d ]` 判假、
-    //   整段 if 根本不进，脚本以 0 退出，测试却「通过」了前一半。
-    //   「什么都没发生」和「跑对了」长得一模一样，正是这类测试最危险的地方，
-    //   所以下面专门有一条 existsSync 来证明它真的进去了。
-    const src = path.join(dir, 'assets', 'cats');
-    const dst = path.join(dir, 'images');
-    fs.mkdirSync(src, { recursive: true });
-    fs.mkdirSync(dst, { recursive: true });
-    fs.writeFileSync(path.join(src, 'daju.jpg'), Buffer.alloc(64, 1));
-    fs.writeFileSync(path.join(src, 'xiao-hei.png'), Buffer.alloc(64, 1));
-    fs.writeFileSync(path.join(src, '大橘.jpg'), Buffer.alloc(64, 1));   // ← 静默 404 的元凶
-    fs.writeFileSync(path.join(src, 'DAJU.webp'), Buffer.alloc(64, 1));  // ← 大写同样取不到
-    fs.writeFileSync(path.join(src, 'README.md'), '# 说明\n');
-
-    // 把真实那段脚本原样拼进去，只替换掉它依赖的三个变量和两个日志函数。
-    //
-    // ★ 路径要转成 `C:/...` 再交给 MSYS2 的 bash：它把反斜杠当普通字符，
-    //   `[ -d "C:\Users\..." ]` 会悄悄地判为假。
-    const msys = (p) => p.replace(/\\/g, '/');
-
-    // ★ install 在这里必须换成桩：MSYS2 里 `-g "$(id -un)"` 会报
-    //   `invalid group 'rhode'`（真实服务器上 APP_USER=bazaar 是个真的系统用户/组，
-    //   没这个问题）。桩只做等价的事 —— 建目录 / 拷文件 —— 但**保留参数形状检查**，
-    //   认不出的参数直接报错，免得把「install 那行写坏了」也一起放过。
-    //   本测试要验的是**哪些文件能过筛选**，不是 install 的属主参数。
-    const installStub = `
-install() {
-  local d=0
-  while [ $# -gt 0 ]; do
-    case "$1" in
-      -d) d=1; shift ;;
-      -m|-o|-g) shift 2 ;;
-      *) break ;;
-    esac
-  done
-  if [ "$d" = 1 ]; then
-    [ $# -eq 1 ] || { echo "STUB install -d 参数形状不对: $*" >&2; return 1; }
-    mkdir -p "$1"
-  else
-    [ $# -eq 2 ] || { echo "STUB install 参数形状不对: $*" >&2; return 1; }
-    cp "$1" "$2"
-  fi
-}
-`;
-
-    const script = [
-      'set -e',
-      `APP_DIR='${msys(dir)}'`,
-      `IMAGE_DIR='${msys(dst)}'`,
-      'APP_USER=$(id -un)',
-      'warn() { echo "WARN $*"; }',
-      'log() { echo "LOG $*"; }',
-      installStub,
-      block,
-    ].join('\n');
-
-    const r = spawnSync(bash, ['-c', script], { encoding: 'utf8', timeout: 30000 });
-    const out = `${r.stdout || ''}${r.stderr || ''}`;
-    assert.equal(r.status, 0, `这段脚本跑挂了：\n${out}`);
-
-    // ★ 先确认它真的进了 if。否则「一个文件都没发」和「整段没执行」长得一模一样。
-    assert.ok(fs.existsSync(path.join(dst, 'cats')),
-      `脚本没建出 $IMAGE_DIR/cats —— 多半是整段 if 都没进去。输出：\n${out}`);
-    assert.match(r.stdout || '', /同步了 \d+ 张/, '日志要报出实际同步了几张');
-    assert.equal(((r.stdout || '').match(/WARN /g) || []).length, 3,
-      `应当正好三条警告（跳过的三个文件各一条），实际：\n${out}`);
-
-    const got = fs.readdirSync(path.join(dst, 'cats')).sort();
-    assert.deepEqual(got, ['daju.jpg', 'xiao-hei.png'],
-      '只有纯 ASCII 小写的照片能发出去；中文名 / 大写名 / README 都不该出现在对外目录里');
-
-    // ★ 被跳过的必须**喊出来**。安静地不发 == 线上少一张图，
-    //   而界面上只有 emoji，谁也想不到是文件名的问题。
-    assert.match(out, /大橘\.jpg/, '中文名要被点名警告');
-    assert.match(out, /DAJU\.webp/, '大写名要被点名警告');
-    assert.match(out, /README\.md/, '非照片文件要说明已跳过');
-  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  assert.ok(!/assets\/cats/.test(d.replace(/^#.*$/gm, '')),
+    'deploy.sh 里又在同步 assets/cats 了？图鉴的照片现在只走上传接口');
 });
 
 test('部署：密钥没填要在发布时喊出来，而且不能把密钥本身打出来', () => {

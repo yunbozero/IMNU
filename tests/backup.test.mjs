@@ -15,6 +15,7 @@ import { createSqliteRepository } from '../server/repository.mjs';
 import {
   REQUIRED_TABLES, backupDatabase, inspectBackup, listBackups,
   pruneBackups, restoreBackup, timestampName,
+  imagesDirFor, backupImages, restoreImages,
 } from '../server/backup.mjs';
 
 function tmpDir(tag = 'backup') {
@@ -205,6 +206,138 @@ test('备份：按数量轮转，只保留最新的 N 份', () => {
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
+});
+
+/* ============================================================
+   ★ 照片快照
+   ============================================================ */
+
+/** 造一个假的图片目录 */
+function seededImages(dir, names = ['img_aa.jpg', 'cats/daju.jpg']) {
+  for (const n of names) {
+    const full = path.join(dir, n);
+    fs.mkdirSync(path.dirname(full), { recursive: true });
+    fs.writeFileSync(full, Buffer.alloc(32, 7));
+  }
+  return dir;
+}
+
+test('照片备份：快照目录和数据库备份同名配对（库里存的是文件名，缺一不可）', () => {
+  // ★ 这是这个功能存在的理由：库里存的是照片的**文件名**，照片本身在磁盘上。
+  //   只备库的话，恢复出来全是指向不存在文件的 img_xxx.jpg ——
+  //   界面上全是破图，而且一句报错都没有。
+  assert.equal(
+    imagesDirFor('/srv/bazaar/backup/bazaar-20260101-120000.db'),
+    '/srv/bazaar/backup/bazaar-20260101-120000.images'
+  );
+  // Windows 路径也要能配对上（本地跑测试时就是这种）
+  assert.equal(
+    imagesDirFor(path.join('C:', 'bak', 'bazaar-20260101-120000.db')),
+    path.join('C:', 'bak', 'bazaar-20260101-120000.images')
+  );
+});
+
+test('照片备份：整个目录都被快照下来，内容一模一样', () => {
+  const dir = tmpDir('imgbak');
+  try {
+    const images = seededImages(path.join(dir, 'images'));
+    const out = path.join(dir, 'bazaar-20260101-120000.db');
+
+    const r = backupImages(images, out);
+    assert.equal(r.files, 2);
+    assert.equal(r.bytes, 64);
+    assert.equal(r.copied, 0, '同一个盘上应当全部走硬链接（快且几乎不占空间）');
+
+    // 内容要真的在，而且能读回来
+    assert.deepEqual(
+      fs.readFileSync(path.join(r.dir, 'cats', 'daju.jpg')),
+      Buffer.alloc(32, 7)
+    );
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('照片备份：★ 靠的是硬链接 —— 因为图片文件永不原地修改', () => {
+  // nginx 敢给 /images/ 设 30 天缓存，靠的就是「换图 = 换一个新文件名」。
+  // 同一条不变量也让硬链接快照永远有效：快照里的 inode 内容不会被后续操作改掉。
+  // 这条测试把它钉住 —— 一旦有人改成原地覆盖，快照会跟着变，备份就失去意义了。
+  const dir = tmpDir('imglink');
+  try {
+    const images = seededImages(path.join(dir, 'images'), ['img_aa.jpg']);
+    const r = backupImages(images, path.join(dir, 'x.db'));
+
+    const src = fs.statSync(path.join(images, 'img_aa.jpg'));
+    const dst = fs.statSync(path.join(r.dir, 'img_aa.jpg'));
+    assert.equal(dst.ino, src.ino, '应当是同一个 inode（硬链接），不是拷贝');
+    assert.equal(dst.nlink, 2);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('照片备份：没有图片目录不算错误（全新装的服务器就是没有）', () => {
+  const dir = tmpDir('imgempty');
+  try {
+    const r = backupImages(path.join(dir, '不存在'), path.join(dir, 'x.db'));
+    assert.equal(r.files, 0);
+    assert.equal(r.bytes, 0);
+    // 不该顺手建出一个空目录 —— 那会让人以为「备份里有照片」
+    assert.equal(fs.existsSync(r.dir), false);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('照片备份：轮转时快照必须跟着一起删（否则会被历史照片撑爆）', () => {
+  const dir = tmpDir('imgprune');
+  const backups = path.join(dir, 'backups');
+  try {
+    fs.mkdirSync(backups, { recursive: true });
+    const names = ['bazaar-20260101-000000', 'bazaar-20260102-000000', 'bazaar-20260103-000000'];
+    for (const stem of names) {
+      fs.writeFileSync(path.join(backups, `${stem}.db`), 'x');
+      fs.mkdirSync(path.join(backups, `${stem}.images`), { recursive: true });
+      fs.writeFileSync(path.join(backups, `${stem}.images`, 'img_aa.jpg'), 'img');
+    }
+
+    pruneBackups(backups, 1);
+
+    // 只留最新那对
+    assert.deepEqual(fs.readdirSync(backups).sort(), [
+      'bazaar-20260103-000000.db',
+      'bazaar-20260103-000000.images',
+    ]);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('照片恢复：只补不删（目录里多出来的文件一律不动）', () => {
+  // 恢复场景下最怕的是把还在用的照片删掉 —— 而多几个文件只是浪费一点磁盘，
+  // 代价完全不对称。所以这里刻意是「只补」。
+  const dir = tmpDir('imgrestore');
+  try {
+    const snap = path.join(dir, 'bazaar-20260101-120000.images');
+    seededImages(snap, ['img_aa.jpg', 'img_bb.jpg']);
+
+    // 本地：aa 已经有（要和快照里那份对上，这样才能验「跳过」），
+    // cc 是快照里没有的（必须在恢复后仍然存在）
+    const images = seededImages(path.join(dir, 'images'), ['img_aa.jpg', 'img_cc.jpg']);
+
+    const r = restoreImages(snap, images);
+    assert.equal(r.added, 1, '只有快照里有、目录里没有的 bb 要补进来');
+    assert.equal(r.skipped, 1, '已经存在的 aa 不该被重复动');
+
+    assert.deepEqual(fs.readdirSync(images).sort(),
+      ['img_aa.jpg', 'img_bb.jpg', 'img_cc.jpg'],
+      '只补不删 —— 本地多出来的 cc 必须还在');
+
+    // 内容要能读出来（不是建了个空文件）
+    assert.deepEqual(fs.readFileSync(path.join(images, 'img_bb.jpg')), Buffer.alloc(32, 7));
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('照片恢复：快照不存在时安静返回 0（不该让恢复流程整个失败）', () => {
+  // 老备份里没有 .images 目录是很正常的事（这个功能是后加的）。
+  // 那时候库恢复还是要照做 —— 照片补不回来是遗憾，但不能因此不恢复数据库。
+  const dir = tmpDir('imgnosnap');
+  try {
+    const r = restoreImages(path.join(dir, '没有这一份.images'), path.join(dir, 'images'));
+    assert.deepEqual(r, { added: 0, skipped: 0 });
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
 /* ============================================================

@@ -39,6 +39,7 @@
         "pages/item-new/index",
         "pages/event/index",
         "pages/cats/index",
+        "pages/cat-edit/index",
         "pages/cancel/index"
       ]
     }

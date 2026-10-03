@@ -210,67 +210,14 @@ if [ -f "$NGINX_SITE" ]; then
     warn "  修法：把 deploy/nginx.conf 里那段 location /images/ 合并进 $NGINX_SITE，然后"
     warn "    sudo nginx -t && sudo systemctl reload nginx"
   fi
-
-  # ★ 图鉴照片那一段单独检查。缺了它不会 404（上面那个 location 会兜住），
-  #   但会**继承 30 天的缓存** —— 图鉴是同一个文件名换内容，
-  #   于是「换了照片，学生一个月都看到旧的」，而且现象极难联想到缓存。
-  #   这种「不报错但一直不对」的情况只能靠发布时喊一声。
-  if ! grep -q 'location /images/cats/' "$NGINX_SITE"; then
-    warn "nginx 站点里没有 /images/cats/ 的 location —— 图鉴照片会被缓存 30 天"
-    warn "  现象：换了 assets/cats/ 里的照片，手机上一整个月还是旧图"
-    warn "  修法：把 deploy/nginx.conf 里那段 location /images/cats/ 合并进 $NGINX_SITE（缓存 1h）"
-  fi
 else
   warn "找不到 $NGINX_SITE —— nginx 还在用默认站点？"
 fi
 
-# ---------- 3.8 图鉴照片 ----------
-# 猫猫图鉴的照片是**跟着仓库走的静态资源**（猫就那么几只、一年改几次），
-# 所以由发布脚本从 assets/cats/ 同步到图片目录，nginx 直接发。
-# ★ 只增不删：仓库里删掉一张照片不删线上的文件 —— 免得手滑把还在用的图弄没。
-#   真要清，手工去 $IMAGE_DIR/cats/ 删。
-ASSETS_CATS="$APP_DIR/assets/cats"
-if [ -d "$ASSETS_CATS" ]; then
-  install -d -m 755 -o "$APP_USER" -g "$APP_USER" "$IMAGE_DIR/cats"
-  cats=0
-  for f in "$ASSETS_CATS"/*; do
-    [ -f "$f" ] || continue
-    name=$(basename "$f")
-
-    # 只同步照片；README.md 之类留给自己看，别往对外目录里塞
-    case "$name" in
-      *.jpg|*.jpeg|*.png|*.webp|*.gif) ;;
-      *)
-        warn "assets/cats/$name 不是照片，已跳过（只同步 .jpg/.jpeg/.png/.webp/.gif）"
-        continue
-        ;;
-    esac
-
-    # ★★ 文件名必须是**全小写 ASCII**。这是本项目最容易踩、又最查不出来的坑：
-    #   小程序的 <image> 会把中文名做百分号编码，而静态服务**故意不做 URL 解码**
-    #   （不解释放它是为了从根上杜绝路径穿越）→ 请求 404，界面回落成 emoji，
-    #   一句话的报错都没有，看起来就跟「还没传照片」一模一样。
-    #   放在这里拦，是因为这是**唯一能看到真实文件名的自动化环节** ——
-    #   服务端读到的是已经编码过的路径，它连原始名字都看不见。
-    case "$name" in
-      *[!a-z0-9._-]*)
-        warn "assets/cats/$name 的名字里有中文或大写字母 —— 它在小程序里会 404（界面只剩 emoji，且不报错）。改成全小写英文名，例如 daju.jpg，并同步改 miniprogram/data/cats.js"
-        continue
-        ;;
-    esac
-
-    install -m 644 -o "$APP_USER" -g "$APP_USER" "$f" "$IMAGE_DIR/cats/"
-    cats=$((cats + 1))
-
-    # 手机上加载大图很慢 —— 但 600px 左右、300KB 以内对活动这个量级完全够。
-    # 提醒一下，不拦。
-    size=$(wc -c < "$f" | tr -d ' ')
-    if [ "$size" -gt 307200 ]; then
-      warn "$name 有 $((size / 1024))KB —— 手机上会慢，建议压到 300KB 以内（600px 左右）"
-    fi
-  done
-  log "同步了 $cats 张图鉴照片到 $IMAGE_DIR/cats/"
-fi
+# 注：图鉴照片**不再走仓库**。图鉴已经搬进数据库，照片和物品一样在管理端
+# 上传（走 /api/admin/image），所以这里没有「同步 assets/cats/」那一段了。
+# 顺带也去掉了「同名换图被缓存挡住」那个坑 —— 上传生成的文件名带随机串，
+# 内容永不改变，可以放心长期缓存。
 
 # ---------- 4. 重启 ----------
 log "重启 $SERVICE"

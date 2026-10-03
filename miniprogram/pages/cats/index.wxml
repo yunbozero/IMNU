@@ -16,14 +16,20 @@
     >{{item.label}}</view>
   </view>
 
-  <view wx:if="{{cats.length === 0}}" class="empty">
+  <!-- 连缓存都没有、又没问到接口：给一句人话，而不是一片空白让人以为图鉴坏了 -->
+  <view wx:if="{{offline}}" class="empty" bindtap="refresh">
+    <view class="empty__icon">📡</view>
+    <view class="empty__text">暂时连不上，点一下重试</view>
+  </view>
+
+  <view wx:elif="{{list.length === 0}}" class="empty">
     <view class="empty__icon">🐈</view>
     <view class="empty__text">这一栏暂时没有记录</view>
   </view>
 
   <view class="cat-grid">
     <view
-      wx:for="{{cats}}"
+      wx:for="{{list}}"
       wx:key="id"
       class="cat-card"
       data-id="{{item.id}}"
