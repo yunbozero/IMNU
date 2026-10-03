@@ -23,7 +23,10 @@
 .sheet {
   width: 100%; background: #fff;
   border-radius: 40rpx 40rpx 0 0;
-  padding: 24rpx 32rpx calc(32rpx + env(safe-area-inset-bottom));
+  /* 兜底先写；calc 里用 px 不用 rpx —— rpx 在 calc() 里真机算不出来，
+     整条声明会失效，弹层内容就会贴着屏幕底边（16px ≈ 32rpx） */
+  padding: 24rpx 32rpx 32rpx;
+  padding-bottom: calc(16px + env(safe-area-inset-bottom));
   box-sizing: border-box;
 }
 .sheet__grab { width: 76rpx; height: 8rpx; border-radius: 4rpx; background: #E8DCD4; margin: 0 auto 24rpx; }

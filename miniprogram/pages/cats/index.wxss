@@ -19,10 +19,24 @@
 }
 .segmented__item--on { background: var(--brand); color: #fff; }
 
-.cat-grid { display: flex; flex-wrap: wrap; gap: 24rpx; }
+/* 猫猫卡片：一行两个。
+ *
+ * ★ 宽度**不能**写成 calc(50% - 12rpx)。rpx 放进 calc() 里，
+ *   开发者工具算得出来（它按模拟机宽度在**编译期**把 rpx 换成 px），
+ *   真机却算不出来 —— 真实屏幕宽度只有运行时才知道，那次替换进不到 calc 内部，
+ *   浏览器不认识 rpx，整条 width 就被判为非法值丢掉。
+ *   于是卡片退化成「按内容定宽」，而下面的位置文字又是 nowrap，
+ *   卡片被撑得超过半屏 → 一行只剩一只猫，右边空出一大片。
+ *   症状「模拟器正常、真机不正常」就是这么来的。
+ *
+ *   改成 48% + space-between：两个 48% 加中间的空档正好占满一行，
+ *   既不依赖 calc，也不依赖 flex 的 gap（gap 要 iOS 14.1 / Chrome 84 以上，
+ *   旧 iOS 上会失效）。行距用 margin-bottom，同样躲开 gap。 */
+.cat-grid { display: flex; flex-wrap: wrap; justify-content: space-between; }
 .cat-card {
-  width: calc(50% - 12rpx);
+  width: 48%;
   box-sizing: border-box;
+  margin-bottom: 24rpx;
   background: #fff; border-radius: 32rpx; padding: 20rpx;
   box-shadow: 0 4rpx 20rpx rgba(150, 90, 60, 0.06);
 }

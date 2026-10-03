@@ -446,6 +446,102 @@ test('取消原因：没选、或选了不存在的 key 都要拒', () => {
 });
 
 /* ============================================================
+   ★ 样式雷区：calc() 里不能出现 rpx
+   ============================================================ */
+
+/**
+ * 取出所有 `calc(...)` 的**完整**参数，包括 env(...) 这种嵌套括号。
+ * 直接上正则 `calc\(([^()]*)\)` 会因为嵌套而漏掉它们。
+ */
+function calcArgs(src) {
+  const out = [];
+  let i = src.indexOf('calc(');
+  while (i !== -1) {
+    let depth = 0;
+    let j = i + 4;                       // 指向 calc 后面那个 '('
+    for (; j < src.length; j++) {
+      if (src[j] === '(') depth += 1;
+      else if (src[j] === ')') {
+        depth -= 1;
+        if (depth === 0) break;
+      }
+    }
+    out.push(src.slice(i + 5, j));
+    i = src.indexOf('calc(', j);
+  }
+  return out;
+}
+
+/** 去掉 /* … *\/ 注释。反面教材写在注释里，不先删掉会把文档自己测红。 */
+const stripCssComments = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '');
+
+/** 一段 wxss 里所有「calc() 且参数含 rpx」的地方。命中即为真机上的失效声明。 */
+function rpxInCalc(src) {
+  return calcArgs(stripCssComments(src)).filter((arg) => /rpx/.test(arg));
+}
+
+test('样式雷区自测：能真的从 calc() 里取出参数', () => {
+  // 先证明这个扫描器本身有效，否则下面那条「全绿」什么都说明不了
+  assert.deepEqual(calcArgs('width: calc(50% - 12rpx);'), ['50% - 12rpx']);
+  assert.deepEqual(calcArgs('padding: calc(20px + env(safe-area-inset-bottom));'),
+    ['20px + env(safe-area-inset-bottom)'], 'env() 这种嵌套括号不能被截断');
+  assert.deepEqual(calcArgs('a: calc(1px + 2px); b: calc(3px);'), ['1px + 2px', '3px']);
+  assert.deepEqual(calcArgs('width: 100rpx;'), [], '没有 calc 就不该有结果');
+});
+
+test('样式雷区自测：这套判定能真的抓到 rpx-in-calc，也不误报', () => {
+  // ★ 这条才是关键：只测「扫描器能取参数」是不够的，
+  //   得证明「判定本身抓得到真问题、也不会把正常写法当成问题」。
+  assert.deepEqual(rpxInCalc('width: calc(50% - 12rpx);'), ['50% - 12rpx'],
+    'rpx 在 calc 里必须被抓到 —— 这正是猫猫图鉴一行只显示一只的原因');
+  assert.deepEqual(rpxInCalc('.a { width: 100rpx; height: 50%; }'), [],
+    '不在 calc 里的 rpx 是完全正常的写法，不能误报');
+  assert.deepEqual(rpxInCalc('padding-bottom: calc(16px + env(safe-area-inset-bottom));'), [],
+    'calc 里用 px + env() 是安全的写法，不能误报');
+  // 同一行里既有 calc 又有普通 rpx：只该报 calc 那部分
+  assert.deepEqual(rpxInCalc('padding: 20rpx 32rpx calc(20px + env(a));'), [],
+    'calc 外面的 rpx 不该被算进去（这就是不能按整行判断的原因）');
+  assert.deepEqual(rpxInCalc('padding: 20rpx 32rpx calc(20rpx + env(a));'), ['20rpx + env(a)']);
+  // 注释里的反面教材不算数
+  assert.deepEqual(rpxInCalc('/* 别写 calc(50% - 12rpx) */\n.a { width: 48%; }'), []);
+});
+
+test('样式：★ calc() 里不能出现 rpx（真机上算不出来）', () => {
+  // 症状：猫猫图鉴和物品列表「一行只显示一个，右边空出一大片」。
+  // 原因：开发者工具按模拟机宽度在**编译期**把 rpx 换成 px，所以模拟器正常；
+  //      真机的屏幕宽度只有运行时才知道，那次替换进不到 calc 内部，
+  //      浏览器不认识 rpx → 整条 width 判为非法值丢掉 → 卡片按内容定宽。
+  // 这份守卫是**类级**的：以后再有人写 calc(...rpx...) 会立刻红，
+  // 而不是等到真机上才发现。
+  const problems = [];
+
+  for (const file of allSourceFiles().filter((f) => f.endsWith('.wxss'))) {
+    for (const arg of rpxInCalc(read(file))) {
+      problems.push(`${path.relative(MP, file).replace(/\\/g, '/')}: calc(${arg})`);
+    }
+  }
+
+  assert.deepEqual(problems, [],
+    'calc() 里出现 rpx，真机上整条声明会失效。'
+    + '宽度改用百分比（如 48% + justify-content: space-between），'
+    + '内边距改用 px：\n' + problems.join('\n'));
+});
+
+test('样式：两列卡片不能用 calc 定宽，也不能只靠 flex 的 gap', () => {
+  // flex 的 gap 要 iOS 14.1 / Chrome 84 以上，旧 iOS 上会失效。
+  // 因此这两处两列布局用「48% 定宽 + space-between + margin-bottom」，
+  // 三样都是任何 WebView 都支持的老写法。
+  for (const f of ['pages/cats/index.wxss', 'packageBazaar/pages/items/index.wxss']) {
+    // 同样要先去掉注释：那里面正写着「不要用 calc(50% - 12rpx)」这个反面教材
+    const src = read(path.join(MP, f)).replace(/\/\*[\s\S]*?\*\//g, '');
+    assert.ok(!/calc\(/.test(src), `${f} 里不该再用 calc 定宽`);
+    assert.match(src, /justify-content:\s*space-between/, `${f} 缺少 space-between`);
+    assert.match(src, /width:\s*48%/, `${f} 的卡片宽度应当是 48%`);
+    assert.match(src, /margin-bottom:\s*24rpx/, `${f} 的行距应当用 margin-bottom`);
+  }
+});
+
+/* ============================================================
    管理端新建物品
    ============================================================ */
 
