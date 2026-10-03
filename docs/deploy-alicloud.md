@@ -489,6 +489,36 @@ ls -ld /srv/bazaar/images
 # 期望：drwxr-xr-x … bazaar bazaar … /srv/bazaar/images
 ```
 
+**真正能判定「照片这条路通了没有」的只有一种测法：放一个真文件进去取一次。**
+
+```bash
+# 用 bazaar 账号建文件 —— 这才是服务写照片时的真实身份
+sudo install -d -m 755 -o bazaar -g bazaar /srv/bazaar/images
+sudo -u bazaar sh -c 'printf "\211PNG\r\n\032\n" > /srv/bazaar/images/probe.png'
+
+curl -sI https://你的域名/images/probe.png | head -3
+# 期望：HTTP/2 200 且 content-type: image/png
+#   → 说明 location /images/ 生效了、nginx 也读得到这个目录
+
+sudo rm -f /srv/bazaar/images/probe.png
+```
+
+> ⚠️ **不要用 `curl -sI .../images/`（只到目录）来判断。**
+> 那个结果同时取决于三件事：目录存不存在、`index` 有没有命中、请求落在哪个
+> `server` 块 —— 它返回 404 完全可能是「目录还没建」而不是「配置没生效」。
+> 我就是拿这个当判据，白让人查了一轮。用上面那个放真文件的测法，一次就能定下来。
+
+如果放了文件仍然 404，按顺序排：
+
+1. **配置没加载**：`sudo nginx -T | grep -c 'location /images/'`，是 `0` 就说明没生效
+   （改完必须 `sudo nginx -t && sudo systemctl reload nginx`）。
+2. **加错了 server 块**：`certbot --nginx` 通常会**新加**一个 `listen 443 ssl` 的块，
+   而 https 请求走的是那一个。`location /images/` 必须和 `listen 443` 在**同一个**
+   `server { }` 里 —— 加在 `listen 80` 那个块里对 https 没用。
+   用 `sudo grep -n 'listen\|location /images/' /etc/nginx/sites-available/bazaar`
+   看行号就能对出来。
+3. **权限**：目录不是 755，或属主不是 `bazaar`（nginx 的 worker 是 `www-data`）。
+
 > ⚠️ **不要**为了照片去配「downloadFile 合法域名」。
 > `<image>` 组件的 `src` **不受服务器域名白名单限制**（白名单管的是 `wx.request` /
 > `wx.uploadFile` / `wx.downloadFile` / `wx.connectSocket` 这几个 **API**，
