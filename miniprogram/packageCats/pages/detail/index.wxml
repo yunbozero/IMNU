@@ -1,4 +1,17 @@
-<view class="page" wx:if="{{cat}}">
+<!-- 自定义导航栏：沉浸式大图要从屏幕最上面开始，所以默认导航栏关掉了
+     （见 index.json 的 navigationStyle）。这里自己画一条，高度按状态栏和
+     右上角胶囊的位置算出来 —— 算错了标题会被胶囊压住。 -->
+<view class="navbar" wx:if="{{nav}}" style="padding-top: {{nav.statusBarHeight}}px;">
+  <view
+    class="navbar__bar"
+    style="height: {{nav.contentHeight}}px; padding-right: {{nav.menuReserveWidth}}px;"
+  >
+    <view class="navbar__back" bindtap="goBack">‹</view>
+    <view class="navbar__title">{{navTitle}}</view>
+  </view>
+</view>
+
+<view class="page" wx:if="{{cat}}" style="padding-top: {{nav ? nav.navBarHeight : 0}}px;">
 
   <view class="hero {{cat.tint}}">
     <!-- 有照片显示照片；没有 / 加载失败就回落 emoji + 底色（和物品那边同一个套路） -->

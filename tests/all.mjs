@@ -33,6 +33,7 @@ import './miniprogram-build.test.mjs';
 import './miniprogram-lint.test.mjs';
 import './miniprogram-states.test.mjs';
 import './miniprogram.test.mjs';
+import './nav.test.mjs';
 import './passcode.test.mjs';
 import './proposal.test.mjs';
 import './prototype.test.mjs';

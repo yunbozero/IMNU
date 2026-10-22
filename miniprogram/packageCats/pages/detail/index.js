@@ -7,21 +7,37 @@
  */
 import * as cats from '../../../services/cats.js';
 import { imageUrl } from '../../../utils/format.js';
+import { getNavMetrics } from '../../../utils/nav.js';
 
 Page({
   data: {
     cat: null, photo: '', photoFailed: false, missing: false,
     // 相册：和主图分开。主图是列表页那张，相册只在详情页按需展示
     gallery: [],
+    // 自定义导航栏：详情页用沉浸式大图，标题和返回键浮在图上
+    nav: null,
+    navTitle: '猫咪详情',
   },
 
   onLoad(query) {
     this.id = (query && query.id) || '';
+    // 导航栏尺寸只在进入时算一次（屏幕不会中途变）
+    this.setData({ nav: getNavMetrics() });
 
     // ★ 先用缓存同步渲染 —— 从列表页点进来时它一定命中，
     //   所以不会出现「先白一下再出内容」。
     this.apply(cats.cached());
     this.refresh();
+  },
+
+  /** 自定义导航栏的返回键：没有上一页（比如从分享卡片直接进来）就回首页 */
+  goBack() {
+    const pages = getCurrentPages();
+    if (pages.length > 1) {
+      wx.navigateBack({ delta: 1 });
+      return;
+    }
+    wx.switchTab({ url: '/pages/home/index' });
   },
 
   async refresh() {
@@ -61,6 +77,7 @@ Page({
 
     if (this.title !== cat.name) {
       this.title = cat.name;
+      this.setData({ navTitle: cat.name });
       wx.setNavigationBarTitle({ title: cat.name });
     }
   },
