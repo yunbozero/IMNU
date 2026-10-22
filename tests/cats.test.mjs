@@ -761,6 +761,36 @@ test('图鉴：findById 找不到要返回 null（详情页靠它判断「已被
   assert.equal(cats.findById([], 'cat_1'), null);
 });
 
+test('图鉴：搜索按名字/昵称/地点/品种/毛色/性格/校区命中', () => {
+  const list = [
+    {
+      id: 'a', name: '八嘎猫', nickName: '', location: '东门外', classification: '狸花',
+      furColor: '狸花色', personality: '亲人', campus: '盛乐校区',
+    },
+    {
+      id: 'b', name: '橘座', nickName: '超级橘', location: '图书馆', classification: '橘猫及橘白',
+      furColor: '橘色', personality: '高冷', campus: '赛罕校区',
+    },
+  ];
+
+  for (const [kw, want] of [
+    ['橘', ['b']],
+    ['超级', ['b']],
+    ['东门', ['a']],
+    ['狸花', ['a']],
+    ['高冷', ['b']],
+    ['赛罕', ['b']],
+  ]) {
+    assert.deepEqual(cats.search(list, kw).map((c) => c.id), want, `搜「${kw}」`);
+  }
+
+  assert.deepEqual(cats.search(list, ''), [], '空词返回空数组（界面靠 searching 区分状态）');
+  assert.deepEqual(cats.search(list, '   '), []);
+  assert.deepEqual(cats.search(null, '橘'), [], '没数据时不能崩');
+  assert.equal(cats.matchKeyword(null, '橘'), false);
+  assert.equal(cats.matchKeyword(list[0], ''), false);
+});
+
 /* ============================================================
    3. 枚举漂移：两边各存一份，靠这里比对
    ============================================================ */

@@ -121,6 +121,28 @@ export function byStatus(list, status) {
   return (list || []).filter((c) => c.status === status);
 }
 
+/**
+ * 搜索匹配：名字、昵称、地点、品种、毛色、性格、校区。
+ *
+ * 为什么搜这么多字段：42 只猫里，很多人**记不住名字、只记得「东门那只橘的」**，
+ * 只搜名字等于没帮上忙。
+ */
+const SEARCH_FIELDS = ['name', 'nickName', 'location', 'classification', 'furColor',
+  'personality', 'campus'];
+
+export function matchKeyword(cat, keyword) {
+  const kw = String(keyword || '').trim().toLowerCase();
+  if (!kw || !cat) return false;
+  return SEARCH_FIELDS.some((f) => String(cat[f] || '').toLowerCase().includes(kw));
+}
+
+/** 搜全部分组（不受当前 tab 限制）—— 搜东西时不该被分组挡住 */
+export function search(list, keyword) {
+  const kw = String(keyword || '').trim();
+  if (!kw) return [];
+  return (list || []).filter((c) => matchKeyword(c, kw));
+}
+
 export function findById(list, id) {
   return (list || []).find((c) => c.id === id) || null;
 }

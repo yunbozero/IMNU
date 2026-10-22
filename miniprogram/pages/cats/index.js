@@ -16,6 +16,9 @@ Page({
     active: 'onCampus',
     list: [],
     tips: FEEDING_TIPS,
+    // 搜索：有词时**跨分组**搜，不受当前 tab 限制
+    keyword: '',
+    searching: false,
     // 加载失败过的猫 id —— 那一格回落到 emoji
     photoFailed: {},
     // 连缓存都没有、接口也没问到 —— 给一句人话，而不是一片空白
@@ -47,13 +50,34 @@ Page({
     }
     this.all = list;
     this.setData({ offline: false });
-    this.switchTo(this.data.active);
+    // 正在搜索时刷新，要接着按关键词过滤 —— 不能悄悄退出搜索
+    if (this.data.searching) this.applySearch();
+    else this.switchTo(this.data.active);
   },
   switchTo(key) {
+    // 切分组就等于退出搜索 —— 否则「点失踪却还在看搜索结果」会很困惑
     this.setData({
       active: key,
+      keyword: '',
+      searching: false,
       list: cats.byStatus(this.all, key).map(cats.decorate),
     });
+  },
+
+  onSearch(e) {
+    const keyword = e.detail.value;
+    this.setData({ keyword, searching: !!keyword.trim() });
+    this.applySearch();
+  },
+
+  clearSearch() {
+    this.setData({ keyword: '', searching: false });
+    this.switchTo(this.data.active);
+  },
+
+  applySearch() {
+    if (!this.data.searching) return;
+    this.setData({ list: cats.search(this.all, this.data.keyword).map(cats.decorate) });
   },
 
   /** 照片加载失败 → 这一格回落到 emoji（按 id 记，切分组会重排） */

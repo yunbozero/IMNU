@@ -16,6 +16,19 @@
     >{{item.label}}</view>
   </view>
 
+  <!-- 搜索：跨分组搜名字/昵称/地点/品种/毛色/性格/校区 -->
+  <view class="search">
+    <text class="search__icon">🔍</text>
+    <input
+      class="search__input"
+      value="{{keyword}}"
+      placeholder="搜名字、地点、品种，比如「东门」「橘」"
+      confirm-type="search"
+      bindinput="onSearch"
+    />
+    <text wx:if="{{keyword}}" class="search__clear" bindtap="clearSearch">清除</text>
+  </view>
+
   <!-- 连缓存都没有、又没问到接口：给一句人话，而不是一片空白让人以为图鉴坏了 -->
   <view wx:if="{{offline}}" class="empty" bindtap="refresh">
     <view class="empty__icon">📡</view>
@@ -23,8 +36,8 @@
   </view>
 
   <view wx:elif="{{list.length === 0}}" class="empty">
-    <view class="empty__icon">🐈</view>
-    <view class="empty__text">这一栏暂时没有记录</view>
+    <view class="empty__icon">{{searching ? '🔍' : '🐈'}}</view>
+    <view class="empty__text">{{searching ? '没搜到，换个词试试（试试地名或毛色）' : '这一栏暂时没有记录'}}</view>
   </view>
 
   <view class="cat-grid">
