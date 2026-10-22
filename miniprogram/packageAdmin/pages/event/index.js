@@ -81,6 +81,13 @@ Page({
     stallName: '',
     stallLoc: '',
     busyStall: false,
+
+    // 首页公告（一级管理员及以上能改）
+    annModes: ['不展示', '强制展示', '5 秒自动关'],
+    annMode: 0,
+    annTitle: '',
+    annContent: '',
+    annSubmitting: false,
   },
 
   onLoad() {
@@ -132,6 +139,15 @@ Page({
         // 当前活动的口令也从这里取 —— 公开接口 /api/event 不给口令（故意剥掉的）
         const current = events.find((e) => e.id === (this.data.active && this.data.active.id));
         this.setData({ events, activePass: current ? (current.passCode || '') : '' });
+
+        // 公告走公开接口读，界面里回填成表单初值
+        const pub2 = await api.get('/api/announcement', { token: session.getToken() });
+        const a = pub2 && pub2.announcement;
+        this.setData({
+          annMode: a ? a.mode : 0,
+          annTitle: a ? a.title : '',
+          annContent: a ? a.content : '',
+        });
       }
     } catch (e) {
       if (e && e.code === 'need_register') return session.handleError(e);
@@ -139,6 +155,37 @@ Page({
     } finally {
       this.setData({ loading: false });
     }
+  },
+
+  /* ---------------- 首页公告 ---------------- */
+
+  onAnnMode(e) { this.setData({ annMode: Number(e.detail.value) }); },
+  onAnnTitle(e) { this.setData({ annTitle: e.detail.value }); },
+  onAnnContent(e) { this.setData({ annContent: e.detail.value }); },
+
+  async saveAnnouncement() {
+    if (this.data.annSubmitting) return;
+    const mode = this.data.annMode;
+    const title = String(this.data.annTitle || '').trim();
+    if (mode !== 0 && !title) {
+      return wx.showToast({ title: '公告要有个标题', icon: 'none' });
+    }
+
+    this.setData({ annSubmitting: true });
+    try {
+      const r = await api.post('/api/admin/announcement', {
+        token: session.getToken(),
+        body: { mode, title, content: String(this.data.annContent || '').trim() },
+      });
+      const a = r && r.announcement;
+      wx.showToast({ title: a ? '公告已发布' : '公告已撤下', icon: 'success' });
+      await this.load();
+    } catch (err) {
+      session.handleError(err);
+    } finally {
+      this.setData({ annSubmitting: false });
+    }
+    return undefined;
   },
 
   /* ---------------- 新建活动 ---------------- */

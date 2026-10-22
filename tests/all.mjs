@@ -16,6 +16,7 @@ import './api.test.mjs';
 import './api-admin.test.mjs';
 import './auth.test.mjs';
 import './backup.test.mjs';
+import './announcement.test.mjs';
 import './cat-gallery.test.mjs';
 import './cats.test.mjs';
 import './deploy.test.mjs';

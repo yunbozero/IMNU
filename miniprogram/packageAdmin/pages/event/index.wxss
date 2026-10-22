@@ -18,6 +18,18 @@
   font-size: 28rpx;
 }
 
+/* 多行输入（公告内容、备注）。高度写死一点，textarea 自己不会撑开 */
+.field__area {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 160rpx;
+  padding: 22rpx 26rpx;
+  border-radius: 22rpx;
+  background: #F9F4F1;
+  font-size: 28rpx;
+  line-height: 1.6;
+}
+
 /* 日期 + 时间两个 picker 并排。gap 无法在老 iOS 上用，所以用 margin */
 .row picker { flex: 1; min-width: 0; }
 .row picker + picker { margin-left: 16rpx; }

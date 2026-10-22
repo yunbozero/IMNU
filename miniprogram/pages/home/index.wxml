@@ -11,6 +11,19 @@
     <text>（点一下重试）</text>
   </view>
 
+  <!-- 公告：mode 1 强制（点「知道了」才关），mode 2 五秒后自己收起来 -->
+  <view wx:if="{{announceVisible && announcement}}" class="announce">
+    <view class="announce__head">
+      <text class="announce__tag">公告</text>
+      <text class="announce__title">{{announcement.title}}</text>
+    </view>
+    <view wx:if="{{announcement.content}}" class="announce__body">{{announcement.content}}</view>
+    <view class="announce__foot">
+      <text class="announce__date">{{announcement.date}}</text>
+      <text class="announce__close" bindtap="closeAnnouncement">知道了</text>
+    </view>
+  </view>
+
   <!-- 主入口：闲置物品登记（列表页） -->
   <view class="entry entry--primary" bindtap="goItems" hover-class="entry--hover">
     <view class="entry__icon">🎁</view>

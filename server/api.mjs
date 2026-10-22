@@ -113,6 +113,11 @@ export const CAT_NOTE_MAX = 160;
 /** 一只猫的相册上限。旧图鉴里最多的一只有 5 张，留一倍余量。 */
 export const CAT_IMAGES_MAX = 9;
 
+/** 公告：存在 settings 表里的一条 JSON。标题一行，内容最多一段。 */
+const SETTING_ANNOUNCEMENT = 'announcement';
+export const ANNOUNCEMENT_TITLE_MAX = 40;
+export const ANNOUNCEMENT_CONTENT_MAX = 200;
+
 // 补充资料的上限（旧图鉴里实测的最长值 + 余量，见 CAT_EXTRA_FIELDS 的说明）
 export const CAT_NICK_MAX = 12;
 export const CAT_CAMPUS_MAX = 12;
@@ -1511,6 +1516,75 @@ export function createApi({
         return { status: 200, raw: { contentType: 'text/csv; charset=utf-8', text: toCsv(rows) } };
       }
       return ok({ event, total: rows.length, reservations: rows });
+    },
+
+    /* ---------- 首页公告 ---------- */
+
+    /**
+     * 公告。公开接口 —— 首页一进来就要看，不能要求登录。
+     *
+     * 存在 settings 表里一条 JSON。三种模式（和上一届项目的 Verify 集合同一个口径）：
+     *   mode 0 = 不展示（等同于没有公告）
+     *   mode 1 = 强制展示，用户点了「知道了」才关
+     *   mode 2 = 展示 5 秒后自动关（首页横幅，不挡操作）
+     */
+    getAnnouncement() {
+      const raw = repo.getSetting(SETTING_ANNOUNCEMENT);
+      if (!raw) return ok({ announcement: null });
+      let parsed;
+      try { parsed = JSON.parse(raw); } catch { return ok({ announcement: null }); }
+      if (!parsed || !parsed.mode || !parsed.title) return ok({ announcement: null });
+      return ok({
+        announcement: {
+          mode: parsed.mode,
+          title: parsed.title,
+          content: parsed.content || '',
+          date: parsed.date || '',
+        },
+      });
+    },
+
+    /** 改公告。一级管理员及以上。`mode: 0` 或不传内容 = 清掉公告。 */
+    adminSetAnnouncement({ body, user }) {
+      if (!user) return fail('unauthorized', '请先登录', 401);
+      if (!isSeniorManager(user)) return fail('forbidden', '改公告需要一级管理员及以上', 403);
+
+      const mode = Number(body?.mode ?? 0);
+      if (![0, 1, 2].includes(mode)) {
+        return fail('bad_request', '公告模式只能是 0（不展示）/ 1（强制）/ 2（5 秒自动关）', 400);
+      }
+
+      const title = asOptionalText(body?.title, ANNOUNCEMENT_TITLE_MAX);
+      if (!title.ok) return fail('bad_request', `公告标题最多 ${ANNOUNCEMENT_TITLE_MAX} 个字`, 400);
+      const content = asOptionalText(body?.content, ANNOUNCEMENT_CONTENT_MAX);
+      if (!content.ok) return fail('bad_request', `公告内容最多 ${ANNOUNCEMENT_CONTENT_MAX} 个字`, 400);
+
+      const before = repo.getSetting(SETTING_ANNOUNCEMENT);
+
+      // mode 0 / 没标题 = 清掉：不留下一条「mode 0 的空公告」，免得首页还要多判一次
+      if (mode === 0 || !title.value) {
+        repo.clearSetting(SETTING_ANNOUNCEMENT);
+        repo.writeAudit({
+          actorId: user.id, action: 'announcement.clear',
+          targetType: 'setting', targetId: SETTING_ANNOUNCEMENT,
+          detail: { had: !!before },
+        });
+        return ok({ announcement: null });
+      }
+
+      const payload = {
+        mode,
+        title: title.value,
+        content: content.value || '',
+        date: new Date(now()).toISOString().slice(0, 10),
+      };
+      repo.setSetting(SETTING_ANNOUNCEMENT, JSON.stringify(payload));
+      repo.writeAudit({
+        actorId: user.id, action: 'announcement.set',
+        targetType: 'setting', targetId: SETTING_ANNOUNCEMENT,
+        detail: { mode, title: payload.title, had: !!before },
+      });
+      return ok({ announcement: payload });
     },
 
     /* ---------- 运行期设置 ---------- */

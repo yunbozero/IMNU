@@ -52,6 +52,8 @@ export const ROUTES = {
   'GET /api/items': { handler: 'listItems', auth: 'none' },
   // 猫猫图鉴。公开：图鉴是 tabBar 一级页面，谁打开都要看到。
   'GET /api/cats': { handler: 'listCats', auth: 'none' },
+  // 首页公告。公开：一进首页就要看到，不能要求登录。
+  'GET /api/announcement': { handler: 'getAnnouncement', auth: 'none' },
   'POST /api/login': { handler: 'login', auth: 'none' },
   'POST /api/register': { handler: 'register', auth: 'register' },
   'GET /api/me': { handler: 'me', auth: 'user' },
@@ -88,6 +90,8 @@ export const ROUTES = {
   'GET /api/admin/reservations': { handler: 'adminReservations', auth: 'user' },
   'GET /api/admin/settings': { handler: 'adminGetSettings', auth: 'user' },
   'POST /api/admin/settings': { handler: 'adminSetSettings', auth: 'user' },
+  // 首页公告（门槛：一级管理员及以上，在 api.mjs 里判）
+  'POST /api/admin/announcement': { handler: 'adminSetAnnouncement', auth: 'user' },
 };
 
 /**

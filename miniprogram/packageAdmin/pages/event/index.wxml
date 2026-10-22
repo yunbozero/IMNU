@@ -143,6 +143,49 @@
       </view>
     </view>
 
+    <!-- ---------- 首页公告 ---------- -->
+    <view wx:if="{{canAdminister}}" class="card">
+      <view class="card__title">首页公告</view>
+
+      <view class="field">
+        <view class="field__k">展示方式</view>
+        <picker mode="selector" range="{{annModes}}" value="{{annMode}}" bindchange="onAnnMode">
+          <view class="field__pick">{{annModes[annMode]}}</view>
+        </picker>
+      </view>
+
+      <view class="field">
+        <view class="field__k">标题</view>
+        <input
+          class="field__input"
+          maxlength="40"
+          placeholder="比如：本周六活动开放预定，图书馆前"
+          value="{{annTitle}}"
+          bindinput="onAnnTitle"
+        />
+      </view>
+
+      <view class="field">
+        <view class="field__k">内容（可不填）</view>
+        <textarea
+          class="field__area"
+          maxlength="200"
+          placeholder="一两句话就够，太长了没人看"
+          value="{{annContent}}"
+          bindinput="onAnnContent"
+        />
+      </view>
+
+      <view class="notice">
+        <text class="notice__b">「强制」= 学生必须点一下「知道了」；「5 秒自动关」= 横幅自己收起来。</text>
+        撤下公告就把展示方式选成「不展示」再保存。
+      </view>
+
+      <button class="btn" disabled="{{annSubmitting}}" bindtap="saveAnnouncement">
+        {{annSubmitting ? '保存中…' : '保存公告'}}
+      </button>
+    </view>
+
     <!-- ---------- 全部活动 ---------- -->
     <block wx:if="{{canAdminister}}">
       <view class="card">

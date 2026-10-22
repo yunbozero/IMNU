@@ -13,10 +13,43 @@ Page({
     bazaarDesc: '看看有什么',
     isStaff: false,
     hasUser: false,
+    // 首页公告：mode 1 强制（点「知道了」才关）、mode 2 五秒后自动关
+    announcement: null,
+    announceVisible: false,
   },
 
   onLoad() {
     this.load();
+    this.loadAnnouncement();
+  },
+
+  /**
+   * 拉公告。失败了就什么都不显示 —— 公告是锦上添花，
+   * 不能因为它让首页报错，更不能挡住「看一眼有什么」这件事。
+   */
+  async loadAnnouncement() {
+    try {
+      const r = await api.get('/api/announcement');
+      const a = r && r.announcement;
+      if (!a || !a.mode) return;
+      this.setData({ announcement: a, announceVisible: true });
+      // mode 2：五秒后自动收起来（不挡操作）；定时器落账，页面走了要清
+      if (a.mode === 2) {
+        clearTimeout(this._announceTimer);
+        this._announceTimer = setTimeout(() => this.setData({ announceVisible: false }), 5000);
+      }
+    } catch {
+      // 静默：公告读不到不该影响首页
+    }
+  },
+
+  closeAnnouncement() {
+    clearTimeout(this._announceTimer);
+    this.setData({ announceVisible: false });
+  },
+
+  onUnload() {
+    clearTimeout(this._announceTimer);
   },
 
   onShow() {
