@@ -75,7 +75,7 @@
   </view>
 
   <view class="notice">
-    <text class="notice__b">只锁定名额，不占用别人的机会。</text>
+    <text class="notice__b">只登记名额，不占用别人的机会。</text>
     预定成功后，请于活动当天凭取货码到摊位领取。
   </view>
 

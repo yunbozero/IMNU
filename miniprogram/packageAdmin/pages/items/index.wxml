@@ -79,7 +79,7 @@
         data-status="{{item.offShelf ? 'on_sale' : 'off_shelf'}}"
         disabled="{{busyId === item.id}}"
         bindtap="toggleShelf"
-      >{{item.offShelf ? '重新上架' : '下架'}}</button>
+      >{{item.offShelf ? '重新开放' : '关闭预定'}}</button>
       <button
         class="op op--del"
         data-id="{{item.id}}"

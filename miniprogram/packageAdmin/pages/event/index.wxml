@@ -6,16 +6,16 @@
 
   <block wx:if="{{!error}}">
 
-    <!-- ---------- 现在在售的 ---------- -->
+    <!-- ---------- 正在开放预定的 ---------- -->
     <view class="card">
-      <view class="card__title">现在在售</view>
+      <view class="card__title">正在开放预定</view>
 
       <view wx:if="{{active}}" class="ev">
         <view class="ev__name">{{active.name}}</view>
         <view class="ev__time">{{active.rangeText}}</view>
       </view>
       <view wx:else class="ev ev--none">
-        还没有在售的活动。下面建一个，学生就能看到物品列表了。
+        还没有开放预定的活动。下面建一个，学生就能看到物品列表了。
       </view>
     </view>
 
@@ -146,8 +146,8 @@
       </view>
 
       <view class="notice">
-        <text class="notice__b">同时只能有一个「在售」活动。</text>
-        首页只认最新的那个，所以两个在售并存的话，
+        <text class="notice__b">同时只能有一个「开放预定」活动。</text>
+        首页只认最新的那个，所以两个开放预定并存的话，
         学生看到的是新的、而这里看着有两个 —— 要换活动请先把旧的结束掉。
       </view>
     </block>

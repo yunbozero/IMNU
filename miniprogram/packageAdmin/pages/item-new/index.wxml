@@ -107,8 +107,8 @@
     </view>
 
     <view class="notice">
-      <text class="notice__b">保存后这件物品立刻在售，学生马上就能预定。</text>
-      想先藏着就别建；建完想撤，回「物品名额」把它下架。照片传上去之后就确定了，
+      <text class="notice__b">保存后这件物品立刻开放预定，学生马上就能预定。</text>
+      想先藏着就别建；建完想撤，回「物品名额」把它关闭预定。照片传上去之后就确定了，
       要换得回列表点「换图」。
     </view>
 
@@ -116,7 +116,7 @@
       class="btn save"
       disabled="{{submitting}}"
       bindtap="submit"
-    >{{submitting ? '保存中…' : '保存并上架'}}</button>
+    >{{submitting ? '保存中…' : '保存并开放预定'}}</button>
 
   </block>
 

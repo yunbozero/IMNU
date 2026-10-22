@@ -17,7 +17,9 @@ import * as session from '../../../services/session.js';
 import { quotaText, quotaLevel, quotaPercent, imageUrl } from '../../../utils/format.js';
 import { pickAndUploadImage, reportImageResult } from '../../utils/image-upload.js';
 
-const STATUS_TEXT = { on_sale: '在售', off_shelf: '已下架' };
+// 界面措辞统一用「开放预定 / 已关闭」：这是个人主体小程序，「在售/上架」这类
+// 电商词更容易在审核时被要求整改（状态键本身不变，仍是 on_sale / off_shelf）。
+const STATUS_TEXT = { on_sale: '开放预定', off_shelf: '已关闭' };
 
 /** 补上展示用字段。列表加载和单行更新都走它，避免两处算得不一样。 */
 function decorate(it) {

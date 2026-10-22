@@ -40,7 +40,7 @@
     </view>
 
     <view wx:if="{{reservation.status === 'reserved'}}" class="notice notice--strong">
-      <text class="notice__b">本小程序只锁定名额。</text>
+      <text class="notice__b">本小程序只登记名额。</text>
       请于活动当天到对应摊位，出示这个码领取物品。
     </view>
 

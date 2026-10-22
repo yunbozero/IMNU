@@ -22,7 +22,8 @@ import * as api from '../../../services/api.js';
 import * as session from '../../../services/session.js';
 import { timeText } from '../../../utils/format.js';
 
-const STATUS_TEXT = { draft: '草稿', on_sale: '在售', ended: '已结束' };
+// 措辞统一成「开放预定」：个人主体小程序里「在售」这类电商词更容易被审核要求整改
+const STATUS_TEXT = { draft: '草稿', on_sale: '开放预定', ended: '已结束' };
 
 /** 状态徽章的颜色类，和 app.wxss 里的 .tag--* 对应 */
 const STATUS_CLASS = {
@@ -168,7 +169,7 @@ Page({
       const ok = await new Promise((resolve) => {
         wx.showModal({
           title: '先结束现在的活动？',
-          content: `现在在售的是「${this.data.active.name}」。开始新活动会把它结束掉，`
+          content: `现在开放预定的是「${this.data.active.name}」。开始新活动会把它结束掉，`
             + '结束之后学生就看不到它了。要继续吗？',
           confirmText: '结束并开始',
           success: (r) => resolve(!!r.confirm),

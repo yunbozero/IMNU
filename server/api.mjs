@@ -120,7 +120,7 @@ const isSeniorManager = (user) => isManager(user) && canAdminister(user.role);
 const MESSAGES = {
   soldout: '手慢了，名额刚刚被约满',
   dup: '你已经预定过这件物品了',
-  off_shelf: '这件物品已经下架了',
+  off_shelf: '这件物品已经关闭预定了',
   not_found: '物品不存在',
   code_taken: '取货码生成撞车，请重试',
   invalid_code: '取货码不存在，请核对数字',
@@ -660,7 +660,7 @@ export function createApi({
         if (active) {
           if (body?.endPrevious !== true) {
             return fail('event_conflict',
-              `现在已经在售「${active.name}」。要开始新的，请先把旧的结束掉。`);
+              `现在开放预定的是「${active.name}」。要开始新的，请先把旧的结束掉。`);
           }
           repo.updateEventStatus(active.id, 'ended');
           endedPrevious = active;
@@ -710,7 +710,7 @@ export function createApi({
         const active = repo.getActiveEvent();
         if (active && active.id !== eventId) {
           return fail('event_conflict',
-            `「${active.name}」还在售。要开始这个，请先把那个结束掉。`);
+            `「${active.name}」还在开放预定。要开始这个，请先把那个结束掉。`);
         }
       }
 
@@ -744,7 +744,7 @@ export function createApi({
 
       const event = repo.getActiveEvent();
       if (!event) {
-        return fail('no_active_event', '还没有在售的活动，先在「活动与摊位」里建一个');
+        return fail('no_active_event', '还没有开放预定的活动，先在「活动与摊位」里建一个');
       }
 
       const name = asStallName(body?.name);
@@ -1026,7 +1026,7 @@ export function createApi({
       // 与其让它变成一个查不到的孤儿，不如告诉管理员先去把活动开起来。
       const event = repo.getActiveEvent();
       if (!event) {
-        return fail('no_active_event', '还没有在售的活动，先跑 scripts/init-event.mjs 把活动建起来');
+        return fail('no_active_event', '还没有开放预定的活动，先跑 scripts/init-event.mjs 把活动建起来');
       }
 
       const name = asItemName(body?.name);

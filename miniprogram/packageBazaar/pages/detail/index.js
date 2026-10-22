@@ -47,7 +47,7 @@ Page({
       const r = await api.get('/api/items');
       const item = (r.items || []).find((x) => x.id === this.data.id);
       if (!item) {
-        this.setData({ error: '这件物品不存在或已下架' });
+        this.setData({ error: '这件物品不存在或已关闭预定' });
         return;
       }
       const stalls = r.stalls || [];
