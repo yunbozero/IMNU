@@ -335,6 +335,32 @@ test('小程序：界面文案不出现「义卖 / 救助 / 公益 / 慈善」�
     + '\n（代码注释里可以用这些词，界面文案不行。内部叫法见 docs/admin-plan.md）');
 });
 
+test('小程序：状态措辞统一成「开放预定 / 关闭预定 / 只登记名额」', () => {
+  // ① 「在售 / 上架 / 下架」是电商词。个人主体 + 义卖场景，审核看到这类措辞
+  //    比看到「开放预定」更容易要求整改（状态键仍是 on_sale / off_shelf，不动）。
+  // ② 同一个概念只能有一个名字：「只锁定名额」和「只登记名额」曾经各占一半。
+  // ③ 「一人一份」与实际规则不符：明细页可以一次选 1–5 份（MAX_QTY_PER_RESERVE）。
+  const BANNED = [
+    ['在售', '改用「开放预定」'],
+    ['上架', '改用「开放预定」'],
+    ['下架', '改用「关闭预定」'],
+    ['只锁定', '统一成「只登记名额」'],
+    ['一人一份', '规则是「每人约一次、份数可选」，写成「一人一次」'],
+  ];
+  const problems = [];
+
+  for (const file of allSourceFiles()) {
+    if (!/\.(wxml|js|json)$/.test(file)) continue;
+    const rel = path.relative(MP, file).replace(/\\/g, '/');
+    const text = visibleTextOf(file, read(file));
+    for (const [w, hint] of BANNED) {
+      if (text.includes(w)) problems.push(`${rel} 的界面文案里有「${w}」—— ${hint}`);
+    }
+  }
+
+  assert.deepEqual(problems, [], '界面措辞没统一：\n' + problems.join('\n'));
+});
+
 test('小程序：界面里的应用名必须是注册名称', () => {
   // 注册名称是「盛师猫猫」。名称、简介、类目、实际内容四者要一致 ——
   // 界面标题写着别的名字，直接判「名称与实际功能不符」。
@@ -1269,6 +1295,43 @@ test('照片：图片地址在模拟器和真机上各自拼对', async () => {
   //   照片地址复用同一个 BASE_URL，所以不用额外配一遍。
   assert.match(pickBaseUrl({ platform: 'devtools' }), /^http:\/\/127\.0\.0\.1:3000$/);
   assert.match(pickBaseUrl({ platform: 'android' }), /^https:\/\//);
+});
+
+test('时间：展示一律按北京时间，不跟手机的时区走', async () => {
+  const { timeText, clockText } = await import('../miniprogram/utils/format.js');
+
+  // 2026-04-18 01:00 UTC = 北京时间 09:00
+  const ts = Date.UTC(2026, 3, 18, 1, 0);
+  assert.equal(timeText(ts), '04-18 09:00');
+  assert.equal(clockText(ts), '09:00');
+
+  // ★ 跨日：UTC 还是 17 号 23:30，北京已经是 18 号 07:30 ——
+  //   用本地 getter 的实现在东八区机器上恰好也是这个结果，所以只能靠上一条区分。
+  const late = Date.UTC(2026, 3, 17, 23, 30);
+  assert.equal(timeText(late), '04-18 07:30');
+  assert.equal(clockText(late), '07:30');
+
+  // 空值 / 垃圾值给破折号（界面靠它显示「—」，不能崩）
+  for (const v of [0, null, undefined, '', 'abc', NaN]) {
+    assert.equal(timeText(v), '—', `timeText(${String(v)})`);
+    assert.equal(clockText(v), '—', `clockText(${String(v)})`);
+  }
+});
+
+test('时间：format.js 里不许出现本地时区 getter', () => {
+  const src = read(path.join(MP, 'utils/format.js'));
+
+  // 注释里提到这些名字是允许的（上面就解释了为什么不用它），只查**代码**。
+  const code = src
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/(^|\s)\/\/.*$/gm, '$1');
+
+  // 服务端解析时间写死 +08:00，客户端展示也必须写死。
+  // 本地 getter 在开发者自己的机器上永远是对的，所以只能禁掉写法本身。
+  for (const bad of ['getHours(', 'getMinutes(', 'getDate(', 'getMonth(', 'getFullYear(']) {
+    assert.ok(!code.includes(bad),
+      `format.js 里还有 ${bad} —— 那是手机本地时区，非东八区设备上会差几个小时`);
+  }
 });
 
 test('照片：界面确实把图片渲染出来了，而且没照片时回落 emoji', () => {

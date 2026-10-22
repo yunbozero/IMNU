@@ -50,20 +50,31 @@ function pad(n) {
   return String(n).padStart(2, '0');
 }
 
-/** 毫秒时间戳 → '09-14 15:30' */
+/**
+ * 北京时间的固定偏移。中国不实行夏令时，所以这是一个常量而不是时区库。
+ *
+ * ★ 服务端解析时间时写死 `+08:00`（见 server/time.mjs），客户端显示也必须写死 ——
+ *   `getHours()` 拿的是**手机本地时区**：手机不在国内、或者系统时区被改过，
+ *   学生看到的核销时间就会差几个小时，管理员对不上账。
+ *   而本地怎么测都是对的，所以只能靠「不用本地 getter」这件事本身来保证。
+ */
+const BEIJING_OFFSET_MS = 8 * 60 * 60 * 1000;
+
+/** 毫秒时间戳 → '09-14 15:30'（北京时间） */
 export function timeText(ts) {
   if (!ts) return '—';
-  const d = new Date(Number(ts));
+  const d = new Date(Number(ts) + BEIJING_OFFSET_MS);
   if (Number.isNaN(d.getTime())) return '—';
-  return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return `${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} `
+    + `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
 }
 
-/** 毫秒时间戳 → '15:30' */
+/** 毫秒时间戳 → '15:30'（北京时间） */
 export function clockText(ts) {
   if (!ts) return '—';
-  const d = new Date(Number(ts));
+  const d = new Date(Number(ts) + BEIJING_OFFSET_MS);
   if (Number.isNaN(d.getTime())) return '—';
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
 }
 
 /**
