@@ -28,6 +28,7 @@
 `soldout` `dup` `off_shelf` `not_found` `code_taken` `invalid_code` `already_redeemed`
 `cancelled` `sid_taken` `openid_taken` `rate_limited` `unauthorized` `forbidden`
 `bad_request` `no_active_event` `login_failed`
+`pass_required` `pass_wrong` `pass_locked`（活动口令）
 
 ---
 
@@ -170,11 +171,29 @@ Authorization: Bearer <token>
 {
   "itemId": "it_...",
   "qty": 1,
-  "requestId": "客户端生成的唯一字符串"
+  "requestId": "客户端生成的唯一字符串",
+  "pass": "482913"
 }
 ```
 
 `requestId` 是**防重复提交的幂等键**，必填。用 `crypto.randomUUID()` 生成，同一笔预定重试时要**复用同一个值**——这样网络超时重发不会产生两单。
+
+`pass` **只有这场活动设了口令时才需要**（`GET /api/event` 返回的 `passRequired` 会告诉你）。它是活动口令，不是密码——只挡「不知道这场的口令」的人：
+
+```json
+// 没带口令
+{"ok":false,"error":"pass_required","message":"这场活动需要活动口令"}
+
+// 口令不对
+{"ok":false,"error":"pass_wrong","message":"活动口令不对，再试一次"}
+
+// 错太多次（10 分钟内 5 次）→ 锁 1 小时
+{"ok":false,"error":"pass_locked","message":"口令试错太多次了，58 分钟后再来"}
+```
+
+口令挂在这个接口上、而不是「登记」上：登记是一次性的、口令是每场都换的——挂在登记上，上学期登记过的人就绕过去了。
+
+**上一场「预定了没来取」的人，本场每账号上限压到 1 件**（不是禁定）。触发时 `too_many` 的 `message` 会说清原因；取消过的不算失约，核销过的也不算没取。
 
 ```json
 // 成功
@@ -391,6 +410,31 @@ emoji；文件名 = 换成它。换成新图时会**顺手删掉旧文件**，�
 - 重复设成同一个状态返回 `ok` 且带 `unchanged: true`（界面据此不用提示「已改」）。
 - ★ 在加这个接口之前，**没有任何办法结束活动** —— 只能改数据库。
   不收尾的话它一直挂着「在售」，下次办活动就互相打架。
+
+### `POST /api/admin/event/pass`
+
+设置 / 清除某场活动的口令。**需要一级管理员及以上。**
+
+```json
+// 设口令（不传 eventId 就是当前开放预定的那场）
+{"passCode": "482913"}
+
+// 关掉口令
+{"passCode": null}
+```
+
+| 字段 | 规则 |
+| --- | --- |
+| `passCode` | `null` / 空串 = 不启用；否则必须是 **6 位数字**（现场好念好输，安全性靠限流兜） |
+| `eventId` | 可选。不传就用当前活动 |
+
+三个设计点：
+
+- **口令存在活动上**（`events.pass_code`），不是全局设置。换活动天然换钥匙——存全局就会在换学期时忘了改，沿用旧口令。
+- **学生端读不到口令**：`GET /api/event`、`GET /api/items` 只返回 `passRequired: true/false`。
+- **审计里只有「有没有改」**，不记口令本身——审计日志是长期保存的，把钥匙抄在日志里等于没设。
+
+改完立即生效：旧口令立刻作废，客户端缓存了旧口令的用户会被要求重新输入。
 
 ### `POST /api/admin/stall`
 

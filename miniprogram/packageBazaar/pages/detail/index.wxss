@@ -54,3 +54,15 @@
 }
 .stepper__btn--off { color: #CFC3BB; border-color: #EFE6E0; }
 .stepper__qty { font-size: 34rpx; font-weight: 700; min-width: 44rpx; text-align: center; }
+
+/* 活动口令：只有设了口令的活动才显示。样式刻意安静 ——
+   它是「偶尔输一次」的东西，不该和数量步进器抢注意力。 */
+.passbox { margin: -8rpx 0 24rpx; }
+.passbox__row { display: flex; align-items: center; gap: 20rpx; }
+.passbox__label { font-size: 28rpx; font-weight: 600; flex: 0 0 auto; }
+.passbox__input {
+  flex: 1; height: 72rpx; padding: 0 22rpx; border-radius: 18rpx;
+  background: #F9F4F1; font-size: 30rpx; letter-spacing: 6rpx;
+}
+.passbox__hint { font-size: 23rpx; color: var(--text-2); line-height: 1.6; margin-top: 12rpx; }
+.passbox__hint--err { color: var(--danger); }

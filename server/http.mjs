@@ -67,6 +67,8 @@ export const ROUTES = {
   'GET /api/admin/events': { handler: 'adminListEvents', auth: 'user' },
   'POST /api/admin/event': { handler: 'adminCreateEvent', auth: 'user' },
   'POST /api/admin/event/status': { handler: 'adminSetEventStatus', auth: 'user' },
+  // 活动口令：学生端读不到它（getEvent/listItems 已经剥掉），只有管理员能读能改
+  'POST /api/admin/event/pass': { handler: 'adminSetEventPassCode', auth: 'user' },
   'POST /api/admin/stall': { handler: 'adminCreateStall', auth: 'user' },
   'POST /api/admin/item/create': { handler: 'adminCreateItem', auth: 'user' },
   // 图鉴。门槛（副主任及以上）在 api.mjs 里判断。

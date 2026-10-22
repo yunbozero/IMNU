@@ -70,7 +70,12 @@ Page({
     startTime: '09:00',
     endDate: '',
     endTime: '17:00',
+    // 活动口令（可空 = 不启用）。6 位数字，现场海报/班群里发
+    passCode: '',
     submitting: false,
+
+    // 当前活动正在用的口令（只有一级管理员能看到，来自 /api/admin/events）
+    activePass: '',
 
     // 新建摊位的表单
     stallName: '',
@@ -116,16 +121,17 @@ Page({
       // 活动列表只有一级管理员能看
       if (session.isSeniorManager()) {
         const r = await api.get('/api/admin/events', { token: session.getToken() });
-        this.setData({
-          events: (r.events || []).map((e) => ({
-            ...e,
-            statusText: STATUS_TEXT[e.status] || e.status,
-            statusClass: STATUS_CLASS[e.status] || 'tag',
-            rangeText: rangeText(e),
-            // 每种状态给一个「下一步」按钮；已结束的不给（重开没有实际用途）
-            action: e.status === 'draft' ? '开始' : (e.status === 'on_sale' ? '结束' : ''),
-          })),
-        });
+        const events = (r.events || []).map((e) => ({
+          ...e,
+          statusText: STATUS_TEXT[e.status] || e.status,
+          statusClass: STATUS_CLASS[e.status] || 'tag',
+          rangeText: rangeText(e),
+          // 每种状态给一个「下一步」按钮；已结束的不给（重开没有实际用途）
+          action: e.status === 'draft' ? '开始' : (e.status === 'on_sale' ? '结束' : ''),
+        }));
+        // 当前活动的口令也从这里取 —— 公开接口 /api/event 不给口令（故意剥掉的）
+        const current = events.find((e) => e.id === (this.data.active && this.data.active.id));
+        this.setData({ events, activePass: current ? (current.passCode || '') : '' });
       }
     } catch (e) {
       if (e && e.code === 'need_register') return session.handleError(e);
@@ -142,6 +148,45 @@ Page({
   onStartTime(e) { this.setData({ startTime: e.detail.value }); },
   onEndDate(e) { this.setData({ endDate: e.detail.value }); },
   onEndTime(e) { this.setData({ endTime: e.detail.value }); },
+  onPassCode(e) { this.setData({ passCode: e.detail.value }); },
+
+  /**
+   * 改「当前活动」的口令。
+   *
+   * 口令是每场活动一个（存在 events 表上），所以换活动天然换钥匙；
+   * 这里只负责改现行这一个。留空 = 关掉口令。
+   */
+  async editPass() {
+    const cur = this.data.activePass;
+    const res = await new Promise((resolve) => {
+      wx.showModal({
+        title: cur ? '改活动口令' : '设置活动口令',
+        editable: true,
+        placeholderText: cur ? `当前 ${cur}，填新的 6 位数字` : '6 位数字，留空表示不启用',
+        success: (r) => resolve(r),
+        fail: () => resolve(null),
+      });
+    });
+    if (!res || !res.confirm) return;
+
+    const next = String(res.content || '').trim();
+    // 前端先挡一道：6 位数字或空。真正的约束在服务端。
+    if (next && !/^\d{6}$/.test(next)) {
+      return wx.showToast({ title: '口令要 6 位数字（留空表示关掉）', icon: 'none' });
+    }
+
+    try {
+      await api.post('/api/admin/event/pass', {
+        token: session.getToken(),
+        body: { passCode: next || null },
+      });
+      wx.showToast({ title: next ? '口令已更新' : '口令已关闭', icon: 'success' });
+      await this.load();
+    } catch (err) {
+      session.handleError(err);
+    }
+    return undefined;
+  },
 
   /** 拼成服务端认的 "2026-04-18 09:00"；日期没选就是空（允许不填时间） */
   buildTime(date, time) {
@@ -160,6 +205,8 @@ Page({
       startsAt: this.buildTime(this.data.startDate, this.data.startTime),
       endsAt: this.buildTime(this.data.endDate, this.data.endTime),
       draft,
+      // 口令可空：留空就是这场不启用口令，之后在活动卡片上还能改
+      passCode: String(this.data.passCode || '').trim(),
     };
 
     // ★ 至多一个在售活动：已经有一个在售时先问清楚。
@@ -184,7 +231,7 @@ Page({
     try {
       await api.post('/api/admin/event', { token: session.getToken(), body });
       wx.showToast({ title: draft ? '已存为草稿' : '活动已开始', icon: 'success' });
-      this.setData({ name: '' });
+      this.setData({ name: '', passCode: '' });
       await this.load();
     } catch (err) {
       session.handleError(err);

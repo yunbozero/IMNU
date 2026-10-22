@@ -17,6 +17,15 @@
       <view wx:else class="ev ev--none">
         还没有开放预定的活动。下面建一个，学生就能看到物品列表了。
       </view>
+
+      <view wx:if="{{active}}" class="hint">
+        活动口令：{{activePass || '未启用（学生不用输就能约）'}}
+      </view>
+      <button
+        wx:if="{{active && canAdminister}}"
+        class="op"
+        bindtap="editPass"
+      >{{activePass ? '改口令' : '设口令'}}</button>
     </view>
 
     <!-- ---------- 摊位 ---------- -->
@@ -99,6 +108,18 @@
             <view class="field__pick">{{endTime}}</view>
           </picker>
         </view>
+      </view>
+
+      <view class="field">
+        <view class="field__k">活动口令（可不填）</view>
+        <input
+          class="field__input"
+          type="number"
+          maxlength="6"
+          placeholder="6 位数字，学生要输对才能预定"
+          value="{{passCode}}"
+          bindinput="onPassCode"
+        />
       </view>
 
       <view class="notice">

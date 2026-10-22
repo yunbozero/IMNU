@@ -15,6 +15,7 @@
  *
  * 所有 `error` 都是稳定的机器可读字符串，`message` 才是给人看的中文。
  */
+import { timingSafeEqual } from 'node:crypto';
 import { generateCode, SETTING_MAX_PER_USER, pickMaxPerUser } from './repository.mjs';
 import { parseEventTime, checkRange, formatEventTime } from './time.mjs';
 import {
@@ -30,6 +31,20 @@ export const API_VERSION = '1.0.0';
 
 /** 单次预定的数量上限。防止有人一次把名额全占了。 */
 export const MAX_QTY_PER_RESERVE = 5;
+
+/**
+ * 活动口令的长度。6 位数字 —— 它要在海报上、班群里、志愿者嘴上传递，
+ * 好念好输比「更难猜」重要；安全性靠限流兜，不靠长度。
+ */
+export const PASS_CODE_LEN = 6;
+
+/** 口令试错的窗口与上限：10 分钟内错 5 次 → 锁 1 小时。6 位数字不限流等于没有。 */
+const PASS_FAIL_WINDOW_MS = 10 * 60 * 1000;
+const PASS_FAIL_MAX = 5;
+const PASS_LOCK_MS = 60 * 60 * 1000;
+
+/** 「上一场有预定没取」的降权上限：本场最多约几件（不是禁定）。 */
+const UNCLAIMED_CAP = 1;
 /** 取货码撞车后的重试次数。6 位数字空间很大，撞一次都算罕见。 */
 export const CODE_RETRY = 5;
 /**
@@ -188,6 +203,93 @@ export function createApi({
     return s.length >= 1 && s.length <= EVENT_NAME_MAX ? s : null;
   };
 
+  /**
+   * 活动口令。返回 `{ ok, value }`：value 为 null 表示**不启用**。
+   *
+   * 为什么不用「返回 null 就算非法」的写法：这里「空」是合法且有意义的
+   * （关掉口令），和「填错了」必须分开，否则管理员永远关不掉口令。
+   */
+  const asPassCode = (v) => {
+    if (v === undefined || v === null) return { ok: true, value: null };
+    if (typeof v !== 'string') return { ok: false, value: null };
+    const s = v.trim();
+    if (s === '') return { ok: true, value: null };
+    const re = new RegExp(`^\\d{${PASS_CODE_LEN}}$`);
+    return re.test(s) ? { ok: true, value: s } : { ok: false, value: null };
+  };
+
+  /**
+   * 口令比较。长度不同也先走一次等长比较，别让「长度对不对」变成可测的旁路。
+   */
+  const passMatches = (given, expected) => {
+    const a = Buffer.from(String(given ?? ''), 'utf8');
+    const b = Buffer.from(String(expected ?? ''), 'utf8');
+    if (a.length !== b.length) {
+      timingSafeEqual(a, a);
+      return false;
+    }
+    return timingSafeEqual(a, b);
+  };
+
+  /**
+   * 口令试错计数。按账号记，进程内存 —— 单进程部署够用，重启即清零。
+   * 只做「锁一会儿」，不做永久封禁：现场输错几次是正常的。
+   */
+  const passFails = new Map();   // userId -> { count, firstAt, lockedUntil }
+
+  function passLockState(userId) {
+    const t = now();
+    const rec = passFails.get(userId);
+    if (rec && rec.lockedUntil && rec.lockedUntil > t) {
+      return { locked: true, retryAfterMs: rec.lockedUntil - t };
+    }
+    return { locked: false, retryAfterMs: 0 };
+  }
+
+  function passFailed(userId) {
+    const t = now();
+    let rec = passFails.get(userId);
+    if (!rec || t - rec.firstAt > PASS_FAIL_WINDOW_MS
+        || (rec.lockedUntil && rec.lockedUntil <= t)) {
+      rec = { count: 0, firstAt: t, lockedUntil: 0 };
+    }
+    rec.count += 1;
+    if (rec.count >= PASS_FAIL_MAX) {
+      rec.lockedUntil = t + PASS_LOCK_MS;
+      rec.count = 0;
+      rec.firstAt = t;
+    }
+    passFails.set(userId, rec);
+  }
+
+  function passCleared(userId) {
+    passFails.delete(userId);
+  }
+
+  /**
+   * 给**学生端**看的活动。口令不能出现在公开接口里 ——
+   * 它唯一的价值就是「不知道的人进不来」，公开出去等于没设。
+   */
+  const publicEvent = (e) => {
+    if (!e) return null;
+    const { passCode: _drop, ...rest } = e;
+    // 学生端只需要知道「要不要口令」，不需要知道口令是什么
+    return { ...rest, passRequired: !!e.passCode };
+  };
+
+  /**
+   * 上一场（最近一个已结束的活动）里，这个人有没有「预定了但没取」的东西。
+   *
+   * `listEvents` 已经按创建时间倒序，所以第一个 ended 的就是上一场。
+   * 只数 `reserved`：取消过的不算失约，核销过的不算没取。
+   */
+  function hasUnclaimedInPreviousEvent(currentEventId, userId) {
+    const prev = repo.listEvents()
+      .find((e) => e.status === 'ended' && e.id !== currentEventId);
+    if (!prev) return false;
+    return repo.listUserReservations(prev.id, userId).some((r) => r.status === 'reserved');
+  }
+
   /** 摊位名。 */
   const asStallName = (v) => {
     if (typeof v !== 'string') return null;
@@ -321,7 +423,7 @@ export function createApi({
         return ok({ event: null, stalls: [], serverTime: now() });
       }
       return ok({
-        event,
+        event: publicEvent(event),
         stalls: repo.listStalls(event.id),
         serverTime: now(),
       });
@@ -338,7 +440,7 @@ export function createApi({
         return { ...it, stallName: stall ? stall.name : null, stallLoc: stall ? stall.loc : null };
       });
 
-      return ok({ event, items, serverTime: now() });
+      return ok({ event: publicEvent(event), items, serverTime: now() });
     },
 
     /* ---------- 登录 ---------- */
@@ -458,7 +560,30 @@ export function createApi({
       const event = repo.getActiveEvent();
       if (!event) return fail('no_active_event', '活动还没开始');
 
+      // ★ 活动口令挂在这里，不是挂在「登记」上。
+      //   登记是一次性的、口令是每场都换的；挂错地方，上学期登记过的人就绕过去了。
+      //   只有「要占名额」这个动作需要证明「你知道这场的口令」。
+      if (event.passCode) {
+        const lock = passLockState(user.id);
+        if (lock.locked) {
+          const mins = Math.max(1, Math.ceil(lock.retryAfterMs / 60000));
+          return fail('pass_locked', `口令试错太多次了，${mins} 分钟后再来`, 429);
+        }
+        const given = typeof body?.pass === 'string' ? body.pass.trim() : '';
+        if (!given) return fail('pass_required', '这场活动需要活动口令', 200);
+        if (!passMatches(given, event.passCode)) {
+          passFailed(user.id);
+          return fail('pass_wrong', '活动口令不对，再试一次', 200);
+        }
+        passCleared(user.id);
+      }
+
       if (!repo.getItem(itemId)) return fail('not_found', MESSAGES.not_found, 404);
+
+      // ★ 上一场「预定了没来取」的人，本场最多约 1 件（不是禁定）。
+      //   取消的不算失约 —— 那是负责的行为；核销过的当然也不算。
+      //   上限在事务里收紧（maxPerUserCap），所以并发下也不会多约。
+      const downgraded = hasUnclaimedInPreviousEvent(event.id, user.id);
 
       // ★ 取货码由这里生成，撞车了换一个重试。
       //   repository 只负责「撞了要告诉我」，不负责重试——
@@ -470,6 +595,7 @@ export function createApi({
         const r = repo.tryReserve({
           eventId: event.id, itemId, userId: user.id, qty, requestId, code,
           maxPerUser: maxItemsPerUser,
+          maxPerUserCap: downgraded ? UNCLAIMED_CAP : null,
         });
 
         if (r.ok) {
@@ -485,6 +611,10 @@ export function createApi({
 
         // 上限要把具体数字告诉用户，所以不能走静态文案表
         if (r.reason === 'too_many') {
+          if (r.downgraded) {
+            return fail('too_many',
+              '上一场你有预定了没来取，本场先只能约 1 件。取到货之后就不影响了。', 200);
+          }
           return fail('too_many',
             `每个账号最多预定 ${r.limit} 件，你已经定了 ${r.current} 件。`, 200);
         }
@@ -642,6 +772,12 @@ export function createApi({
       const name = asEventName(body?.name);
       if (!name) return fail('bad_request', `活动名要填 1–${EVENT_NAME_MAX} 个字`, 400);
 
+      // 口令可以建活动时顺手设，也可以留空（不启用）——后期在活动页改。
+      const pass = asPassCode(body?.passCode);
+      if (!pass.ok) {
+        return fail('bad_request', `活动口令要是 ${PASS_CODE_LEN} 位数字（留空表示不启用）`, 400);
+      }
+
       let startsAt;
       let endsAt;
       try {
@@ -668,13 +804,16 @@ export function createApi({
       }
 
       const event = repo.createEvent({
-        name, startsAt, endsAt, status: draft ? 'draft' : 'on_sale',
+        name, startsAt, endsAt, status: draft ? 'draft' : 'on_sale', passCode: pass.value,
       });
 
       repo.writeAudit({
         actorId: user.id, action: 'event.create',
         targetType: 'event', targetId: event.id,
-        detail: { name, draft, endedPrevious: endedPrevious ? endedPrevious.id : null },
+        detail: {
+          name, draft, pass: !!pass.value,
+          endedPrevious: endedPrevious ? endedPrevious.id : null,
+        },
       });
       if (endedPrevious) {
         repo.writeAudit({
@@ -725,6 +864,54 @@ export function createApi({
         actorId: user.id, action: 'event.status',
         targetType: 'event', targetId: eventId,
         detail: { name: target.name, from: target.status, to: status },
+      });
+
+      return ok({ event: r.event });
+    },
+
+    /**
+     * 设置 / 清除某场活动的口令。**一级管理员及以上。**
+     *
+     * 不传 eventId 就是当前开放预定的那场（管理端最常见的用法）。
+     * `passCode: null` 或空串 = 关掉口令。
+     *
+     * ★ 口令本身不进审计日志，只记「这次操作有没有改变口令」——
+     *   审计日志是长期保存的，把它写成口令等于把钥匙抄在门口。
+     */
+    adminSetEventPassCode({ body, user }) {
+      if (!user) return fail('unauthorized', '请先登录', 401);
+      if (!isSeniorManager(user)) {
+        return fail('forbidden', '改活动口令需要一级管理员及以上', 403);
+      }
+
+      const explicitId = body?.eventId === undefined ? null : asId(body.eventId);
+      if (body?.eventId !== undefined && !explicitId) {
+        return fail('bad_request', 'eventId 不对', 400);
+      }
+      const active = explicitId ? null : repo.getActiveEvent();
+      const eventId = explicitId || (active && active.id);
+      if (!eventId) return fail('no_active_event', '还没有开放预定的活动，先在「活动与摊位」里建一个');
+
+      const target = repo.listEvents().find((e) => e.id === eventId);
+      if (!target) return fail('not_found', '活动不存在', 404);
+
+      const pass = asPassCode(body?.passCode);
+      if (!pass.ok) {
+        return fail('bad_request', `活动口令要是 ${PASS_CODE_LEN} 位数字（留空表示不启用）`, 400);
+      }
+
+      const r = repo.setEventPassCode(eventId, pass.value);
+      if (!r.ok) return fail(r.reason, '活动不存在', 404);
+
+      repo.writeAudit({
+        actorId: user.id, action: 'event.pass',
+        targetType: 'event', targetId: eventId,
+        detail: {
+          name: target.name,
+          from: target.passCode ? '已设置' : '未启用',
+          to: pass.value ? '已设置' : '未启用',
+          via: 'admin',
+        },
       });
 
       return ok({ event: r.event });

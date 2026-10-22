@@ -92,6 +92,24 @@
       </view>
     </view>
 
+    <!-- 活动口令：这场活动设了口令才出现。通过一次之后本机记住，不再显示 -->
+    <view class="passbox" wx:if="{{passRequired}}">
+      <view class="passbox__row" wx:if="{{needPass}}">
+        <text class="passbox__label">活动口令</text>
+        <input
+          class="passbox__input"
+          type="number"
+          maxlength="6"
+          value="{{pass}}"
+          placeholder="6 位数字"
+          bindinput="onPassInput"
+        />
+      </view>
+      <view class="passbox__hint {{passError ? 'passbox__hint--err' : ''}}">
+        {{passError || (needPass ? '口令在摊位海报 / 班群里，问一下志愿者' : '这台手机已经记住口令')}}
+      </view>
+    </view>
+
     <view class="panel">
       <view class="panel__row"><text class="panel__k">取货人</text><text class="panel__v">{{userLabel}}</text></view>
       <view class="panel__row"><text class="panel__k">取货地点</text><text class="panel__v">{{stall.name}}</text></view>

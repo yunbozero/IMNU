@@ -53,6 +53,9 @@ CREATE TABLE IF NOT EXISTS events (
   starts_at  INTEGER,
   ends_at    INTEGER,
   status     TEXT NOT NULL DEFAULT 'draft',     -- draft | on_sale | ended
+  -- 活动口令：空 = 不启用。存在活动上而不是全局设置里，是因为它**每场都换** ——
+  -- 存全局就会在换活动时忘了改，新学期沿用旧口令。
+  pass_code  TEXT,
   created_at INTEGER NOT NULL
 );
 
@@ -225,6 +228,7 @@ export function openDatabase(file = ':memory:') {
  */
 const ADDED_COLUMNS = [
   { table: 'items', column: 'image', ddl: 'ALTER TABLE items ADD COLUMN image TEXT' },
+  { table: 'events', column: 'pass_code', ddl: 'ALTER TABLE events ADD COLUMN pass_code TEXT' },
 ];
 
 /** 某张表当前有哪些列。表不存在时返回空集合。 */

@@ -24,6 +24,7 @@ export const REPOSITORY_METHODS = [
   'getActiveEvent',
   'listEvents',
   'updateEventStatus',
+  'setEventPassCode',
   'createStall',
   'listStalls',
   'createItem',
@@ -132,6 +133,7 @@ const mapStall = (r) => (r ? {
 
 const mapEvent = (r) => (r ? {
   id: r.id, name: r.name, startsAt: r.starts_at, endsAt: r.ends_at, status: r.status,
+  passCode: r.pass_code ?? null,
 } : null);
 
 /**
@@ -182,11 +184,24 @@ export function createSqliteRepository(db) {
 
     /* ---------------- 场次 / 摊位 ---------------- */
 
-    createEvent({ name, startsAt = null, endsAt = null, status = 'draft' }) {
+    createEvent({ name, startsAt = null, endsAt = null, status = 'draft', passCode = null }) {
       const id = newId('ev');
-      db.prepare(`INSERT INTO events (id,name,starts_at,ends_at,status,created_at)
-                  VALUES (?,?,?,?,?,?)`).run(id, name, startsAt, endsAt, status, now());
-      return { id, name, startsAt, endsAt, status };
+      db.prepare(`INSERT INTO events (id,name,starts_at,ends_at,status,pass_code,created_at)
+                  VALUES (?,?,?,?,?,?,?)`).run(id, name, startsAt, endsAt, status, passCode, now());
+      return { id, name, startsAt, endsAt, status, passCode };
+    },
+
+    /**
+     * 改一场活动的口令。传 null / 空串表示**不启用**。
+     *
+     * 为什么单独一个方法而不是塞进 updateEventStatus：改状态是「开始/结束」，
+     * 改口令是「换钥匙」—— 两者的权限门槛和审计语义不同（见 api.mjs）。
+     */
+    setEventPassCode(eventId, passCode) {
+      const r = db.prepare('UPDATE events SET pass_code = ? WHERE id = ?')
+        .run(passCode === undefined ? null : passCode, eventId);
+      if (r.changes === 0) return { ok: false, reason: 'not_found' };
+      return { ok: true, event: mapEvent(db.prepare('SELECT * FROM events WHERE id = ?').get(eventId)) };
     },
 
     /**
@@ -335,7 +350,10 @@ export function createSqliteRepository(db) {
      * requestId 重复提交是幂等的，返回第一次的结果而不是报错——
      * 学生手抖点两次「预定」不应该产生两单，也不应该看到报错。
      */
-    tryReserve({ eventId, itemId, userId, qty = 1, requestId, code, maxPerUser = null }) {
+    tryReserve({
+      eventId, itemId, userId, qty = 1, requestId, code,
+      maxPerUser = null, maxPerUserCap = null,
+    }) {
       if (!requestId) throw new Error('requestId 必填：它是防重复提交的幂等键');
       if (!code) throw new Error('code 必填：取货码由调用方生成');
       if (!Number.isInteger(qty) || qty <= 0) throw new Error('qty 必须是正整数');
@@ -354,7 +372,16 @@ export function createSqliteRepository(db) {
         //   但更不能把所有人的预定都堵死。
         const storedRow = db.prepare('SELECT value FROM settings WHERE key = ?')
           .get(SETTING_MAX_PER_USER);
-        const limit = pickMaxPerUser(storedRow ? storedRow.value : null, maxPerUser);
+        let limit = pickMaxPerUser(storedRow ? storedRow.value : null, maxPerUser);
+
+        // ★ 额外上限（maxPerUserCap）：目前只有一个来源 ——「上一场有预定没取货」的降权。
+        //   它只能**收紧**，不能放宽：管理员把上限调到 3，降权的人仍然只能 1 件。
+        //   放在事务里算，和 held 的计数在同一个写锁下，所以并发也不会超。
+        if (Number.isInteger(maxPerUserCap) && maxPerUserCap > 0) {
+          limit = Number.isInteger(limit) && limit > 0
+            ? Math.min(limit, maxPerUserCap)
+            : maxPerUserCap;
+        }
 
         // ★ 先数一遍再扣减。
         //   事务用的是 BEGIN IMMEDIATE，进门就拿到写锁，所以这个数字在本次写入前
@@ -368,7 +395,11 @@ export function createSqliteRepository(db) {
           `).get(eventId, userId).s;
 
           if (held + qty > limit) {
-            return abort({ ok: false, reason: 'too_many', limit, current: held });
+            return abort({
+              ok: false, reason: 'too_many', limit, current: held,
+              // 让上层能说清「是被降权卡住的」还是「被普通上限卡住的」
+              downgraded: Number.isInteger(maxPerUserCap) && maxPerUserCap > 0 && limit === maxPerUserCap,
+            });
           }
         }
 
