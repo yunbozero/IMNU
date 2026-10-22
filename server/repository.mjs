@@ -112,6 +112,14 @@ const mapCat = (r) => (r ? {
   id: r.id, name: r.name, emoji: r.emoji, tint: r.tint, image: r.image,
   status: r.status, gender: r.gender, location: r.location,
   personality: r.personality, note: r.note,
+  // 补充资料（旧图鉴导进来的）：全是可空文本
+  nickName: r.nick_name, campus: r.campus, classification: r.classification,
+  furColor: r.fur_color, friendliness: r.friendliness, sterilized: r.sterilized,
+  appearance: r.appearance, firstSightingAt: r.first_sighting_at,
+  firstSightingLoc: r.first_sighting_loc, relationship: r.relationship,
+  relatedCats: r.related_cats, birthAt: r.birth_at,
+  deathAt: r.death_at, deathReason: r.death_reason,
+  missingAt: r.missing_at, deliveryAt: r.delivery_at,
   createdAt: r.created_at, updatedAt: r.updated_at,
 } : null);
 
@@ -136,6 +144,29 @@ const mapStall = (r) => (r ? {
 const mapCatImage = (r) => (r ? {
   id: r.id, catId: r.cat_id, image: r.image, sort: r.sort, createdAt: r.created_at,
 } : null);
+
+/**
+ * 猫的「补充资料」：接口用 camelCase，库里是 snake_case。
+ * 加一个字段只改这张表 + db.mjs 的 ALTER + api.mjs 的上限。
+ */
+const CAT_EXTRA_FIELDS = [
+  ['nickName', 'nick_name'],
+  ['campus', 'campus'],
+  ['classification', 'classification'],
+  ['furColor', 'fur_color'],
+  ['friendliness', 'friendliness'],
+  ['sterilized', 'sterilized'],
+  ['appearance', 'appearance'],
+  ['firstSightingAt', 'first_sighting_at'],
+  ['firstSightingLoc', 'first_sighting_loc'],
+  ['relationship', 'relationship'],
+  ['relatedCats', 'related_cats'],
+  ['birthAt', 'birth_at'],
+  ['deathAt', 'death_at'],
+  ['deathReason', 'death_reason'],
+  ['missingAt', 'missing_at'],
+  ['deliveryAt', 'delivery_at'],
+];
 
 const mapEvent = (r) => (r ? {
   id: r.id, name: r.name, startsAt: r.starts_at, endsAt: r.ends_at, status: r.status,
@@ -756,17 +787,28 @@ export function createSqliteRepository(db) {
       return mapCat(db.prepare('SELECT * FROM cats WHERE id = ?').get(id));
     },
 
-    createCat({
-      name, emoji = null, tint = null, image = null, status = 'onCampus',
-      gender = null, location = null, personality = null, note = null,
-    }) {
+    createCat(input = {}) {
+      const {
+        name, emoji = null, tint = null, image = null, status = 'onCampus',
+        gender = null, location = null, personality = null, note = null,
+      } = input;
       const ts = now();
       const id = newId('cat');
-      db.prepare(`
-        INSERT INTO cats (id,name,emoji,tint,image,status,gender,location,personality,note,
-                          created_at,updated_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
-      `).run(id, name, emoji, tint, image, status, gender, location, personality, note, ts, ts);
+
+      // 补充资料：camelCase → 列名。抽成一张表，加字段时只改这一处。
+      const extra = [];
+      for (const [key, column] of CAT_EXTRA_FIELDS) {
+        extra.push({ column, value: input[key] === undefined ? null : input[key] });
+      }
+
+      const columns = ['id', 'name', 'emoji', 'tint', 'image', 'status', 'gender',
+        'location', 'personality', 'note', 'created_at', 'updated_at',
+        ...extra.map((e) => e.column)];
+      const values = [id, name, emoji, tint, image, status, gender, location,
+        personality, note, ts, ts, ...extra.map((e) => e.value)];
+
+      db.prepare(`INSERT INTO cats (${columns.join(',')})
+                  VALUES (${columns.map(() => '?').join(',')})`).run(...values);
       return { ok: true, cat: this.getCat(id) };
     },
 
@@ -785,6 +827,10 @@ export function createSqliteRepository(db) {
       const args = [];
       for (const f of fields) {
         if (patch[f] !== undefined) { sets.push(`${f} = ?`); args.push(patch[f]); }
+      }
+      // 补充资料：camelCase → 列名（和 createCat 共用同一张表）
+      for (const [key, column] of CAT_EXTRA_FIELDS) {
+        if (patch[key] !== undefined) { sets.push(`${column} = ?`); args.push(patch[key]); }
       }
 
       // 一个字段都没传也算成功（幂等），但不必写库

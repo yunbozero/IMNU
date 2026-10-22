@@ -14,7 +14,7 @@ import * as api from '../../../services/api.js';
 import * as session from '../../../services/session.js';
 import * as cats from '../../../services/cats.js';
 import {
-  NAME_MAX, LOC_MAX, PERSONALITY_MAX, NOTE_MAX, EMOJI_MAX, IMAGES_MAX,
+  NAME_MAX, LOC_MAX, PERSONALITY_MAX, NOTE_MAX, EMOJI_MAX, IMAGES_MAX, EXTRA_FIELDS,
   TINTS, EMOJI_SUGGESTIONS, STATUSES, GENDERS,
   statusIndex, genderIndex, buildCatBody,
 } from '../../utils/cat-form.js';
@@ -53,6 +53,10 @@ Page({
     images: [],
     imageUrls: [],
     imageMax: CAT_IMAGES_MAX,
+
+    // 补充资料（旧图鉴导进来的）。只开放这几项编辑，其余字段导入后只读
+    extraFields: EXTRA_FIELDS,
+    extras: {},
 
     // 选项
     tints: TINTS,
@@ -113,6 +117,7 @@ Page({
         imagePreview: found.image ? cats.decorate(found).photo : '',
         images: found.images || [],
         imageUrls: (found.images || []).map((n) => imageUrl({ image: n })),
+        extras: Object.fromEntries(EXTRA_FIELDS.map((f) => [f.key, found[f.key] || ''])),
       });
       wx.setNavigationBarTitle({ title: `改「${found.name}」` });
     } catch (e) {
@@ -132,6 +137,11 @@ Page({
   pickTint(e) { this.setData({ tint: e.currentTarget.dataset.key }); },
   onStatus(e) { this.setData({ statusIndex: Number(e.detail.value) }); },
   onGender(e) { this.setData({ genderIndex: Number(e.detail.value) }); },
+  onExtra(e) {
+    const key = e.currentTarget.dataset.key;
+    if (!key) return;
+    this.setData({ [`extras.${key}`]: e.detail.value });
+  },
 
   /**
    * 选照片。选完**立刻上传**，而不是等提交时一起传 ——
@@ -196,6 +206,7 @@ Page({
       personality: this.data.personality,
       note: this.data.note,
       image: this.data.image,
+      ...this.data.extras,
     });
 
     if (!built.ok) {

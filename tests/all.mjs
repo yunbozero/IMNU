@@ -24,6 +24,7 @@ import './dev-runtime.test.mjs';
 import './encoding.test.mjs';
 import './init-event.test.mjs';
 import './images.test.mjs';
+import './import-cats.test.mjs';
 import './invariants.test.mjs';
 import './lan.test.mjs';
 import './longimage.test.mjs';

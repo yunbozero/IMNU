@@ -18,8 +18,40 @@
   </view>
 
   <view class="panel">
+    <view class="panel__row" wx:if="{{cat.nickName}}"><text class="panel__k">昵称</text><text class="panel__v">{{cat.nickName}}</text></view>
     <view class="panel__row"><text class="panel__k">性别</text><text class="panel__v">{{cat.gender}}</text></view>
-    <view class="panel__row"><text class="panel__k">出没地点</text><text class="panel__v">{{cat.location}}</text></view>
+    <view class="panel__row" wx:if="{{cat.campus}}"><text class="panel__k">校区</text><text class="panel__v">{{cat.campus}}</text></view>
+    <view class="panel__row" wx:if="{{cat.classification}}"><text class="panel__k">品种</text><text class="panel__v">{{cat.classification}}</text></view>
+    <view class="panel__row" wx:if="{{cat.furColor}}"><text class="panel__k">毛色</text><text class="panel__v">{{cat.furColor}}</text></view>
+    <view class="panel__row" wx:if="{{cat.friendliness}}"><text class="panel__k">友好程度</text><text class="panel__v">{{cat.friendliness}}</text></view>
+    <view class="panel__row" wx:if="{{cat.sterilized}}"><text class="panel__k">绝育</text><text class="panel__v">{{cat.sterilized}}</text></view>
+    <view class="panel__row"><text class="panel__k">出没地点</text><text class="panel__v">{{cat.location || '—'}}</text></view>
+    <view class="panel__row" wx:if="{{cat.firstSightingAt}}"><text class="panel__k">首次目击</text><text class="panel__v">{{cat.firstSightingAt}}{{cat.firstSightingLoc ? ' · ' + cat.firstSightingLoc : ''}}</text></view>
+    <view class="panel__row" wx:if="{{cat.birthAt}}"><text class="panel__k">出生（约）</text><text class="panel__v">{{cat.birthAt}}</text></view>
+  </view>
+
+  <!-- 状态相关的资料：只有对应状态才可能出现的那几行 -->
+  <view class="panel" wx:if="{{cat.deathAt || cat.deathReason || cat.missingAt || cat.deliveryAt}}">
+    <view class="panel__row" wx:if="{{cat.deliveryAt}}"><text class="panel__k">送养时间</text><text class="panel__v">{{cat.deliveryAt}}</text></view>
+    <view class="panel__row" wx:if="{{cat.missingAt}}"><text class="panel__k">失踪时间</text><text class="panel__v">{{cat.missingAt}}</text></view>
+    <view class="panel__row" wx:if="{{cat.deathAt}}"><text class="panel__k">离世时间</text><text class="panel__v">{{cat.deathAt}}</text></view>
+    <view class="panel__row" wx:if="{{cat.deathReason}}"><text class="panel__k">离世原因</text><text class="panel__v">{{cat.deathReason}}</text></view>
+  </view>
+
+  <view class="card" wx:if="{{cat.appearance}}">
+    <view class="card__title">外貌</view>
+    <view class="body-text">{{cat.appearance}}</view>
+  </view>
+
+  <view class="card" wx:if="{{cat.relationship || cat.relatedCats}}">
+    <view class="card__title">猫际关系</view>
+    <view class="body-text" wx:if="{{cat.relationship}}">{{cat.relationship}}</view>
+    <view class="body-text" wx:if="{{cat.relatedCats}}">相关猫：{{cat.relatedCats}}</view>
+  </view>
+
+  <view class="card">
+    <view class="card__title">性格</view>
+    <view class="body-text">{{cat.personality}}</view>
   </view>
 
   <!-- 相册：平铺缩略图，点开是全屏大图（wx.previewImage，可以左右滑/保存）。
@@ -37,11 +69,6 @@
         bindtap="previewPhoto"
       />
     </view>
-  </view>
-
-  <view class="card">
-    <view class="card__title">性格</view>
-    <view class="body-text">{{cat.personality}}</view>
   </view>
 
   <view class="notice" wx:if="{{cat.note}}">{{cat.note}}</view>

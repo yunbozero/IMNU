@@ -183,6 +183,26 @@ DB_PATH=tmp/bazaar-dev.db npm run init-event -- deploy/event-config.example.json
 就是「补物品」。默认目标是线上库路径，本地跑**一定要带 `DB_PATH=`** ——
 屏幕第一行会把目标库打出来，跑之前先看一眼。
 
+### 导入上一届的猫猫图鉴
+
+上一届的图鉴数据（`C:\z_Downloads\小程序数据`）能直接导进来：
+
+```bash
+# 演练：只打印要导哪些猫、有没有封面，不写库
+node scripts/import-cats.mjs --data "C:\z_Downloads\小程序数据"
+
+# 真导（默认 DEV 库和 tmp/images；线上必须显式传 --db 和 --images）
+node scripts/import-cats.mjs --data "C:\z_Downloads\小程序数据" --yes
+```
+
+三条规矩：
+
+- **按猫名去重**：那 7 份 JSONL 是不同时间点的快照，不是 7 批猫；取 `lastEditTime` 最新的
+- **同名已存在就跳过**，不覆盖 —— 可以安全地跑第二次
+- **单张图超过 2MB 会跳过并打印出来**（服务端上限），那几张在管理端手动补；小程序上传时会自动压缩
+
+导完是 42 只（滤掉了 4 只「参考猫」和几条测试数据），41 张封面、99 张在校照片进相册。
+
 ### 物品照片放在哪
 
 和数据库同样的规矩（都在 `server/db.mjs` / `server/images.mjs` 里定义）：

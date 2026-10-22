@@ -111,6 +111,20 @@
         />
       </view>
 
+      <!-- 补充资料：从上一届图鉴导进来的字段。这里只开放最常改的几项，
+           其余（出生/离世/失踪时间、猫际关系…）导入后只读，在详情页看。 -->
+      <view class="field" wx:for="{{extraFields}}" wx:key="key">
+        <view class="field__k">{{item.label}}（可不填）</view>
+        <input
+          class="field__input"
+          maxlength="{{item.max}}"
+          placeholder="{{item.placeholder}}"
+          value="{{extras[item.key]}}"
+          data-key="{{item.key}}"
+          bindinput="onExtra"
+        />
+      </view>
+
       <view class="field">
         <view class="field__k">没照片时显示什么</view>
         <input

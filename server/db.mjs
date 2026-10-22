@@ -176,6 +176,27 @@ CREATE TABLE IF NOT EXISTS cats (
   location    TEXT,                              -- 常在哪儿出没
   personality TEXT,                              -- 性格
   note        TEXT,                              -- 其它要提醒的（绝育、胆小、线索…）
+  -- 以下这些是从上一届图鉴导进来的资料。旧数据里这些字段是有值的
+  -- （校区/品种/毛色/友好度/绝育 42/42，外貌 25/42，昵称 13/42…），
+  -- 只存名字和一句简介会把一只猫的历史丢掉大半。
+  -- 时间类一律存**文本**（'2022-08-06' 这种），因为旧数据里本来就是人写的、
+  -- 有的还带说明；转成时间戳反而会丢信息、也会引入时区问题。
+  nick_name           TEXT,                      -- 昵称（「重型橘猫」其实叫「超级橘」）
+  campus              TEXT,                      -- 校区
+  classification      TEXT,                      -- 品种/分类（狸花、橘猫及橘白…）
+  fur_color           TEXT,                      -- 毛色
+  friendliness        TEXT,                      -- 友好程度（热情/温和/高冷/怕生/危险）
+  sterilized          TEXT,                      -- 绝育情况（已绝育/未绝育）
+  appearance          TEXT,                      -- 外貌描写
+  first_sighting_at   TEXT,                      -- 首次目击时间
+  first_sighting_loc  TEXT,                      -- 首次目击地点
+  relationship        TEXT,                      -- 和其它猫的关系
+  related_cats        TEXT,                      -- 相关猫的名字
+  birth_at            TEXT,                      -- 出生（约）
+  death_at            TEXT,                      -- 离世时间
+  death_reason        TEXT,                      -- 离世原因
+  missing_at          TEXT,                      -- 失踪时间
+  delivery_at         TEXT,                      -- 送养时间
   created_at  INTEGER NOT NULL,
   updated_at  INTEGER NOT NULL
 );
@@ -241,6 +262,13 @@ export function openDatabase(file = ':memory:') {
 const ADDED_COLUMNS = [
   { table: 'items', column: 'image', ddl: 'ALTER TABLE items ADD COLUMN image TEXT' },
   { table: 'events', column: 'pass_code', ddl: 'ALTER TABLE events ADD COLUMN pass_code TEXT' },
+  // 图鉴的补充资料（从上一届图鉴导进来的字段，见 SCHEMA 里的说明）
+  ...['nick_name', 'campus', 'classification', 'fur_color', 'friendliness', 'sterilized',
+    'appearance', 'first_sighting_at', 'first_sighting_loc', 'relationship', 'related_cats',
+    'birth_at', 'death_at', 'death_reason', 'missing_at', 'delivery_at',
+  ].map((column) => ({
+    table: 'cats', column, ddl: `ALTER TABLE cats ADD COLUMN ${column} TEXT`,
+  })),
 ];
 
 /** 某张表当前有哪些列。表不存在时返回空集合。 */

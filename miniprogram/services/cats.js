@@ -52,6 +52,25 @@ function sanitizeList(raw) {
       location: typeof c.location === 'string' ? c.location : '',
       personality: typeof c.personality === 'string' ? c.personality : '',
       note: typeof c.note === 'string' ? c.note : '',
+      // 补充资料（旧图鉴导进来的）：缺失一律给空串，界面靠 '' 判断显不显示
+      nickName: typeof c.nickName === 'string' ? c.nickName : '',
+      campus: typeof c.campus === 'string' ? c.campus : '',
+      classification: typeof c.classification === 'string' ? c.classification : '',
+      furColor: typeof c.furColor === 'string' ? c.furColor : '',
+      friendliness: typeof c.friendliness === 'string' ? c.friendliness : '',
+      sterilized: typeof c.sterilized === 'string' ? c.sterilized : '',
+      appearance: typeof c.appearance === 'string' ? c.appearance : '',
+      firstSightingAt: typeof c.firstSightingAt === 'string' ? c.firstSightingAt : '',
+      firstSightingLoc: typeof c.firstSightingLoc === 'string' ? c.firstSightingLoc : '',
+      relationship: typeof c.relationship === 'string' ? c.relationship : '',
+      relatedCats: typeof c.relatedCats === 'string' ? c.relatedCats : '',
+      birthAt: typeof c.birthAt === 'string' ? c.birthAt : '',
+      deathAt: typeof c.deathAt === 'string' ? c.deathAt : '',
+      deathReason: typeof c.deathReason === 'string' ? c.deathReason : '',
+      missingAt: typeof c.missingAt === 'string' ? c.missingAt : '',
+      deliveryAt: typeof c.deliveryAt === 'string' ? c.deliveryAt : '',
+      // 相册：只留非空字符串。坏一项就跳过那一项，不是整条丢掉
+      images: Array.isArray(c.images) ? c.images.filter((n) => typeof n === 'string' && n) : [],
     });
   }
   return out;

@@ -113,6 +113,18 @@ export const CAT_NOTE_MAX = 160;
 /** 一只猫的相册上限。旧图鉴里最多的一只有 5 张，留一倍余量。 */
 export const CAT_IMAGES_MAX = 9;
 
+// 补充资料的上限（旧图鉴里实测的最长值 + 余量，见 CAT_EXTRA_FIELDS 的说明）
+export const CAT_NICK_MAX = 12;
+export const CAT_CAMPUS_MAX = 12;
+export const CAT_CLASSIFICATION_MAX = 12;
+export const CAT_FUR_MAX = 20;
+export const CAT_FRIENDLY_MAX = 6;
+export const CAT_STERILIZED_MAX = 6;
+export const CAT_APPEARANCE_MAX = 80;
+export const CAT_DATE_MAX = 20;
+export const CAT_RELATION_MAX = 40;
+export const CAT_REASON_MAX = 40;
+
 /**
  * 猫的状态。
  * ★ 必须和 miniprogram/data/cats.js 的 CAT_STATUS 的键一致 —— 那边是中文文案，
@@ -380,6 +392,24 @@ export function createApi({
       ['location', CAT_LOC_MAX, '出没地点'],
       ['personality', CAT_PERSONALITY_MAX, '性格'],
       ['note', CAT_NOTE_MAX, '备注'],
+      // 补充资料（旧图鉴导进来的）。上限按旧数据里的最长值往上留一点余量：
+      // 这些是老资料，不该因为「多写两个字」被拒，但也不能无限长。
+      ['nickName', CAT_NICK_MAX, '昵称'],
+      ['campus', CAT_CAMPUS_MAX, '校区'],
+      ['classification', CAT_CLASSIFICATION_MAX, '品种'],
+      ['furColor', CAT_FUR_MAX, '毛色'],
+      ['friendliness', CAT_FRIENDLY_MAX, '友好程度'],
+      ['sterilized', CAT_STERILIZED_MAX, '绝育情况'],
+      ['appearance', CAT_APPEARANCE_MAX, '外貌'],
+      ['firstSightingAt', CAT_DATE_MAX, '首次目击时间'],
+      ['firstSightingLoc', CAT_LOC_MAX, '首次目击地点'],
+      ['relationship', CAT_RELATION_MAX, '猫咪关系'],
+      ['relatedCats', CAT_RELATION_MAX, '相关猫'],
+      ['birthAt', CAT_DATE_MAX, '出生时间'],
+      ['deathAt', CAT_DATE_MAX, '离世时间'],
+      ['deathReason', CAT_REASON_MAX, '离世原因'],
+      ['missingAt', CAT_DATE_MAX, '失踪时间'],
+      ['deliveryAt', CAT_DATE_MAX, '送养时间'],
     ]) {
       const r = put(key, text(key, max, label));
       if (r !== true) return { ok: false, message: r };

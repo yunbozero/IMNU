@@ -20,6 +20,20 @@ export const NOTE_MAX = 160;
 /** 相册张数上限，和服务端 CAT_IMAGES_MAX 一致（有测试比对）。 */
 export const IMAGES_MAX = 9;
 
+/**
+ * 补充资料：管理端只编辑这 6 个（其余字段是导入的历史资料，暂不开放编辑）。
+ * 上限和服务端一一对应（有测试比对）。
+ */
+export const EXTRA_FIELDS = [
+  { key: 'nickName', label: '昵称', max: 12, placeholder: '比如：超级橘' },
+  { key: 'campus', label: '校区', max: 12, placeholder: '盛乐校区 / 赛罕校区' },
+  { key: 'classification', label: '品种', max: 12, placeholder: '狸花 / 橘猫及橘白 / 玳瑁及三花' },
+  { key: 'furColor', label: '毛色', max: 20, placeholder: '橘白、灰黑色及白色…' },
+  { key: 'friendliness', label: '友好程度', max: 6, placeholder: '热情 / 温和 / 高冷 / 怕生 / 危险' },
+  { key: 'sterilized', label: '绝育', max: 6, placeholder: '已绝育 / 未绝育' },
+  { key: 'appearance', label: '外貌', max: 80, placeholder: '白手套、眉心双三角…' },
+];
+
 /** 和服务端 CAT_STATUSES 一一对应。key 存在数据库里，label 只给界面看。 */
 export const STATUSES = [
   { key: 'onCampus', label: '在校' },
@@ -103,6 +117,15 @@ export function buildCatBody(form = {}) {
 
   const gender = GENDERS.includes(form.gender) ? form.gender : '未知';
 
+  // 补充资料：只提交管理端编辑的那几个；没填就是空串（服务端会存成空串，
+  // 不影响详情页的 wx:if 判断）。空串不是「不改」—— 这里语义是「整体提交」。
+  const extra = {};
+  for (const f of EXTRA_FIELDS) {
+    const r = brief(form[f.key], f.max, f.label);
+    if (r.error) return { ok: false, error: r.error };
+    extra[f.key] = r.value;
+  }
+
   return {
     ok: true,
     body: {
@@ -115,6 +138,7 @@ export function buildCatBody(form = {}) {
       location: location.value,
       personality: personality.value,
       note: note.value,
+      ...extra,
     },
   };
 }

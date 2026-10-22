@@ -660,6 +660,11 @@ const okWith = (list) => async () => ({ statusCode: 200, data: { ok: true, cats:
 const A_CAT = {
   id: 'cat_1', name: '大橘', emoji: '🐱', tint: 't-orange', image: null,
   status: 'onCampus', gender: '公', location: '图书馆前', personality: '亲人', note: '',
+  // 补充资料：sanitize 会把缺的字段补成空串，所以基准数据里也要带上
+  nickName: '', campus: '', classification: '', furColor: '', friendliness: '',
+  sterilized: '', appearance: '', firstSightingAt: '', firstSightingLoc: '',
+  relationship: '', relatedCats: '', birthAt: '', deathAt: '', deathReason: '',
+  missingAt: '', deliveryAt: '', images: [],
 };
 
 test('图鉴：拉成功要写缓存，decorate 补上照片地址和状态文案', async () => {
@@ -799,6 +804,9 @@ test('图鉴：表单校验能拦住每一条服务端也会拒的输入', () =>
     name: '大橘', emoji: '🐱', tint: 't-orange', image: null,
     status: 'onCampus', gender: '公',
     location: '图书馆前', personality: '亲人', note: '',
+    // 补充资料：没填就是空串（不是 undefined —— 表单是整体提交语义）
+    nickName: '', campus: '', classification: '', furColor: '', friendliness: '',
+    sterilized: '', appearance: '',
   });
 
   assert.equal(buildCatBody({ name: '   ' }).ok, false, '全空格的名字要拦');
