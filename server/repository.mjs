@@ -55,6 +55,8 @@ export const REPOSITORY_METHODS = [
   'createCat',
   'updateCat',
   'deleteCat',
+  'listCatImages',
+  'setCatImages',
   'writeAudit',
 ];
 
@@ -129,6 +131,10 @@ const mapReservation = (r) => (r ? {
 
 const mapStall = (r) => (r ? {
   id: r.id, eventId: r.event_id, name: r.name, loc: r.loc, createdAt: r.created_at,
+} : null);
+
+const mapCatImage = (r) => (r ? {
+  id: r.id, catId: r.cat_id, image: r.image, sort: r.sort, createdAt: r.created_at,
 } : null);
 
 const mapEvent = (r) => (r ? {
@@ -790,12 +796,59 @@ export function createSqliteRepository(db) {
       return { ok: true, cat: this.getCat(id) };
     },
 
+    /**
+     * 相册。传 catId 只取那一只，不传就是全部（列表页一次取完，避免 42 次查询）。
+     * 顺序就是 sort（录入先后）。
+     */
+    listCatImages(catId = null) {
+      const rows = catId
+        ? db.prepare('SELECT * FROM cats_images WHERE cat_id = ? ORDER BY sort, created_at')
+            .all(catId)
+        : db.prepare('SELECT * FROM cats_images ORDER BY cat_id, sort, created_at').all();
+      return rows.map(mapCatImage);
+    },
+
+    /**
+     * 整体替换一只猫的相册（传空数组 = 清空）。
+     *
+     * ★ 用「整体替换」而不是 add/remove 两个方法：界面上是「编辑一页、最后保存」，
+     *   中间状态不该立刻落库 —— 用户点了加图又取消，不该留下半套数据。
+     *   返回被移出相册的文件名，调用方负责删磁盘上的文件（和换主图同一套规矩）。
+     */
+    setCatImages(catId, images = []) {
+      return inTransactionAbortable(db, () => {
+        const cat = db.prepare('SELECT id FROM cats WHERE id = ?').get(catId);
+        if (!cat) return abort({ ok: false, reason: 'not_found' });
+
+        const before = db.prepare('SELECT image FROM cats_images WHERE cat_id = ?')
+          .all(catId).map((r) => r.image);
+
+        db.prepare('DELETE FROM cats_images WHERE cat_id = ?').run(catId);
+        const ts = now();
+        images.forEach((image, i) => {
+          db.prepare(`INSERT INTO cats_images (id,cat_id,image,sort,created_at)
+                      VALUES (?,?,?,?,?)`).run(newId('ci'), catId, image, i, ts);
+        });
+
+        const kept = new Set(images);
+        return {
+          ok: true,
+          images: this.listCatImages(catId),
+          removed: before.filter((n) => !kept.has(n)),
+        };
+      });
+    },
+
     /** 真删。没有任何东西引用猫，所以不需要软删除。 */
     deleteCat(id) {
       const existing = this.getCat(id);
       if (!existing) return { ok: false, reason: 'not_found' };
+      // 相册一起删：留着就是一批谁也不引用的孤儿文件
+      const images = db.prepare('SELECT image FROM cats_images WHERE cat_id = ?')
+        .all(id).map((r) => r.image);
+      db.prepare('DELETE FROM cats_images WHERE cat_id = ?').run(id);
       db.prepare('DELETE FROM cats WHERE id = ?').run(id);
-      return { ok: true, cat: existing };
+      return { ok: true, cat: existing, images };
     },
 
     /* ---------------- 审计 ---------------- */

@@ -31,18 +31,18 @@ export const COMPRESS_QUALITY = 70;
 export const MAX_IMAGE_KB = Math.round(MAX_IMAGE_BYTES / 1024);
 
 /** 选图。用户取消返回 null（取消不是错误，界面不该弹提示）。 */
-function chooseImage() {
+function chooseImage(count = 1) {
   return new Promise((resolve) => {
     wx.chooseMedia({
-      count: 1,
+      count,
       mediaType: ['image'],
       sizeType: ['compressed'],
       sourceType: ['album', 'camera'],
       success: (res) => {
-        const f = res && res.tempFiles && res.tempFiles[0];
-        resolve(f ? f.tempFilePath : null);
+        const files = (res && res.tempFiles) || [];
+        resolve(files.map((f) => f.tempFilePath).filter(Boolean));
       },
-      fail: () => resolve(null),   // 取消和失败都走这里，一律当成「没选」
+      fail: () => resolve([]),   // 取消和失败都走这里，一律当成「没选」
     });
   });
 }
@@ -83,13 +83,24 @@ function readBase64(filePath) {
  * （拿它做预览比用远端地址快，而且不依赖网络）。
  */
 export async function pickAndUploadImage({ token } = {}) {
-  const picked = await chooseImage();
-  if (!picked) return { ok: false, cancelled: true };
+  const picked = await chooseImage(1);
+  if (!picked.length) return { ok: false, cancelled: true };
 
   // 上传要一两秒，中途没反馈会让人以为点空了
   wx.showLoading({ title: '上传中…', mask: true });
   try {
-    const compressed = await compressIfPossible(picked);
+    const one = await uploadOne(picked[0], token);
+    if (!one.ok) return one;
+    return { ok: true, image: one.image, url: one.url, previewPath: one.previewPath };
+  } finally {
+    wx.hideLoading();
+  }
+}
+
+/** 单张：压缩 → 读 base64 → 传。多选时按顺序一张一张传，成功一张是一张。 */
+async function uploadOne(filePath, token) {
+  try {
+    const compressed = await compressIfPossible(filePath);
     const base64 = await readBase64(compressed);
     if (!base64) return { ok: false, message: '读不出这张图片，换一张试试' };
 
@@ -98,14 +109,38 @@ export async function pickAndUploadImage({ token } = {}) {
     }
 
     const r = await api.post('/api/admin/image', { token, body: { image: base64 } });
-    return {
-      ok: true,
-      image: r.image,
-      url: r.url,
-      previewPath: compressed,
-    };
+    return { ok: true, image: r.image, url: r.url, previewPath: compressed };
   } catch (e) {
     return { ok: false, message: (e && e.message) || '上传失败，请重试' };
+  }
+}
+
+/**
+ * 一次选多张（相册用）：`count` 是这次最多能加几张。
+ *
+ * ★ 一张一张传、失败就跳过 —— 不因为第 3 张失败把前两张也丢掉。
+ *   返回成功的那几张，外加失败张数，调用方提示「成功 2 张、失败 1 张」。
+ *
+ * @returns {Promise<
+ *   {ok: true, items: Array<{image: string, previewPath: string}>, failed: number}
+ *   | {ok: false, cancelled: true}
+ * >}
+ */
+export async function pickAndUploadImages({ token, count = 9 } = {}) {
+  const picked = await chooseImage(Math.max(1, count));
+  if (!picked.length) return { ok: false, cancelled: true };
+
+  wx.showLoading({ title: `上传中 0/${picked.length}`, mask: true });
+  const items = [];
+  let failed = 0;
+  try {
+    for (let i = 0; i < picked.length; i++) {
+      wx.showLoading({ title: `上传中 ${i + 1}/${picked.length}`, mask: true });
+      const one = await uploadOne(picked[i], token);
+      if (one.ok) items.push({ image: one.image, previewPath: one.previewPath });
+      else failed += 1;
+    }
+    return { ok: true, items, failed };
   } finally {
     wx.hideLoading();
   }

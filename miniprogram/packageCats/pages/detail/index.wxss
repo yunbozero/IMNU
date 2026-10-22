@@ -6,3 +6,8 @@
 .name-row { display: flex; align-items: center; gap: 20rpx; margin: 32rpx 4rpx 0; }
 .name { font-size: 44rpx; font-weight: 800; }
 .body-text { font-size: 28rpx; color: var(--text-2); line-height: 1.7; }
+
+/* 相册：三列网格。★ 宽度只能用百分比 —— calc() 里写 rpx 在客户端编译期就被
+   换成 px，真机上这条声明会整条失效（列表页踩过这个坑，有测试守着）。 */
+.photos { display: flex; flex-wrap: wrap; justify-content: space-between; row-gap: 12rpx; }
+.photos__item { width: 32%; height: 200rpx; border-radius: 16rpx; }

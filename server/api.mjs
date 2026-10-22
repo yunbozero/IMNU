@@ -103,7 +103,15 @@ export const ITEM_TINTS = ['t-pink', 't-green', 't-blue', 't-yellow', 't-purple'
 export const CAT_NAME_MAX = 12;
 export const CAT_LOC_MAX = 30;
 export const CAT_PERSONALITY_MAX = 60;
-export const CAT_NOTE_MAX = 60;
+/**
+ * 简介/备注上限。160 字是给「有故事的老猫」留的 ——
+ * 从旧图鉴导进来的资料里有 5 只超过 60 字，最长 142 字，
+ * 卡在 60 只能截断，等于把最值得看的那几段扔了。
+ */
+export const CAT_NOTE_MAX = 160;
+
+/** 一只猫的相册上限。旧图鉴里最多的一只有 5 张，留一倍余量。 */
+export const CAT_IMAGES_MAX = 9;
 
 /**
  * 猫的状态。
@@ -111,7 +119,7 @@ export const CAT_NOTE_MAX = 60;
  *   这边是存储用的键，有测试比对两边（键少了会变成界面上「未知」的状态）。
  *   `passed`（离世）不是删除：图鉴里要留着纪念，所以它是一个状态。
  */
-export const CAT_STATUSES = ['onCampus', 'missing', 'passed'];
+export const CAT_STATUSES = ['onCampus', 'missing', 'passed', 'adopted'];
 
 /** 性别。做成枚举而不是自由文本，界面上就能用选择器，数据也不会五花八门。 */
 export const CAT_GENDERS = ['公', '母', '未知'];
@@ -319,6 +327,30 @@ export function createApi({
     if (v === null || v === '') return { ok: true, value: null };
     if (!imageExists(v, imageDir)) return { ok: false };
     return { ok: true, value: v };
+  };
+
+  /**
+   * 相册：一组已经上传过的图片名。空数组 = 清空相册。
+   *
+   * 每个名字都要**在磁盘上真实存在** —— 客户端可能传一个别人的文件名，
+   * 或者传一个已经被删掉的（两次编辑之间换了图）。这里不收就变成 404 破图。
+   */
+  const asImageList = (v) => {
+    if (v === undefined) return { ok: true, value: undefined };
+    if (v === null) return { ok: true, value: [] };
+    if (!Array.isArray(v)) return { ok: false, message: 'images 要是数组' };
+    if (v.length > CAT_IMAGES_MAX) {
+      return { ok: false, message: `相册最多 ${CAT_IMAGES_MAX} 张` };
+    }
+    const out = [];
+    for (const one of v) {
+      if (typeof one !== 'string' || !one) return { ok: false, message: 'images 里有过期的图片' };
+      if (!imageExists(one, imageDir)) {
+        return { ok: false, message: '有一张图片已经不在了，请刷新后重试' };
+      }
+      if (!out.includes(one)) out.push(one);
+    }
+    return { ok: true, value: out };
   };
 
   /**
@@ -1098,7 +1130,14 @@ export function createApi({
      * 那是界面文案，属于小程序（见 miniprogram/data/cats.js 的 CAT_LIST_GROUPS）。
      */
     listCats() {
-      return ok({ cats: repo.listCats() });
+      // 相册一次全取，挂到各自的猫上 —— 42 只猫逐只查会变成 42 条 SQL
+      const byCat = new Map();
+      for (const img of repo.listCatImages()) {
+        if (!byCat.has(img.catId)) byCat.set(img.catId, []);
+        byCat.get(img.catId).push(img.image);
+      }
+      const cats = repo.listCats().map((c) => ({ ...c, images: byCat.get(c.id) || [] }));
+      return ok({ cats });
     },
 
     /**
@@ -1118,15 +1157,19 @@ export function createApi({
       const fields = catFieldsFrom(body);
       if (!fields.ok) return fail('bad_request', fields.message, 400);
 
+      const images = asImageList(body?.images);
+      if (!images.ok) return fail('bad_request', images.message, 400);
+
       const r = repo.createCat({ name: name.value, ...fields.values });
+      if (images.value && images.value.length) repo.setCatImages(r.cat.id, images.value);
 
       repo.writeAudit({
         actorId: user.id, action: 'cat.create',
         targetType: 'cat', targetId: r.cat.id,
-        detail: { name: r.cat.name },
+        detail: { name: r.cat.name, images: images.value ? images.value.length : 0 },
       });
 
-      return ok({ cat: r.cat });
+      return ok({ cat: repo.getCat(r.cat.id), images: images.value || [] });
     },
 
     /**
@@ -1162,13 +1205,27 @@ export function createApi({
         deleteImage(before.image, imageDir);
       }
 
+      // 相册：整体替换。移出相册的文件要删掉，否则每编辑一次就攒一批孤儿图
+      let removedImages = [];
+      if (body?.images !== undefined) {
+        const images = asImageList(body.images);
+        if (!images.ok) return fail('bad_request', images.message, 400);
+        const setr = repo.setCatImages(catId, images.value);
+        if (!setr.ok) return fail('not_found', '找不到这只猫', 404);
+        removedImages = setr.removed.filter((n) => n !== fields.values.image && n !== before.image);
+        for (const n of removedImages) deleteImage(n, imageDir);
+      }
+
       repo.writeAudit({
         actorId: user.id, action: 'cat.update',
         targetType: 'cat', targetId: catId,
-        detail: { changed: Object.keys(fields.values) },
+        detail: {
+          changed: Object.keys(fields.values),
+          images: body?.images === undefined ? undefined : (body.images || []).length,
+        },
       });
 
-      return ok({ cat: r.cat });
+      return ok({ cat: r.cat, images: repo.listCatImages(catId).map((x) => x.image) });
     },
 
     /** 删掉一只猫。真删（没有任何东西引用猫），同时清掉它的照片文件。 */
@@ -1183,11 +1240,15 @@ export function createApi({
       if (!r.ok) return fail('not_found', '找不到这只猫', 404);
 
       if (r.cat.image) deleteImage(r.cat.image, imageDir);
+      // 相册里的文件也一起删，不然成了谁也引用不到的孤儿
+      for (const n of (r.images || [])) {
+        if (n !== r.cat.image) deleteImage(n, imageDir);
+      }
 
       repo.writeAudit({
         actorId: user.id, action: 'cat.delete',
         targetType: 'cat', targetId: catId,
-        detail: { name: r.cat.name, image: r.cat.image },
+        detail: { name: r.cat.name, image: r.cat.image, images: (r.images || []).length },
       });
 
       return ok({ deleted: catId });

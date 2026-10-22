@@ -171,7 +171,7 @@ CREATE TABLE IF NOT EXISTS cats (
   emoji       TEXT,                              -- 没照片时的图标，一个 emoji 或两个字
   tint        TEXT,                              -- 图标底色，对应 app.wxss 里的 .t-*
   image       TEXT,                              -- 照片文件名（不是完整 URL），见 server/images.mjs
-  status      TEXT NOT NULL DEFAULT 'onCampus',  -- onCampus | missing | passed
+  status      TEXT NOT NULL DEFAULT 'onCampus',  -- onCampus | missing | passed | adopted
   gender      TEXT,                              -- 公 | 母 | 未知
   location    TEXT,                              -- 常在哪儿出没
   personality TEXT,                              -- 性格
@@ -183,6 +183,18 @@ CREATE TABLE IF NOT EXISTS cats (
 -- 没有「拖动排序」的界面：图鉴不是需要精排的内容，而做一个拖拽排序
 -- 在手机上既难用又难测。真想调顺序就改 created_at。
 CREATE INDEX IF NOT EXISTS ix_cats_status ON cats(status, created_at);
+
+-- 相册：一只猫可以有多张照片（旧图鉴导进来时，每只有 2–5 张在校照片）。
+-- 「sort」是界面上的显示顺序，就是录入时的先后；不做拖拽排序（同 cats 的理由）。
+-- 主图仍在 cats.image —— 列表页只加载那一张，相册只在详情页按需取。
+CREATE TABLE IF NOT EXISTS cats_images (
+  id         TEXT PRIMARY KEY,
+  cat_id     TEXT NOT NULL REFERENCES cats(id),
+  image      TEXT NOT NULL,
+  sort       INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_cats_images_cat ON cats_images(cat_id, sort);
 `;
 
 /**

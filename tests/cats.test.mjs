@@ -19,14 +19,14 @@ import { openMigrated } from '../server/db.mjs';
 import { createSqliteRepository } from '../server/repository.mjs';
 import { createFakeSessionProvider } from '../server/auth.mjs';
 import {
-  CAT_NAME_MAX, CAT_STATUSES, CAT_GENDERS, ITEM_TINTS, ITEM_EMOJI_MAX,
+  CAT_NAME_MAX, CAT_NOTE_MAX, CAT_IMAGES_MAX, CAT_STATUSES, CAT_GENDERS, ITEM_TINTS, ITEM_EMOJI_MAX,
 } from '../server/api.mjs';
 import { setPlatform, resetPlatform, originalPlatform } from '../miniprogram/services/platform.js';
 import * as cats from '../miniprogram/services/cats.js';
 import { CAT_STATUS, CAT_LIST_GROUPS } from '../miniprogram/data/cats.js';
 import {
   STATUSES as MP_STATUSES, GENDERS as MP_GENDERS, buildCatBody,
-  NAME_MAX as MP_NAME_MAX, EMOJI_MAX,
+  NAME_MAX as MP_NAME_MAX, NOTE_MAX as MP_NOTE_MAX, IMAGES_MAX as MP_IMAGES_MAX, EMOJI_MAX,
 } from '../miniprogram/packageAdmin/utils/cat-form.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -781,6 +781,8 @@ test('图鉴：性别枚举两边必须一致', () => {
 
 test('图鉴：字数上限两边必须一致（界面宽了会一路填到提交才被拒）', () => {
   assert.equal(MP_NAME_MAX, CAT_NAME_MAX);
+  assert.equal(MP_NOTE_MAX, CAT_NOTE_MAX, '简介上限两边不一致');
+  assert.equal(MP_IMAGES_MAX, CAT_IMAGES_MAX, '相册张数上限两边不一致');
   // 上限只在该被服务端卡住的地方出现，这里确认它们是正整数
   for (const n of [CAT_NAME_MAX, ITEM_TINTS.length, ITEM_EMOJI_MAX]) {
     assert.ok(Number.isInteger(n) && n > 0);
@@ -803,7 +805,10 @@ test('图鉴：表单校验能拦住每一条服务端也会拒的输入', () =>
   assert.equal(buildCatBody({ name: '一'.repeat(MP_NAME_MAX + 1) }).ok, false);
   assert.equal(buildCatBody({ name: '猫', location: '一'.repeat(31) }).ok, false);
   assert.equal(buildCatBody({ name: '猫', personality: '一'.repeat(61) }).ok, false);
-  assert.equal(buildCatBody({ name: '猫', note: '一'.repeat(61) }).ok, false);
+  // 简介上限 160：旧图鉴里最长的一只写了 142 字，60 字会把它截掉一半
+  assert.equal(buildCatBody({ name: '猫', note: '一'.repeat(MP_NOTE_MAX + 1) }).ok, false);
+  assert.equal(buildCatBody({ name: '猫', note: '一'.repeat(MP_NOTE_MAX) }).ok, true,
+    '刚好到上限要放行 —— 否则用户会一路填到提交才被拒');
 
   // 按**码点数**算，不是按 length —— '🐱'.length 是 2，用 length 的话
   // 一个 emoji 就把 2 个位置全占了。上限本身和物品共用 ITEM_EMOJI_MAX。

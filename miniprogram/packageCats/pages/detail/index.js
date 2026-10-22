@@ -6,9 +6,14 @@
  * 拿不到照片、或者加载失败，都回落到 emoji + 底色，所以仍然能看资料。
  */
 import * as cats from '../../../services/cats.js';
+import { imageUrl } from '../../../utils/format.js';
 
 Page({
-  data: { cat: null, photo: '', photoFailed: false, missing: false },
+  data: {
+    cat: null, photo: '', photoFailed: false, missing: false,
+    // 相册：和主图分开。主图是列表页那张，相册只在详情页按需展示
+    gallery: [],
+  },
 
   onLoad(query) {
     this.id = (query && query.id) || '';
@@ -51,6 +56,7 @@ Page({
       photo: cat.photo,
       photoFailed: changed ? false : this.data.photoFailed,
       missing: false,
+      gallery: (found.images || []).map((n) => imageUrl({ image: n })),
     });
 
     if (this.title !== cat.name) {
@@ -62,5 +68,20 @@ Page({
   /** 照片加载失败（网络不通、文件不在）→ 回落到 emoji，别留一个空框 */
   onPhotoError() {
     if (!this.data.photoFailed) this.setData({ photoFailed: true });
+  },
+
+  /**
+   * 点开相册里的一张 → 全屏预览。
+   *
+   * 用 wx.previewImage 而不是自己写 swiper：用户熟悉（能左右滑、能长按保存、
+   * 能转发），而且它自己处理缩放和手势，比自己实现稳。
+   * 当前这张也放进 urls 的同一顺序里，滑起来才跟点击位置对得上。
+   */
+  previewPhoto(e) {
+    const urls = this.data.gallery.filter(Boolean);
+    if (!urls.length) return;
+    const i = Number(e.currentTarget.dataset.index);
+    const current = urls[i] || urls[0];
+    wx.previewImage({ current, urls });
   },
 });

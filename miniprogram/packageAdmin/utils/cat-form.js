@@ -14,12 +14,17 @@ import { TINTS, EMOJI_MAX } from './item-form.js';
 export const NAME_MAX = 12;
 export const LOC_MAX = 30;
 export const PERSONALITY_MAX = 60;
-export const NOTE_MAX = 60;
+// 160：旧图鉴里有 5 只的简介超过 60 字、最长 142 字（见 server/api.mjs 的说明）
+export const NOTE_MAX = 160;
+
+/** 相册张数上限，和服务端 CAT_IMAGES_MAX 一致（有测试比对）。 */
+export const IMAGES_MAX = 9;
 
 /** 和服务端 CAT_STATUSES 一一对应。key 存在数据库里，label 只给界面看。 */
 export const STATUSES = [
   { key: 'onCampus', label: '在校' },
   { key: 'missing', label: '失踪' },
+  { key: 'adopted', label: '已送养' },
   { key: 'passed', label: '离世' },
 ];
 

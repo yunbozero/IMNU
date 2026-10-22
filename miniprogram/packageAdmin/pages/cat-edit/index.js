@@ -14,11 +14,14 @@ import * as api from '../../../services/api.js';
 import * as session from '../../../services/session.js';
 import * as cats from '../../../services/cats.js';
 import {
-  NAME_MAX, LOC_MAX, PERSONALITY_MAX, NOTE_MAX, EMOJI_MAX,
+  NAME_MAX, LOC_MAX, PERSONALITY_MAX, NOTE_MAX, EMOJI_MAX, IMAGES_MAX,
   TINTS, EMOJI_SUGGESTIONS, STATUSES, GENDERS,
   statusIndex, genderIndex, buildCatBody,
 } from '../../utils/cat-form.js';
-import { pickAndUploadImage, reportImageResult } from '../../utils/image-upload.js';
+import { pickAndUploadImage, pickAndUploadImages, reportImageResult } from '../../utils/image-upload.js';
+import { imageUrl } from '../../../utils/format.js';
+
+const CAT_IMAGES_MAX = IMAGES_MAX;
 
 Page({
   data: {
@@ -44,6 +47,12 @@ Page({
     // imagePreview 是本地临时路径 —— 用它预览比用远端地址快，也不依赖网络
     image: null,
     imagePreview: '',
+
+    // 相册：多张照片。images 是服务端文件名（保存时整体替换），
+    // imageUrls 是拼好 BASE_URL 的展示地址。和主图分开 —— 主图是列表页用的那张。
+    images: [],
+    imageUrls: [],
+    imageMax: CAT_IMAGES_MAX,
 
     // 选项
     tints: TINTS,
@@ -102,6 +111,8 @@ Page({
         note: found.note || '',
         image: found.image || null,
         imagePreview: found.image ? cats.decorate(found).photo : '',
+        images: found.images || [],
+        imageUrls: (found.images || []).map((n) => imageUrl({ image: n })),
       });
       wx.setNavigationBarTitle({ title: `改「${found.name}」` });
     } catch (e) {
@@ -139,6 +150,39 @@ Page({
     this.setData({ image: null, imagePreview: '' });
   },
 
+  /**
+   * 往相册里加照片：**一次能多选**，按住顺序一张张传。
+   *
+   * ★ 一张失败不影响其它的 —— 返回里带失败张数，界面上说清楚。
+   *   和主图一样「选完立刻上传」，保存时只提交文件名列表。
+   */
+  async addGalleryImage() {
+    const remain = CAT_IMAGES_MAX - this.data.images.length;
+    if (remain <= 0) {
+      return wx.showToast({ title: `相册最多 ${CAT_IMAGES_MAX} 张`, icon: 'none' });
+    }
+
+    const up = await pickAndUploadImages({ token: session.getToken(), count: remain });
+    if (!up.ok) return;   // 用户取消
+
+    if (up.failed) {
+      wx.showToast({ title: `成功 ${up.items.length} 张，失败 ${up.failed} 张`, icon: 'none' });
+    }
+    if (!up.items.length) return;
+
+    this.setData({
+      images: [...this.data.images, ...up.items.map((x) => x.image)],
+      imageUrls: [...this.data.imageUrls, ...up.items.map((x) => x.previewPath)],
+    });
+  },
+
+  /** 从相册里去掉一张。只是从这一页移走，**保存之后**才真的从库里删 */
+  removeGalleryImage(e) {
+    const i = Number(e.currentTarget.dataset.index);
+    const images = this.data.images.filter((_, k) => k !== i);
+    this.setData({ images, imageUrls: images.map((n) => imageUrl({ image: n })) });
+  },
+
   async submit() {
     if (this.data.submitting) return;   // 防连点：连点两下就是两只一模一样的猫
 
@@ -161,6 +205,8 @@ Page({
     this.setData({ submitting: true });
     try {
       const body = this.catId ? { catId: this.catId, ...built.body } : built.body;
+      // 相册整体提交（空数组 = 清空）；服务端会把移出相册的文件删掉
+      body.images = this.data.images;
       await api.post(
         this.catId ? '/api/admin/cat' : '/api/admin/cat/create',
         { token: session.getToken(), body }

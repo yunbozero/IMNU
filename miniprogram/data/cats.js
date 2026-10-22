@@ -25,11 +25,15 @@ export const CAT_STATUS = {
   onCampus: '在校',
   missing: '失踪',
   passed: '离世',
+  // 被领养离开校园。和「离世」必须分开 —— 旧图鉴里有送养的猫，
+  // 混进「离世」会让读者以为它们已经不在了。
+  adopted: '已送养',
 };
 
 export const CAT_LIST_GROUPS = [
   { key: 'onCampus', label: '在校' },
   { key: 'missing', label: '失踪' },
+  { key: 'adopted', label: '已送养' },
   { key: 'passed', label: '离世' },
 ];
 

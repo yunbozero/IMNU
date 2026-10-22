@@ -32,6 +32,27 @@
         </view>
       </view>
 
+      <!-- 相册：多张照片，详情页里左右滑。主图（上面那张）是列表页用的。 -->
+      <view class="field">
+        <view class="field__k">相册（{{images.length}}/{{imageMax}}，可不加）</view>
+        <view class="gallery">
+          <view
+            wx:for="{{imageUrls}}"
+            wx:key="*this"
+            class="gallery__item"
+          >
+            <image class="gallery__img" src="{{item}}" mode="aspectFill" />
+            <view class="gallery__del" data-index="{{index}}" bindtap="removeGalleryImage">×</view>
+          </view>
+          <view
+            wx:if="{{images.length < imageMax}}"
+            class="gallery__add"
+            bindtap="addGalleryImage"
+          >＋</view>
+        </view>
+        <view class="field__hint">保存后才生效；从相册移走的照片会在保存时删掉。</view>
+      </view>
+
       <view class="field">
         <view class="field__k">名字</view>
         <input
