@@ -60,7 +60,7 @@
 ## 跑起来
 
 ```bash
-npm test          # 全部测试（541 项）
+npm test          # 全部测试（546 项）
 npm run serve     # 打开 http://localhost:8080/ 看原型演示台
 npm start         # 起后端接口
 npm run dev       # 本地开发用这个：node --watch，改完 server/ 自动重启
@@ -150,7 +150,7 @@ npm start
 | `server/` | 后端：数据模型与仓储、HTTP 接口、图片、备份 |
 | `miniprogram/` | 微信小程序：主包 + 三个分包 |
 | `deploy/` | 阿里云部署：bootstrap、发布脚本、nginx、systemd |
-| `tests/` | 541 项测试：合规红线、结构、状态机、**并发与不变量** |
+| `tests/` | 546 项测试：合规红线、结构、状态机、**并发与不变量** |
 | `scripts/` | 建活动/摊位/物品、设立超管与提权、长图渲染 |
 | `prototype/` | 可点击的 HTML 原型（学生端 + 志愿者核销端） |
 | `docs/` | 见下表 |
@@ -188,6 +188,7 @@ miniprogram/
 | `admin-plan.md` | 管理端的功能范围与权限分档 |
 | `local-dev.md` | 本地联调，含开发者工具里踩过的坑 |
 | `deploy-alicloud.md` | 阿里云部署手册 |
+| `backlog.md` | 待办清单：发布前必修、文档漂移、死代码、待拍板的取舍 |
 | `proposal.html` | 给组织方的 A4 提案（浏览器打开 → Ctrl+P 存 PDF，记得勾「背景图形」） |
 | `longimage-*.html` | 微信长图的源文件 |
 
