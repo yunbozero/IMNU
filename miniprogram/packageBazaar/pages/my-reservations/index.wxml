@@ -14,7 +14,7 @@
     <text class="notice__b">加载失败：</text>{{error}}（点一下重试）
   </view>
 
-  <view wx:if="{{!loading && list.length === 0}}" class="empty">
+  <view wx:if="{{!loading && !error && list.length === 0}}" class="empty">
     <view class="empty__icon">🎫</view>
     <view class="empty__text">这里还没有记录</view>
     <button class="btn" bindtap="goItems">去看看有什么</button>

@@ -1,6 +1,6 @@
 <view class="page page--actionbar">
 
-  <view wx:if="{{error}}" class="notice notice--strong">{{error}}</view>
+  <view wx:if="{{error}}" class="notice notice--strong" bindtap="load">{{error}}（点一下重试）</view>
 
   <block wx:if="{{item}}">
     <view class="hero {{item.tint}}">

@@ -197,3 +197,35 @@ test('小程序：每个页面都在 app.json 里声明了（没有写了却进�
   assert.deepEqual(orphans, [],
     '这些页面写了但没在 app.json 里声明，等于永远进不去：\n' + orphans.join('\n'));
 });
+
+/**
+ * services/ 和 utils/ 里也有页面跳转（session.js 的 handleError 就是一例），
+ * 而上面那条扫描只走过「有 index.wxml 的页面目录」—— 所以这里**必须单独扫一遍**。
+ *
+ * ★ 这条测试是补一个真实的漏检：handleError 曾经用 navigateTo 跳 tabBar 页面
+ *   `/pages/profile/index`，跳转静默失败、连 toast 都没有，
+ *   而 lint 当时只扫页面目录，于是永远绿。
+ */
+test('小程序：services / utils / data 里的跳转也要过检查（这里曾经漏扫）', () => {
+  const pages = declaredPages();
+  const tabs = tabPages();
+  const problems = [];
+
+  for (const dir of ['services', 'utils', 'data']) {
+    const full = path.join(MP, dir);
+    if (!fs.existsSync(full)) continue;
+    for (const name of fs.readdirSync(full)) {
+      if (!name.endsWith('.js')) continue;
+      problems.push(...lintPage({
+        rel: `${dir}/${name}`,
+        wxml: '',
+        js: read(path.join(full, name)),
+        pages,
+        tabPages: tabs,
+      }));
+    }
+  }
+
+  assert.deepEqual(problems, [],
+    '这些模块里的跳转在真机上会静默失败：\n' + problems.map((p) => '  · ' + p).join('\n'));
+});

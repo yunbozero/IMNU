@@ -167,12 +167,17 @@ Page({
       );
       wx.showToast({ title: this.catId ? '已保存' : '已加上', icon: 'success' });
       // 列表页的 onShow 会自己重新拉一次，所以退回去就能看到
-      setTimeout(() => wx.navigateBack(), 700);
+      // ★ 定时器要落账，否则用户提前返回时它会**再退一层**
+      this._backTimer = setTimeout(() => wx.navigateBack(), 700);
     } catch (err) {
       // 服务端写好的文案直接弹出来
       session.handleError(err);
     } finally {
       this.setData({ submitting: false });
     }
+  },
+
+  onUnload() {
+    clearTimeout(this._backTimer);
   },
 });

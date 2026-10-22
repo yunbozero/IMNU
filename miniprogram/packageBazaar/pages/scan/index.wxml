@@ -1,6 +1,6 @@
 <view class="page">
 
-  <view wx:if="{{error}}" class="notice notice--strong">{{error}}</view>
+  <view wx:if="{{error}}" class="notice notice--strong" bindtap="load">{{error}}（点一下重试）</view>
 
   <block wx:if="{{isStaff}}">
     <view class="desk">

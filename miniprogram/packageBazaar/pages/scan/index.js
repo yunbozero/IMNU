@@ -99,8 +99,12 @@ Page({
     this.setData({ buf, slots: this.buildSlots(buf) });
 
     if (buf.length === CODE_LEN) {
-      // 输满自动提交，志愿者不用再点确认
-      setTimeout(() => {
+      // 输满自动提交，志愿者不用再点确认。
+      // ★ 先把上一次的定时器清掉：输满之后再按任何数字键都会再走到这里，
+      //   不清的话同一个码会被提交两次 —— 第二次必然是「已经核销过了」，
+      //   志愿者看到红字会以为第一单没成功。
+      clearTimeout(this._padTimer);
+      this._padTimer = setTimeout(() => {
         this.setData({ showPad: false });
         this.submit(buf);
       }, 160);
@@ -109,6 +113,11 @@ Page({
 
   /* ---------------- 核销 ---------------- */
   async submit(code) {
+    // 防连点：上一次请求还没回来就不再发第二个。
+    // 扫码和手输两条路都可能触发，重复提交会让志愿者看到「已核销」红字。
+    if (this._submitting) return;
+    this._submitting = true;
+
     try {
       const r = await api.post('/api/redeem', {
         token: session.getToken(),
@@ -141,6 +150,9 @@ Page({
           rows: [],
         },
       });
+    } finally {
+      // 成功和失败都要复位，否则一次网络抖动之后核销台就再也提交不了了
+      this._submitting = false;
     }
   },
 
@@ -168,5 +180,7 @@ Page({
 
   onUnload() {
     clearTimeout(this._t);
+    // 输满自动提交的那个 160ms 定时器也要清：页面走了它还会触发一次请求
+    clearTimeout(this._padTimer);
   },
 });

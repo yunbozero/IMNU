@@ -28,6 +28,7 @@ import './lan.test.mjs';
 import './longimage.test.mjs';
 import './miniprogram-build.test.mjs';
 import './miniprogram-lint.test.mjs';
+import './miniprogram-states.test.mjs';
 import './miniprogram.test.mjs';
 import './proposal.test.mjs';
 import './prototype.test.mjs';

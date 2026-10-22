@@ -136,12 +136,18 @@ Page({
       });
       wx.showToast({ title: '已加上了', icon: 'success' });
       // 列表页的 onShow 会自己重新拉一次，所以退回去就能看到新物品
-      setTimeout(() => wx.navigateBack(), 700);
+      // ★ 定时器要落账：用户在 700ms 内自己点返回时，这个还没触发的
+      //   navigateBack 会**再退一层**（把列表页也退掉）。
+      this._backTimer = setTimeout(() => wx.navigateBack(), 700);
     } catch (err) {
       // 「这个摊位不属于当前活动」这类文案服务端已经写好了，直接用
       session.handleError(err);
     } finally {
       this.setData({ submitting: false });
     }
+  },
+
+  onUnload() {
+    clearTimeout(this._backTimer);
   },
 });

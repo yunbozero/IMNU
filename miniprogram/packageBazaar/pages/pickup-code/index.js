@@ -1,7 +1,7 @@
 import * as api from '../../../services/api.js';
 import * as session from '../../../services/session.js';
 import { platform } from '../../../services/platform.js';
-import { groupCode, statusText } from '../../../utils/format.js';
+import { groupCode, statusText, timeText } from '../../../utils/format.js';
 import { buildQr, drawQr } from '../../utils/qr-draw.js';
 
 Page({
@@ -11,6 +11,9 @@ Page({
     reservation: null,
     codeText: '',
     statusText: '',
+    // 核销时间要**格式化后**再给模板 —— 直接把 redeemedAt（毫秒时间戳）塞进 wxml
+    // 会显示成「· 1712345678901」。scan / my-reservations 两处都是这么做的。
+    redeemedText: '',
     statusClass: 'statusbar-card statusbar-card--wait',
     canCancel: false,
     fresh: false,
@@ -30,6 +33,8 @@ Page({
   onUnload() {
     // 恢复成跟随系统亮度
     platform().setScreenBrightness(0);
+    // 取消失败/成功后的延时返回：页面已经走了就不能再退，否则会多退一层
+    clearTimeout(this._backTimer);
   },
 
   brighten() {
@@ -56,6 +61,7 @@ Page({
         reservation,
         codeText: groupCode(reservation.code),
         statusText: statusText(reservation.status),
+        redeemedText: reservation.redeemedAt ? timeText(reservation.redeemedAt) : '',
         statusClass: {
           reserved: 'statusbar-card statusbar-card--wait',
           redeemed: 'statusbar-card statusbar-card--ok',
@@ -127,7 +133,7 @@ Page({
             body: { reservationId: this.data.reservation.id },
           });
           wx.showToast({ title: '已取消，名额已释放', icon: 'none' });
-          setTimeout(() => wx.navigateBack(), 800);
+          this._backTimer = setTimeout(() => wx.navigateBack(), 800);
         } catch (e) {
           wx.showToast({ title: (e && e.message) || '取消失败', icon: 'none' });
         }

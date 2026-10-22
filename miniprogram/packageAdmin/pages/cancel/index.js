@@ -115,12 +115,18 @@ Page({
         body: { reservationId: this.data.id, reason: verdict.reason },
       });
       wx.showToast({ title: '已取消，名额已释放', icon: 'success' });
-      setTimeout(() => wx.navigateBack(), 800);
+      // ★ 定时器要落账：取消页是从名单页进来的，提前返回时这个 navigateBack
+      //   会再退一层，把名单页也退掉。
+      this._backTimer = setTimeout(() => wx.navigateBack(), 800);
     } catch (err) {
       // 「已经核销过了，要取消请先撤销核销」这类文案服务端已经写好了
       session.handleError(err);
     } finally {
       this.setData({ submitting: false });
     }
+  },
+
+  onUnload() {
+    clearTimeout(this._backTimer);
   },
 });

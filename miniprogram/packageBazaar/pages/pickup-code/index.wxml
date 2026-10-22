@@ -1,6 +1,6 @@
 <view class="page">
 
-  <view wx:if="{{error}}" class="notice notice--strong">{{error}}</view>
+  <view wx:if="{{error}}" class="notice notice--strong" bindtap="load">{{error}}（点一下重试）</view>
 
   <block wx:if="{{reservation}}">
 
@@ -11,7 +11,7 @@
 
     <view class="{{statusClass}}">
       <text>{{statusText}}</text>
-      <text wx:if="{{reservation.redeemedAt}}" class="statusbar-card__time">· {{reservation.redeemedAt}}</text>
+      <text wx:if="{{redeemedText}}" class="statusbar-card__time">· {{redeemedText}}</text>
     </view>
 
     <view class="codebox">

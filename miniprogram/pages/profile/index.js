@@ -21,12 +21,9 @@ Page({
     regError: '',
   },
 
-  onLoad(query) {
-    if (query && query.register === '1') {
-      this.setData({ needRegister: true });
-    }
-  },
-
+  // ★ 这里原来有个 onLoad 读 query.register —— 是死代码：
+  //   「我的」是 tabBar 页面，只能 switchTab 进来，而 switchTab 带不了 query。
+  //   登记表单由下面的 refresh() 打开（needRegister = !user）。
   onShow() {
     this.refresh();
     this.syncRole();

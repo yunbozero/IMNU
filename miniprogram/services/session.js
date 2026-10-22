@@ -204,7 +204,12 @@ export async function ensureSession() {
 /** 统一的错误处理：need_register 时跳登记页，其余弹提示 */
 export function handleError(err, { toast = true } = {}) {
   if (err && err.code === 'need_register') {
-    wx.navigateTo({ url: '/pages/profile/index?register=1' });
+    // ★ 「我的」是 tabBar 页面：只能用 switchTab，navigateTo 会直接失败。
+    //   而失败后这个函数就 return 了 —— 用户看到的是「点了没反应」。
+    //   登记表单由 profile 自己的 onShow → refresh() 打开（needRegister = !user），
+    //   不需要带 query —— tabBar 页面也带不了 query。
+    wx.showToast({ title: '请先在「我的」里填写昵称', icon: 'none' });
+    wx.switchTab({ url: '/pages/profile/index' });
     return 'need_register';
   }
   if (toast) {
