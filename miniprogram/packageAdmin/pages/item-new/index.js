@@ -67,7 +67,9 @@ Page({
       // 摊位用公开接口拿（/api/event 本来就连摊位一起给），不用为它另开接口
       const r = await api.get('/api/event', { token: session.getToken() });
       if (!r.event) {
-        this.setData({ error: '还没有开放预定的活动，先在服务器上跑一次 scripts/init-event.mjs' });
+        // ★ 别在这里教人跑脚本：管理端早就有「活动与摊位」页面了，
+        //   组织者手上没有 SSH。这句话以前写的是「先跑一次 scripts/init-event.mjs」。
+        this.setData({ error: '还没有开放预定的活动，先回「活动与摊位」建一个再来' });
         return;
       }
 
