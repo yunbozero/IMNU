@@ -270,6 +270,10 @@ test('名单：页面注册了、入口在「我的」页、走的是 /api/membe
 
   const wxml = read(path.join(MP, 'pages/profile/index.wxml'));
   assert.match(wxml, /bindtap="goMembers"/, '「我的」页要有入口');
+  // ★ 一级管理员及以上已经有「角色管理」（同一批人的管理视图），
+  //   再摆一个只读名单就重复了 —— 入口要对这一档隐藏
+  assert.match(wxml, /wx:if="\{\{!isSeniorManager\}\}"[^>]*bindtap="goMembers"/,
+    '本届负责人只给没有角色管理页的人看');
 
   const js = read(path.join(MP, 'pages/members/index.js'));
   assert.match(js, /\/api\/members/, '要读只读名单接口');

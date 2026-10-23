@@ -80,9 +80,11 @@
       <view class="entry__arrow">›</view>
     </view>
 
-    <!-- 本届负责人：所有人都能看（只显示头像+昵称+角色，没有操作）-->
-    <view class="entry" bindtap="goMembers" hover-class="entry--hover">
-      <view class="entry__icon">🙋</view>
+    <!-- 本届负责人：给**没有角色管理页**的人看（学生 / 志愿者）。
+         一级管理员及以上已经有「角色管理」，那是同一批人的管理视图，
+         再摆一个只读名单只会显得重复。 -->
+    <view wx:if="{{!isSeniorManager}}" class="entry" bindtap="goMembers" hover-class="entry--hover">
+      <view class="entry__icon">👥</view>
       <view class="grow">
         <view class="entry__title">本届负责人</view>
         <view class="entry__desc">现场有事找谁：志愿者与管理员名单</view>
@@ -92,7 +94,7 @@
 
     <!-- 角色管理：一级管理员及以上。在这之前小程序里根本没有提权的入口 -->
     <view wx:if="{{isSeniorManager}}" class="entry entry--staff" bindtap="goAdminRoles" hover-class="entry--hover">
-      <view class="entry__icon">🙋</view>
+      <view class="entry__icon">🔑</view>
       <view class="grow">
         <view class="entry__title">管理端 · 角色管理</view>
         <view class="entry__desc">给志愿者开核销权限、换届转交超管</view>

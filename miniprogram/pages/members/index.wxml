@@ -10,7 +10,7 @@
     </view>
 
     <view wx:if="{{empty}}" class="empty">
-      <view class="empty__icon">🙋</view>
+      <view class="empty__icon">👥</view>
       <view class="empty__text">{{tip}}</view>
     </view>
 
