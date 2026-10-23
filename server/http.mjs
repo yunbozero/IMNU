@@ -99,6 +99,8 @@ export const ROUTES = {
   // 首页公告（门槛：一级管理员及以上，在 api.mjs 里判）
   'POST /api/admin/announcement': { handler: 'adminSetAnnouncement', auth: 'user' },
   'POST /api/admin/copy': { handler: 'adminSetCopy', auth: 'user' },
+  // 清掉某人的头像（内容处置手段：没有自动检测时至少能当场抹掉）
+  'POST /api/admin/user/avatar': { handler: 'adminClearAvatar', auth: 'user' },
 };
 
 /**

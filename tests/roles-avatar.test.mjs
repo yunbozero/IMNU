@@ -12,7 +12,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { openMigrated } from '../server/db.mjs';
 import { createSqliteRepository } from '../server/repository.mjs';
-import { createApi, ROLE_LIMITS } from '../server/api.mjs';
+import { createApi, ROLE_LIMITS, AVATAR_LIMIT } from '../server/api.mjs';
 import { MAX_IMAGE_BASE64 } from '../server/images.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -113,10 +113,56 @@ test('头像：/api/me 要能带出来（「我的」页靠它渲染）', () => 
   } finally { ctx.close(); }
 });
 
+test('头像：换头像有当天次数上限，清空不计次', () => {
+  const ctx = fixture();
+  try {
+    const stu = ctx.mkStudent('a');
+
+    for (let i = 0; i < AVATAR_LIMIT.max; i++) {
+      const r = ctx.api.setMyAvatar({ body: { image: B64 }, user: stu });
+      assert.equal(r.body.ok, true, `第 ${i + 1} 次应该允许`);
+    }
+
+    const blocked = ctx.api.setMyAvatar({ body: { image: B64 }, user: stu });
+    assert.equal(blocked.status, 429, `第 ${AVATAR_LIMIT.max + 1} 次应被限频`);
+    assert.equal(blocked.body.error, 'rate_limited');
+
+    // ★ 不想露脸的人不该被限频卡住：清空永远允许
+    const cleared = ctx.api.setMyAvatar({ body: { image: null }, user: stu });
+    assert.equal(cleared.body.ok, true, '清空头像必须随时可用');
+
+    // 别人不受影响
+    const other = ctx.mkStudent('b');
+    assert.equal(ctx.api.setMyAvatar({ body: { image: B64 }, user: other }).body.ok, true);
+  } finally { ctx.close(); }
+});
+
+test('头像：管理员能清掉别人的头像（没有自动检测时的处置手段）', () => {
+  const ctx = fixture();
+  try {
+    const stu = ctx.mkStudent('a');
+    ctx.api.setMyAvatar({ body: { image: B64 }, user: stu });
+    assert.ok(ctx.reload(stu.id).avatar);
+
+    const r = ctx.api.adminClearAvatar({ body: { userId: stu.id }, user: ctx.owner });
+    assert.equal(r.body.ok, true, JSON.stringify(r.body));
+    assert.equal(r.body.cleared, true);
+    assert.equal(ctx.reload(stu.id).avatar, null, '头像要真的被清掉');
+
+    // 已经没头像了再清一次：不报错，只是 cleared=false
+    const again = ctx.api.adminClearAvatar({ body: { userId: stu.id }, user: ctx.owner });
+    assert.equal(again.body.ok, true);
+    assert.equal(again.body.cleared, false);
+
+    // 学生不能清别人的
+    const student = ctx.mkStudent('c');
+    assert.equal(ctx.api.adminClearAvatar({ body: { userId: stu.id }, user: student }).status, 403);
+  } finally { ctx.close(); }
+});
+
 /* ============================================================
    人数上限
    ============================================================ */
-
 test('上限：一级管理员最多 3 人，第 4 个要被拒', () => {
   const ctx = fixture();
   try {
@@ -188,6 +234,12 @@ test('界面：「我的」页能换头像，角色管理页显示头像 + 分�
 
   const profileJs = read(path.join(MP, 'pages/profile/index.js'));
   assert.match(profileJs, /\/api\/me\/avatar/, '要走换头像的接口');
+
+  // 内容处置：管理员在角色详情里能清掉别人的头像（没有自动检测时的唯一手段）
+  const roleJs = read(path.join(MP, 'packageAdmin/pages/roles/index.js'));
+  assert.match(roleJs, /\/api\/admin\/user\/avatar/, '角色页要能清掉别人的头像');
+  const roleWxmlForAvatar = read(path.join(MP, 'packageAdmin/pages/roles/index.wxml'));
+  assert.match(roleWxmlForAvatar, /bindtap="clearAvatar"/, '详情里要有「清掉 TA 的头像」按钮');
 
   const rolesWxml = read(path.join(MP, 'packageAdmin/pages/roles/index.wxml'));
   assert.match(rolesWxml, /wx:for="\{\{sections\}\}"/, '要按角色分块');

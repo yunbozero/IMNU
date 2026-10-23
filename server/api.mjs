@@ -125,6 +125,14 @@ export const CAT_IMAGES_MAX = 9;
 export const ROLE_LIMITS = { owner: 1, admin: 3, deputy: 5 };
 export const SOFT_ROLE_LIMITS = ['deputy'];
 
+/**
+ * 换头像的频率上限：每人每天 5 次。
+ *
+ * 头像是用户上传的内容，没有自动检测的情况下，至少不能让人反复试探上传什么。
+ * 5 次够正常用（选错图、换一张），不够反复刷。
+ */
+export const AVATAR_LIMIT = { max: 5, windowMs: 24 * 60 * 60 * 1000 };
+
 /* ---------------- 可改文案 ---------------- */
 
 /**
@@ -439,6 +447,27 @@ export function createApi({
     if (!imageExists(v, imageDir)) return { ok: false };
     return { ok: true, value: v };
   };
+
+  /**
+   * 换头像的频率计（每人一份，内存里）。
+   *
+   * 为什么要有：头像是用户上传的内容，而这一版**没有自动检测** ——
+   * 至少不能让人反复试探能传上来什么。清空头像不计次（不想露脸的人不该被卡）。
+   * 放内存足够：重启清零是可接受的代价，而且它防的是「反复刷」，不是精确计费。
+   */
+  const avatarHits = new Map();
+  const allowAvatarChange = (userId) => {
+    const now = Date.now();
+    const rec = avatarHits.get(userId);
+    if (!rec || now >= rec.resetAt) {
+      avatarHits.set(userId, { count: 1, resetAt: now + AVATAR_LIMIT.windowMs });
+      return true;
+    }
+    if (rec.count >= AVATAR_LIMIT.max) return false;
+    rec.count += 1;
+    return true;
+  };
+
 
   /**
    * 相册：一组已经上传过的图片名。空数组 = 清空相册。
@@ -759,6 +788,11 @@ export function createApi({
         return ok({ user: cleared.user });
       }
 
+      // ★ 限频只拦「换新图」，清掉随时允许 —— 否则不想露脸的人反而被卡住
+      if (!allowAvatarChange(user.id)) {
+        return fail('rate_limited', '今天换头像的次数用完了，明天再试', 429);
+      }
+
       if (typeof raw !== 'string') return fail('bad_request', '图片数据不对', 400);
 
       // 容忍 data:image/jpeg;base64,xxx 这种前缀（有些前端库会带上）
@@ -778,8 +812,35 @@ export function createApi({
       return ok({ user: r.user });
     },
 
-    /* ---------- 我的预定 ---------- */
-    listMyReservations({ user }) {
+    /**
+     * 管理员清掉某人的头像。
+     *
+     * 头像是用户上传的内容，而这一版没有自动检测 —— 这个接口就是**处置手段**：
+     * 看到不合适的头像，管理员能当场抹掉，不用等对方自己改，也不用上服务器动库。
+     * 门槛：副主任及以上（和看名单一致；角色管理页只有一级管理员能进）。
+     */
+    adminClearAvatar({ body, user }) {
+      if (!user) return fail('unauthorized', '请先登录', 401);
+      if (!isManager(user)) return fail('forbidden', '你没有管理权限', 403);
+
+      const targetId = asId(body?.userId);
+      if (!targetId) return fail('bad_request', '缺少 userId', 400);
+
+      const target = repo.findUserById(targetId);
+      if (!target) return fail('not_found', '找不到这个人', 404);
+      if (!target.avatar) return ok({ user: target, cleared: false });
+
+      const r = repo.updateUserAvatar(targetId, null);
+      if (!r.ok) return fail('not_found', '找不到这个人', 404);
+
+      repo.writeAudit({
+        actorId: user.id, action: 'user.avatar.clear',
+        targetType: 'user', targetId,
+      });
+      return ok({ user: r.user, cleared: true });
+    },
+
+    /* ---------- 我的预定 ---------- */    listMyReservations({ user }) {
       if (!user) return fail('unauthorized', '请先登录', 401);
 
       const event = repo.getActiveEvent();

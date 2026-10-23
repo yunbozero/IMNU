@@ -117,6 +117,16 @@
         </view>
       </block>
 
+      <!-- 内容处置：头像没有自动检测，至少管理员能当场抹掉 -->
+      <button
+        wx:if="{{detail.avatar && !detail.isSelf}}"
+        class="btn btn--ghost"
+        data-id="{{detail.id}}"
+        data-name="{{detail.name}}"
+        disabled="{{busyId === detail.id}}"
+        bindtap="clearAvatar"
+      >清掉 TA 的头像</button>
+
       <button
         wx:if="{{detail.canTransferOwner}}"
         class="btn btn--ghost"

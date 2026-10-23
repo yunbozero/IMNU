@@ -200,6 +200,31 @@ Page({
   },
 
   /**
+   * 清掉某人的头像（内容处置）。
+   *
+   * 头像是用户上传的内容，没有自动检测 —— 所以至少要让人能当场抹掉：
+   * 看到不合适的头像，不用等对方自己改，也不用上服务器动库。
+   */
+  async clearAvatar(e) {
+    const { id, name } = e.currentTarget.dataset;
+    if (this.data.busyId) return false;
+
+    const ok = await new Promise((resolve) => {
+      wx.showModal({
+        title: `清掉「${name}」的头像？`,
+        content: '头像会回落到昵称首字。对方可以自己再传一张。',
+        confirmText: '清掉',
+        confirmColor: '#C6432F',
+        success: (r) => resolve(!!r.confirm),
+        fail: () => resolve(false),
+      });
+    });
+    if (!ok) return false;
+
+    return this.post('/api/admin/user/avatar', { userId: id }, '已清掉头像');
+  },
+
+  /**
    * 转交超管。**不可逆，而且自己会变成一级管理员** —— 所以文案必须说清，
    * 并让他在弹窗里把目标名字再确认一次。
    */
