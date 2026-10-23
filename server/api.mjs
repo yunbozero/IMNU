@@ -113,6 +113,18 @@ export const CAT_NOTE_MAX = 160;
 /** 一只猫的相册上限。旧图鉴里最多的一只有 5 张，留一倍余量。 */
 export const CAT_IMAGES_MAX = 9;
 
+/**
+ * 各级别的人数上限。
+ *
+ * 超管是 1 —— 但它不靠这个数字保证，而是靠「只能转交、不能直接设」（roles.mjs）。
+ * 一级管理员 3 是**硬上限**：他们能结束活动、改公告和口令，还能再任命一级管理员，
+ * 人越多越难在换届时收回来。
+ * 副主任 5 是**软上限**：只在界面上提醒，不拦（现场多个摊位各要一个负责人是常态）。
+ * 志愿者不限 —— 义卖当天人手越多越好。
+ */
+export const ROLE_LIMITS = { owner: 1, admin: 3, deputy: 5 };
+export const SOFT_ROLE_LIMITS = ['deputy'];
+
 /** 公告：存在 settings 表里的一条 JSON。标题一行，内容最多一段。 */
 const SETTING_ANNOUNCEMENT = 'announcement';
 export const ANNOUNCEMENT_TITLE_MAX = 40;
@@ -582,6 +594,72 @@ export function createApi({
     me({ user }) {
       if (!user) return fail('unauthorized', '请先登录', 401);
       return ok({ user, isStaff: isStaff(user) });
+    },
+
+    /**
+     * 本届负责人名单：超管 / 一级管理员 / 副主任 / 志愿者。
+     *
+     * 为什么单独开一个接口，而不是把 /api/admin/users 放开：
+     * 那个接口带 `settable`（谁能把谁提成什么）和 `canTransferOwner` —— 那是**权限结构**，
+     * 只有管理者该看到。这里只给三个字段，白名单。
+     *
+     * ★ 不返回普通学生：一份「全班同学名单」对谁都没用，只会把个人信息铺得更大；
+     *   而「出问题该找谁」这件事，只跟负责人有关。
+     * ★ 门槛是 `auth: 'user'`：**已登记**的用户才看得到（未登记的人连自己都没有）。
+     */
+    listMembers({ user }) {
+      if (!user) return fail('unauthorized', '请先登录', 401);
+
+      const RANK = { owner: 0, admin: 1, deputy: 2, volunteer: 3 };
+      const members = repo.listUsers()
+        .filter((u) => u.role !== 'student' && RANK[u.role] !== undefined)
+        .sort((a, b) => (RANK[a.role] - RANK[b.role])
+          || String(a.name).localeCompare(String(b.name), 'zh'))
+        .map((u) => ({
+          name: u.name,
+          avatar: u.avatar || null,
+          role: u.role,
+          roleLabel: ROLE_LABEL[u.role] || u.role,
+        }));
+
+      return ok({ members });
+    },
+
+    /**
+     * 换自己的头像。任何已登录用户都能改自己的。
+     *
+     * ★ 一步到位：body 里直接是 base64 图片字节，服务端存图 + 写头像一起做。
+     *   不做「先传图、再设头像」两步 —— 那样中途失败会留一张没人引用的图，
+     *   而头像这条路学生也会用，没有管理端那种「反正有人会去挂图」的兜底。
+     *   `image: null` 表示清掉头像（界面回落到昵称首字）。
+     */
+    setMyAvatar({ body, user }) {
+      if (!user) return fail('unauthorized', '请先登录', 401);
+
+      const raw = body?.image;
+      if (raw === null || raw === undefined || raw === '') {
+        const cleared = repo.updateUserAvatar(user.id, null);
+        if (!cleared.ok) return fail('not_found', '找不到这个账号', 404);
+        return ok({ user: cleared.user });
+      }
+
+      if (typeof raw !== 'string') return fail('bad_request', '图片数据不对', 400);
+
+      // 容忍 data:image/jpeg;base64,xxx 这种前缀（有些前端库会带上）
+      const b64 = raw.startsWith('data:') ? raw.slice(raw.indexOf(',') + 1) : raw;
+      // 先按字符串长度拦一道：解码前就知道超没超，不必先吃进内存
+      if (b64.length > MAX_IMAGE_BASE64) return fail('too_large', TOO_BIG_MSG, 413);
+
+      const saved = saveImage(Buffer.from(b64, 'base64'), imageDir);
+      if (!saved.ok) {
+        if (saved.reason === 'too_large') return fail('too_large', TOO_BIG_MSG, 413);
+        if (saved.reason === 'empty') return fail('bad_request', '图片是空的', 400);
+        return fail('not_image', '只支持 JPG / PNG / WebP / GIF 图片', 400);
+      }
+
+      const r = repo.updateUserAvatar(user.id, saved.name);
+      if (!r.ok) return fail('not_found', '找不到这个账号', 404);
+      return ok({ user: r.user });
     },
 
     /* ---------- 我的预定 ---------- */
@@ -1415,7 +1493,8 @@ export function createApi({
       // 可以设的目标角色。不含 owner —— 超管身份只能走「转交」，那条路是单独的接口。
       const ASSIGNABLE = ['student', 'volunteer', 'deputy', 'admin'];
 
-      const users = repo.listUsers().map((u) => {
+      const all = repo.listUsers();
+      const users = all.map((u) => {
         const verdictFor = (nextRole) => checkRoleChange({
           actorRole: user.role, actorId: user.id,
           targetRole: u.role, targetId: u.id, nextRole,
@@ -1427,6 +1506,7 @@ export function createApi({
         return {
           id: u.id,
           name: u.name,
+          avatar: u.avatar || null,
           role: u.role,
           roleLabel: ROLE_LABEL[u.role] || u.role,
           isSelf: u.id === user.id,
@@ -1438,7 +1518,13 @@ export function createApi({
         };
       });
 
-      return ok({ users, roles: ROLE_LABEL, assignable: ASSIGNABLE });
+      // 各级别人数：界面靠它显示「一级管理员 2/3」并判断软上限
+      const counts = { owner: 0, admin: 0, deputy: 0, volunteer: 0, student: 0 };
+      for (const u of all) {
+        if (counts[u.role] !== undefined) counts[u.role] += 1;
+      }
+
+      return ok({ users, roles: ROLE_LABEL, assignable: ASSIGNABLE, counts, limits: ROLE_LIMITS });
     },
 
     /** 任命 / 撤销管理员。策略全在 roles.mjs。 */
@@ -1462,6 +1548,18 @@ export function createApi({
         // 明确的角色是在编造请求，给 403；其余是业务规则不允许
         const status = verdict.reason === 'forbidden' ? 403 : 200;
         return fail(verdict.reason, verdict.message, status);
+      }
+
+      // ★ 一级管理员的硬上限。放在 checkRoleChange 之后：先判断「你有没有资格任命」，
+      //   再判断「名额还有没有」—— 两个错误同时存在时，先告诉他没有权限更合理。
+      //   已经是一级管理员的人不受影响（重复设成同一个角色会在 roles.mjs 那层被挡）。
+      if (nextRole === 'admin' && target.role !== 'admin') {
+        const admins = repo.listUsers().filter((u) => u.role === 'admin').length;
+        if (admins >= ROLE_LIMITS.admin) {
+          return fail('too_many_admins',
+            `一级管理员最多 ${ROLE_LIMITS.admin} 人（现在已有 ${admins} 人）。`
+            + '需要给更多人开权限的话，用副主任或志愿者。', 200);
+        }
       }
 
       const r = repo.setUserRole(targetId, nextRole);

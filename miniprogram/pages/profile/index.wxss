@@ -3,9 +3,12 @@
   width: 160rpx; height: 160rpx; margin: 0 auto 24rpx;
   border-radius: 50%; background: #fff;
   display: flex; align-items: center; justify-content: center;
-  font-size: 72rpx;
+  font-size: 72rpx; overflow: hidden;
   box-shadow: 0 12rpx 40rpx rgba(150, 90, 60, 0.13);
 }
+.me__avatar-img { width: 160rpx; height: 160rpx; display: block; }
+.me__hint { font-size: 22rpx; color: var(--brand); margin-top: 10rpx; }
+.me__hint--plain { color: var(--text-3); }
 .me__name { font-size: 40rpx; font-weight: 800; }
 .me__sid { font-size: 26rpx; color: var(--text-2); margin-top: 8rpx; }
 .me__role {

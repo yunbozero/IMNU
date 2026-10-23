@@ -1,0 +1,40 @@
+/* 本届负责人（只读名单）。 */
+
+.intro {
+  font-size: 26rpx; color: var(--text-2); line-height: 1.7;
+  padding: 8rpx 8rpx 4rpx;
+}
+
+.block { margin-top: 30rpx; }
+.block__head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  padding: 0 8rpx 6rpx;
+}
+.block__title { font-size: 30rpx; font-weight: 800; }
+.block__count { font-size: 23rpx; color: var(--text-3); }
+
+.grid { display: flex; flex-wrap: wrap; justify-content: space-between; row-gap: 20rpx; }
+
+/* 一行两个，48% + space-between（不用 calc：calc 里写 rpx 真机会整条失效） */
+.u {
+  width: 48%;
+  box-sizing: border-box;
+  background: #fff; border-radius: 26rpx;
+  padding: 24rpx 20rpx;
+  display: flex; align-items: center; gap: 18rpx;
+  box-shadow: 0 4rpx 20rpx rgba(150, 90, 60, 0.06);
+}
+
+.u__avatar {
+  width: 88rpx; height: 88rpx; flex: 0 0 88rpx;
+  border-radius: 50%; background: var(--brand-tint);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 36rpx; font-weight: 700; color: var(--brand-dark);
+  overflow: hidden;
+}
+.u__avatar-img { width: 100%; height: 100%; display: block; }
+
+.u__name {
+  font-size: 27rpx; font-weight: 700; line-height: 1.35;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}

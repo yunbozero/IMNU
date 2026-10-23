@@ -44,6 +44,7 @@ export const REPOSITORY_METHODS = [
   'undoRedeem',
   'updateItem',
   'setUserRole',
+  'updateUserAvatar',
   'bootstrapOwner',
   'transferOwnership',
   'countOwners',
@@ -104,7 +105,7 @@ function uniqueTarget(e) {
 
 const mapUser = (r) => (r ? {
   id: r.id, openid: r.openid, sid: r.sid, name: r.name,
-  role: r.role, createdAt: r.created_at,
+  role: r.role, avatar: r.avatar ?? null, createdAt: r.created_at,
 } : null);
 
 /** 图鉴的一只猫。字段名从 snake_case 转到小程序用的 camelCase。 */
@@ -687,6 +688,19 @@ export function createSqliteRepository(db) {
 
       db.prepare('UPDATE users SET role = ? WHERE id = ?').run(role, userId);
       return { ok: true, user: repo.findUserById(userId), from: u.role, to: role };
+    },
+
+    /**
+     * 改自己的头像。传 null = 清掉。
+     *
+     * 一个人只能改自己的 —— 所以这里不收 userId 之外的东西，
+     * 也不做权限判断：接口层用的是 token 里的 uid。
+     */
+    updateUserAvatar(userId, avatar) {
+      const r = db.prepare('UPDATE users SET avatar = ? WHERE id = ?')
+        .run(avatar === undefined ? null : avatar, userId);
+      if (r.changes === 0) return { ok: false, reason: 'not_found' };
+      return { ok: true, user: repo.findUserById(userId) };
     },
 
     /**

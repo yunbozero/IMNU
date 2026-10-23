@@ -1,35 +1,54 @@
 /**
  * 管理端 · 角色管理（提权 / 撤销 / 转交超管）。
  *
- * 为什么要有这一页：在这之前，小程序里**根本没有任何任命角色的入口** ——
- * 接口 `POST /api/admin/role` 和 `POST /api/admin/transfer-owner` 早就写好了、
- * 也有穷举测试，但界面一直没做。于是「给志愿者开核销权限」只能 SSH 上服务器跑脚本，
- * 而**换届转交超管彻底做不到**：set-role 拒绝设 owner，set-owner 在已有超管时也拒绝，
- * 界面又没有入口 —— 现任超管一毕业，系统就永远卡在他身上。
+ * 展示：**按角色分块**，每块一行两个卡片（头像 + 昵称 + 角色）；
+ * 超管排最前，「我自己」单独一块跟在后面 —— 改权限时最常看的就是这两块。
+ * 点卡片看详情（角色、登记时间、能改成什么）。
  *
  * ★ 界面**不做任何权限判断**。服务端在 /api/admin/users 里逐行算好了
- *   `settable`（这个人能被改成哪些角色）和 `canTransferOwner`，
- *   这里只负责把它们画成按钮。规则只有 roles.mjs 那一处 ——
- *   界面自己判断一遍的话，必然出现「显示了按钮但点了被拒」或者反过来，
- *   而这两种都只在特定角色组合下发生，手测基本撞不到。
- *
- * 门槛：一级管理员及以上（和服务端的 isSeniorManager 一致）。
- * 副主任也能调 adminSetRole（他能任命志愿者），但那一档太窄，
- * 不值得为它多开一页入口。
+ *   `settable`（这个人能被改成哪些角色）、`canTransferOwner`，还给了各级别人数
+ *   `counts` 和上限 `limits`。这里只负责画。规则只有 roles.mjs 那一处 ——
+ *   界面自己判断一遍的话，必然出现「显示了按钮但点了被拒」或者反过来。
  */
 import * as api from '../../../services/api.js';
 import * as session from '../../../services/session.js';
+import { imageUrl } from '../../../utils/format.js';
 
-/** 角色的显示顺序：从低到高，写死的，只影响列表排序 */
-const RANK = { owner: 0, admin: 1, deputy: 2, volunteer: 3, student: 4 };
+/** 块的顺序：从高到低。超管永远只有一个人，放最前面最省事。 */
+const ROLE_ORDER = [
+  { key: 'owner', label: '超管' },
+  { key: 'admin', label: '一级管理员' },
+  { key: 'deputy', label: '副主任' },
+  { key: 'volunteer', label: '志愿者' },
+  { key: 'student', label: '学生' },
+];
+
+/** 提升到某个角色意味着什么。写清楚，别让人对着一个按钮猜。 */
+const CONSEQUENCE = {
+  admin: '能建/结束活动、改公告和活动口令、撤销核销，**还能再任命其他一级管理员**。',
+  deputy: '能看预定名单、取消误定、改物品名额、开放或关闭预定、新建物品和摊位。',
+  volunteer: '能扫码核销取货码，维护猫猫图鉴。',
+  student: '会撤掉他的全部管理权限。',
+};
+
+const decorate = (u) => ({
+  ...u,
+  avatarUrl: u.avatar ? imageUrl({ image: u.avatar }) : '',
+  initial: String(u.name || '').slice(0, 1),
+});
 
 Page({
   data: {
     loading: true,
     error: '',
     busyId: '',
-    list: [],
-    // 我自己是不是超管 —— 决定要不要显示「转交超管」
+    sections: [],
+    meCard: null,
+    detail: null,
+    counts: {},
+    limits: {},
+    // 顶部一行汇总，例如「一级 2/3 · 副主任 3/5」
+    summary: '',
     iAmOwner: false,
   },
 
@@ -55,16 +74,31 @@ Page({
       this.me = session.getUser();
       const r = await api.get('/api/admin/users', { token: session.getToken() });
 
-      // 超管排最前面，然后按级别；同级别按昵称，顺序稳定才好看
-      const list = (r.users || []).slice().sort((a, b) => {
-        const ra = RANK[a.role] === undefined ? 9 : RANK[a.role];
-        const rb = RANK[b.role] === undefined ? 9 : RANK[b.role];
-        if (ra !== rb) return ra - rb;
-        return String(a.name).localeCompare(String(b.name), 'zh');
-      });
+      const counts = r.counts || {};
+      const limits = r.limits || {};
+      const users = (r.users || []).map(decorate);
+      const me = users.find((u) => u.isSelf) || null;
+
+      // 超管块里本来就只有一个人；其它块里把「我」摘出去（我单独一块）
+      const sections = ROLE_ORDER.map(({ key, label }) => ({
+        key,
+        label,
+        count: counts[key] || 0,
+        limit: limits[key] || 0,
+        users: users.filter((u) => u.role === key && !(me && u.id === me.id && key !== 'owner')),
+      })).filter((s) => s.users.length > 0 || s.count > 0);
+
+      const parts = [];
+      if (counts.admin !== undefined) parts.push(`一级 ${counts.admin}/${limits.admin || '—'}`);
+      if (counts.deputy !== undefined) parts.push(`副主任 ${counts.deputy}/${limits.deputy || '—'}`);
+      if (counts.volunteer !== undefined) parts.push(`志愿者 ${counts.volunteer}`);
 
       this.setData({
-        list,
+        sections,
+        meCard: me && me.role !== 'owner' ? me : null,
+        counts,
+        limits,
+        summary: parts.join(' · '),
         iAmOwner: !!(this.me && this.me.role === 'owner'),
       });
     } catch (e) {
@@ -75,29 +109,60 @@ Page({
     }
   },
 
-  /** 改角色。`role` 来自服务端算好的 settable，界面不判断合法性。 */
-  async setRole(e) {
+  /* ---------------- 详情 ---------------- */
+
+  openDetail(e) {
+    const id = e.currentTarget.dataset.id;
+    for (const s of this.data.sections) {
+      const hit = s.users.find((u) => u.id === id);
+      if (hit) return this.setData({ detail: hit });
+    }
+    if (this.data.meCard && this.data.meCard.id === id) return this.setData({ detail: this.data.meCard });
+    return undefined;
+  },
+
+  closeDetail() {
+    this.setData({ detail: null });
+  },
+
+  noop() { /* 阻止弹层内部点击冒泡到遮罩 */ },
+
+  /* ---------------- 改角色 / 转交 ---------------- */
+
+  async changeRole(e) {
     const { id, role, name } = e.currentTarget.dataset;
     if (this.data.busyId) return false;
 
-    const label = this.data.list.find((u) => u.id === id);
-    const to = label && label.settableLabels
-      ? label.settableLabels[label.settable.indexOf(role)] : role;
+    const detail = this.data.detail;
+    const u = detail && detail.id === id ? detail : null;
+    const to = u && u.settableLabels
+      ? u.settableLabels[u.settable.indexOf(role)] : role;
+
+    const lines = [`把「${name}」改成${to}。`];
+    if (CONSEQUENCE[role]) lines.push(CONSEQUENCE[role]);
+
+    // 副主任是软上限：只提醒，不拦（现场多个摊位各要一个人是常态）
+    const { counts, limits } = this.data;
+    if (role === 'deputy' && limits.deputy && (counts.deputy || 0) >= limits.deputy) {
+      lines.push(`已经有 ${counts.deputy} 个副主任（建议不超过 ${limits.deputy} 个），仍要继续吗？`);
+    }
 
     const ok = await new Promise((resolve) => {
       wx.showModal({
         title: `${name} → ${to}？`,
-        content: role === 'student'
-          ? '会撤掉他的全部管理权限。'
-          : '改完立刻生效，他重新进一次「我的」页就能看到新入口。',
+        content: lines.join('\n'),
+        confirmText: role === 'student' ? '撤销权限' : '确认设置',
+        confirmColor: role === 'student' ? '#C6432F' : '#D2694A',
         success: (r) => resolve(!!r.confirm),
         fail: () => resolve(false),
       });
     });
     if (!ok) return false;
 
-    return this.post('/api/admin/role', { userId: id, role },
+    const done = await this.post('/api/admin/role', { userId: id, role },
       role === 'student' ? '已撤销权限' : `已设为${to}`);
+    if (done) this.setData({ detail: null });
+    return done;
   },
 
   /**
@@ -121,7 +186,9 @@ Page({
     });
     if (!ok) return false;
 
-    return this.post('/api/admin/transfer-owner', { userId: id }, '已转交');
+    const done = await this.post('/api/admin/transfer-owner', { userId: id }, '已转交');
+    if (done) this.setData({ detail: null });
+    return done;
   },
 
   /** 两个写操作共用的出口：成功后整页重拉 —— 权限变了，别人的按钮也会跟着变 */

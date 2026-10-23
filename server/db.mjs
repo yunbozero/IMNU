@@ -36,6 +36,8 @@ CREATE TABLE IF NOT EXISTS users (
   sid        TEXT,                              -- 学号，志愿者/管理员可空
   name       TEXT NOT NULL,
   role       TEXT NOT NULL DEFAULT 'student',   -- student | volunteer | admin | owner
+  -- 头像：图片文件名（不是 URL）。学生自己传，角色管理页靠它认人。
+  avatar     TEXT,
   created_at INTEGER NOT NULL
 );
 -- openid 唯一：一个微信号只能登记一次，这是唯一可靠的防多开小号手段
@@ -262,6 +264,7 @@ export function openDatabase(file = ':memory:') {
 const ADDED_COLUMNS = [
   { table: 'items', column: 'image', ddl: 'ALTER TABLE items ADD COLUMN image TEXT' },
   { table: 'events', column: 'pass_code', ddl: 'ALTER TABLE events ADD COLUMN pass_code TEXT' },
+  { table: 'users', column: 'avatar', ddl: 'ALTER TABLE users ADD COLUMN avatar TEXT' },
   // 图鉴的补充资料（从上一届图鉴导进来的字段，见 SCHEMA 里的说明）
   ...['nick_name', 'campus', 'classification', 'fur_color', 'friendliness', 'sterilized',
     'appearance', 'first_sighting_at', 'first_sighting_loc', 'relationship', 'related_cats',

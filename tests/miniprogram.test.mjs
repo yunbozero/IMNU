@@ -895,8 +895,9 @@ test('角色管理：界面自己不判断权限，只用服务端算好的结�
     '界面不该自己算权限；用服务端返回的 settable');
 
   const wxml = read(path.join(MP, rel + '.wxml'));
-  assert.match(wxml, /item\.settable/, '按钮要用服务端给的 settable 渲染');
-  assert.match(wxml, /item\.canTransferOwner/, '转交按钮要用 canTransferOwner 判断');
+  // 不管变量叫 item 还是 detail（详情弹层），按钮都必须来自服务端算好的那两份数据
+  assert.match(wxml, /\.settable\b/, '按钮要用服务端给的 settable 渲染');
+  assert.match(wxml, /\.canTransferOwner\b/, '转交按钮要用 canTransferOwner 判断');
 
   // 入口要在 app.json 里登记，否则 wx.navigateTo 直接失败
   const app = JSON.parse(read(path.join(MP, 'app.json')));
@@ -1268,7 +1269,7 @@ test('管理端物品页：删除按钮要能一眼认出来（不可逆）', ()
    ============================================================ */
 
 test('照片：小程序那边的体积上限必须和服务端一致', async () => {
-  const client = await import('../miniprogram/packageAdmin/utils/image-upload.js');
+  const client = await import('../miniprogram/utils/image-upload.js');
   const server = await import('../server/images.mjs');
 
   // 客户端也拦一道是为了省流量；两边不一致的话，
@@ -1378,7 +1379,7 @@ test('照片：三个页面都算出了 imageUrl（模板不自己拼）', () =>
 });
 
 test('照片：选图压缩上传只写一遍，两个页面共用', () => {
-  const up = read(path.join(MP, 'packageAdmin/utils/image-upload.js'));
+  const up = read(path.join(MP, 'utils/image-upload.js'));
 
   // 微信内置的三个 API，缺一不可
   assert.match(up, /wx\.chooseMedia\(/, '要用 chooseMedia 选图');

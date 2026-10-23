@@ -1,0 +1,38 @@
+<view class="page">
+
+  <view wx:if="{{error}}" class="notice notice--strong" bindtap="load">
+    <text class="notice__b">打不开：</text>{{error}}（点一下重试）
+  </view>
+
+  <block wx:if="{{!error}}">
+    <view class="intro">
+      活动现场有事，找这几位同学。名单由管理员维护，只显示负责人，不含普通同学。
+    </view>
+
+    <view wx:if="{{empty}}" class="empty">
+      <view class="empty__icon">🙋</view>
+      <view class="empty__text">{{tip}}</view>
+    </view>
+
+    <view class="block" wx:for="{{sections}}" wx:key="key">
+      <view class="block__head">
+        <text class="block__title">{{item.label}}</text>
+        <text class="block__count">{{item.users.length}} 人</text>
+      </view>
+      <view class="grid">
+        <view
+          wx:for="{{item.users}}"
+          wx:key="name"
+          wx:for-item="u"
+          class="u"
+        >
+          <view class="u__avatar">
+            <image wx:if="{{u.avatarUrl}}" class="u__avatar-img" src="{{u.avatarUrl}}" mode="aspectFill" />
+            <text wx:else>{{u.initial}}</text>
+          </view>
+          <view class="u__name">{{u.name}}</view>
+        </view>
+      </view>
+    </view>
+  </block>
+</view>

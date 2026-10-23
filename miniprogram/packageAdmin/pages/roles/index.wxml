@@ -4,67 +4,111 @@
     <text class="notice__b">打不开：</text>{{error}}（点一下重试）
   </view>
 
-  <view wx:if="{{!loading && !error && list.length === 0}}" class="empty">
-    <view class="empty__icon">🙋</view>
-    <view class="empty__text">还没有人登记</view>
-  </view>
+  <block wx:if="{{!error}}">
+    <view class="summary" wx:if="{{summary}}">{{summary}}</view>
 
-  <view wx:for="{{list}}" wx:key="id" class="u">
-    <view class="u__head">
-      <view class="u__name">
-        {{item.name}}
-        <text wx:if="{{item.isSelf}}" class="u__me">你自己</text>
+    <!-- 我的账号：单独一块，跟在超管后面。改权限时最常看的就是这两块。 -->
+    <view class="block" wx:if="{{meCard}}">
+      <view class="block__head">
+        <text class="block__title">我的账号</text>
+        <text class="tag {{meCard.role === 'owner' ? 'tag--green' : 'tag--grey'}}">{{meCard.roleLabel}}</text>
       </view>
-      <text class="tag {{item.role === 'owner' ? 'tag--green' : 'tag--grey'}}">{{item.roleLabel}}</text>
+      <view class="grid">
+        <view class="u u--me" data-id="{{meCard.id}}" bindtap="openDetail" hover-class="u--hover">
+          <view class="u__avatar">
+            <image wx:if="{{meCard.avatarUrl}}" class="u__avatar-img" src="{{meCard.avatarUrl}}" mode="aspectFill" />
+            <text wx:else>{{meCard.initial}}</text>
+          </view>
+          <view class="u__name">{{meCard.name}}</view>
+        </view>
+      </view>
     </view>
 
-    <!--
-      按钮完全由服务端给的 settable / canTransferOwner 决定。
-      界面不做任何权限判断 —— 规则只有 server/roles.mjs 那一处。
-    -->
-    <view wx:if="{{item.settable.length || item.canTransferOwner}}" class="u__ops">
-      <button
-        wx:for="{{item.settable}}"
-        wx:for-item="role"
-        wx:for-index="ri"
-        wx:key="*this"
-        class="op {{role === 'student' ? 'op--revoke' : ''}}"
-        data-id="{{item.id}}"
-        data-role="{{role}}"
-        data-name="{{item.name}}"
-        disabled="{{busyId === item.id}}"
-        bindtap="setRole"
-      >设为{{item.settableLabels[ri]}}</button>
+    <!-- 按角色分块：每块一行两个 -->
+    <view class="block" wx:for="{{sections}}" wx:key="key">
+      <view class="block__head">
+        <text class="block__title">{{item.label}}</text>
+        <text class="block__count">{{item.count}} 人{{item.limit ? ' / 上限 ' + item.limit : ''}}</text>
+      </view>
+
+      <view class="empty" wx:if="{{item.users.length === 0}}">
+        <view class="empty__text">还没有{{item.label}}</view>
+      </view>
+
+      <view class="grid" wx:else>
+        <view
+          wx:for="{{item.users}}"
+          wx:key="id"
+          wx:for-item="u"
+          class="u"
+          data-id="{{u.id}}"
+          bindtap="openDetail"
+          hover-class="u--hover"
+        >
+          <view class="u__avatar">
+            <image wx:if="{{u.avatarUrl}}" class="u__avatar-img" src="{{u.avatarUrl}}" mode="aspectFill" />
+            <text wx:else>{{u.initial}}</text>
+          </view>
+          <view class="u__name">{{u.name}}<text wx:if="{{u.isSelf}}" class="u__me">你自己</text></view>
+        </view>
+      </view>
+    </view>
+
+    <view class="notice">
+      <text class="notice__b">改完立刻生效</text>，但对方要重新进一次「我的」页才会看到新入口。
+      超管身份只能「转交」，不能直接把谁改成超管。
+    </view>
+  </block>
+
+  <!-- 详情弹层：点卡片打开，权限按钮都在这里 -->
+  <view wx:if="{{detail}}" class="mask" bindtap="closeDetail">
+    <view class="sheet" catchtap="noop">
+      <view class="sheet__grab"></view>
+
+      <view class="detail-head">
+        <view class="u__avatar u__avatar--lg">
+          <image wx:if="{{detail.avatarUrl}}" class="u__avatar-img" src="{{detail.avatarUrl}}" mode="aspectFill" />
+          <text wx:else>{{detail.initial}}</text>
+        </view>
+        <view class="grow">
+          <view class="detail-name">{{detail.name}}</view>
+          <view class="detail-meta">
+            <text class="tag {{detail.role === 'owner' ? 'tag--green' : 'tag--grey'}}">{{detail.roleLabel}}</text>
+            <text wx:if="{{detail.isSelf}}" class="detail-self">这是你自己</text>
+          </view>
+        </view>
+      </view>
+
+      <view wx:if="{{detail.isSelf}}" class="notice">
+        <text class="notice__b">不能修改自己的身份</text> —— 防止一次误点让系统失去超管。
+      </view>
+
+      <block wx:if="{{!detail.isSelf && detail.settable.length}}">
+        <view class="detail-k">改成</view>
+        <view class="ops">
+          <button
+            wx:for="{{detail.settable}}"
+            wx:key="*this"
+            class="op"
+            data-id="{{detail.id}}"
+            data-role="{{item}}"
+            data-name="{{detail.name}}"
+            disabled="{{busyId === detail.id}}"
+            bindtap="changeRole"
+          >{{detail.settableLabels[index]}}</button>
+        </view>
+      </block>
 
       <button
-        wx:if="{{item.canTransferOwner}}"
-        class="op op--owner"
-        data-id="{{item.id}}"
-        data-name="{{item.name}}"
-        disabled="{{busyId === item.id}}"
+        wx:if="{{detail.canTransferOwner}}"
+        class="btn btn--ghost"
+        data-id="{{detail.id}}"
+        data-name="{{detail.name}}"
+        disabled="{{busyId === detail.id}}"
         bindtap="transfer"
-      >转交超管</button>
-    </view>
+      >把超管转交给 TA</button>
 
-    <!-- 一行都不显示的时候要说清楚为什么，否则看起来像页面坏了 -->
-    <view wx:else class="u__none">
-      {{item.isSelf ? '不能改自己的身份（否则超管会把自己锁死）' : '你没有权限改这个人的角色'}}
+      <button class="btn btn--grey" bindtap="closeDetail">关闭</button>
     </view>
   </view>
-
-  <view class="notice">
-    <text class="notice__b">改完立刻生效。</text>
-    对方要重新进一次「我的」页才能看到新入口（那一页在进入时才读角色）。
-  </view>
-
-  <view wx:if="{{iAmOwner}}" class="notice notice--strong">
-    <text class="notice__b">超管身份只能「转交」，不能直接改。</text>
-    转交之后你自己会变成一级管理员。这是唯一一个撤不回来的操作，点之前把名字再看一遍。
-  </view>
-
-  <view wx:else class="notice">
-    <text class="notice__b">超管身份只能由现任超管转交。</text>
-    一级管理员之间不能互相撤销 —— 这是有意的，避免换届时互相清洗。
-  </view>
-
 </view>

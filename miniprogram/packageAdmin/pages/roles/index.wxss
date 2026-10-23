@@ -1,28 +1,58 @@
 /* 管理端 · 角色管理。样式只在这个分包里用。 */
 
+/* 顶部一行汇总：一级 2/3 · 副主任 3/5 · 志愿者 8 */
+.summary {
+  font-size: 24rpx; color: var(--text-2);
+  padding: 6rpx 8rpx 0; letter-spacing: 0.5rpx;
+}
+
+/* 角色块：标题 + 一行两个卡片 */
+.block { margin-top: 30rpx; }
+.block__head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  padding: 0 8rpx 6rpx;
+}
+.block__title { font-size: 30rpx; font-weight: 800; }
+.block__count { font-size: 23rpx; color: var(--text-3); }
+
+.grid { display: flex; flex-wrap: wrap; justify-content: space-between; row-gap: 20rpx; }
+
+/* 卡片：一行两个（48% + space-between，不用 calc —— calc 里写 rpx 真机会失效） */
 .u {
-  background: #fff; border-radius: 28rpx;
-  padding: 26rpx 30rpx; margin-top: 22rpx;
+  width: 48%;
+  box-sizing: border-box;
+  background: #fff; border-radius: 26rpx;
+  padding: 24rpx 20rpx;
+  display: flex; align-items: center; gap: 18rpx;
   box-shadow: 0 4rpx 20rpx rgba(150, 90, 60, 0.06);
 }
+.u--hover { opacity: 0.75; }
+.u--me { box-shadow: inset 0 0 0 4rpx var(--brand-soft), 0 4rpx 20rpx rgba(150, 90, 60, 0.06); }
 
-.u__head {
-  display: flex; align-items: center;
-  justify-content: space-between; gap: 18rpx;
+.u__avatar {
+  width: 88rpx; height: 88rpx; flex: 0 0 88rpx;
+  border-radius: 50%; background: var(--brand-tint);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 36rpx; font-weight: 700; color: var(--brand-dark);
+  overflow: hidden;
 }
-.u__name { font-size: 31rpx; font-weight: 700; }
-.u__me {
-  font-size: 22rpx; font-weight: 400;
-  color: var(--text-3); margin-left: 10rpx;
-}
+.u__avatar--lg { width: 120rpx; height: 120rpx; flex-basis: 120rpx; font-size: 48rpx; }
+.u__avatar-img { width: 100%; height: 100%; display: block; }
 
-.u__ops { display: flex; flex-wrap: wrap; gap: 16rpx; margin-top: 22rpx; }
-
-/* 一行按钮都没有时说清原因 —— 否则看起来像页面坏了 */
-.u__none {
-  margin-top: 18rpx;
-  font-size: 24rpx; color: var(--text-3); line-height: 1.5;
+.u__name {
+  font-size: 27rpx; font-weight: 700; line-height: 1.35;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+.u__me { font-size: 20rpx; font-weight: 400; color: var(--text-3); margin-left: 6rpx; }
+
+/* 详情弹层 */
+.detail-head { display: flex; align-items: center; gap: 24rpx; padding: 8rpx 4rpx 24rpx; }
+.detail-name { font-size: 36rpx; font-weight: 800; }
+.detail-meta { display: flex; align-items: center; gap: 14rpx; margin-top: 12rpx; }
+.detail-self { font-size: 22rpx; color: var(--text-3); }
+.detail-k { font-size: 25rpx; color: var(--text-2); margin: 8rpx 0 4rpx; }
+
+.ops { display: flex; flex-wrap: wrap; gap: 16rpx; margin: 12rpx 0 8rpx; }
 
 /* 小号按钮：不复用 .btn（那个是通栏宽度） */
 .op {
@@ -33,14 +63,3 @@
 }
 .op::after { border: 0; }
 .op[disabled] { opacity: 0.45; }
-
-/* 撤销权限是不可逆的（对方的管理入口会立刻消失），给个收敛的样式 */
-.op--revoke {
-  background: #fff; color: var(--danger);
-  border: 3rpx solid #F2D8D3;
-}
-
-/* 转交超管是最重的一步：自己会降级，且撤不回来 */
-.op--owner {
-  background: var(--brand); color: #fff;
-}

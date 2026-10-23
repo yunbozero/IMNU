@@ -5,6 +5,9 @@
  * 少一跳，而且用户本来就会来「我的」找自己的信息。
  */
 import * as session from '../../services/session.js';
+import * as api from '../../services/api.js';
+import { imageUrl } from '../../utils/format.js';
+import { pickAndUploadImage, reportImageResult } from '../../utils/image-upload.js';
 
 Page({
   data: {
@@ -12,6 +15,10 @@ Page({
     isStaff: false,
     isManager: false,
     roleText: '学生',
+    // 头像：没有头像时回落成昵称首字（和猫图鉴没照片时回落 emoji 同一个套路）
+    avatarUrl: '',
+    avatarText: '',
+    avatarFailed: false,
     // 登记表单
     needRegister: false,
     name: '',
@@ -56,7 +63,55 @@ Page({
       isSeniorManager: session.isSeniorManager(),
       roleText: session.roleLabel(user),
       needRegister: !user,
+      avatarUrl: user && user.avatar ? imageUrl({ image: user.avatar }) : '',
+      avatarText: user && user.name ? String(user.name).slice(0, 1) : '🎪',
     });
+  },
+
+  /** 点头像 → 选图 → 上传（学生也能改自己的） */
+  async changeAvatar() {
+    if (!this.data.user) return undefined;
+    const up = await pickAndUploadImage({
+      token: session.getToken(),
+      endpoint: '/api/me/avatar',
+    });
+    if (!up.ok) {
+      reportImageResult(up);
+      return undefined;
+    }
+    // 先用本地临时图顶上（不用等一次往返），再拉一次资料换成正式地址
+    this.setData({ avatarUrl: up.previewPath, avatarFailed: false });
+    try {
+      await session.refreshUser();
+    } catch { /* 拉不到就先显示本地图，下次进页面会补上 */ }
+    this.refresh();
+    return undefined;
+  },
+
+  /** 不要头像了 —— 回落到昵称首字 */
+  async clearAvatar() {
+    const res = await new Promise((resolve) => {
+      wx.showModal({
+        title: '去掉头像？',
+        content: '会显示成你昵称的第一个字。',
+        success: (r) => resolve(!!r.confirm),
+        fail: () => resolve(false),
+      });
+    });
+    if (!res) return undefined;
+
+    try {
+      await api.post('/api/me/avatar', { token: session.getToken(), body: { image: null } });
+      await session.refreshUser();
+      this.refresh();
+    } catch (e) {
+      wx.showToast({ title: (e && e.message) || '没改成功', icon: 'none' });
+    }
+    return undefined;
+  },
+
+  onAvatarError() {
+    if (!this.data.avatarFailed) this.setData({ avatarFailed: true });
   },
 
   onNameInput(e) { this.setData({ name: e.detail.value, regError: '' }); },
@@ -152,6 +207,12 @@ Page({
   },
 
   /** 角色管理。一级管理员及以上。 */
+  /** 本届负责人：只读名单，谁都能看（未登记的人在「我的」页只有登记表单，进不来） */
+  goMembers() {
+    if (!this.data.user) return;
+    wx.navigateTo({ url: '/pages/members/index' });
+  },
+
   goAdminRoles() {
     if (!this.data.isSeniorManager) return;
     wx.navigateTo({ url: '/packageAdmin/pages/roles/index' });
