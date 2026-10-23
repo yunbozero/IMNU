@@ -25,6 +25,9 @@ temp/
 *.tmp
 *.bak
 
+# ---- 一次性补图用的压缩产物（见 scripts/import-cats.mjs 的 --attach）----
+.cat-fix/
+
 # ---- Generated artifacts（可随时用 npm run longimage 重新生成）----
 docs/longimage-*.png
 

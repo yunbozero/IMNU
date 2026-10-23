@@ -10,7 +10,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {
-  isJunk, tintOf, mapRecord, mergeSnapshots, STATUS_MAP, runImport,
+  isJunk, tintOf, mapRecord, mergeSnapshots, STATUS_MAP, runImport, attachImages,
 } from '../scripts/import-cats.mjs';
 import { openMigrated } from '../server/db.mjs';
 import { createSqliteRepository } from '../server/repository.mjs';
@@ -195,6 +195,90 @@ test('导入：演练模式不建库、不建图片目录', () => {
     assert.equal(r.planned, 2);
     assert.equal(fs.existsSync(env.dbPath), false, '演练模式不该顺手建出一个空库');
     assert.equal(fs.existsSync(env.imageDir), false, '演练模式不该建图片目录');
+  } finally {
+    fs.rmSync(env.root, { recursive: true, force: true });
+  }
+});
+
+/* ============================================================
+   补图模式（--attach）：给已经导过的猫补封面 / 相册
+   ============================================================ */
+
+/** 造一个「库里已有猫」的环境：一只猫 + 相册里已有一张图 */
+function makeAttachEnv() {
+  const env = makeExport();
+  runImport({ dataDir: env.data, dbPath: env.dbPath, imageDir: env.imageDir, yes: true, log: () => {} });
+
+  const attachDir = path.join(env.root, '补图');
+  fs.mkdirSync(attachDir, { recursive: true });
+  return { ...env, attachDir };
+}
+
+test('补图：封面和相册都能补进去，内容重复的自动跳过', () => {
+  const env = makeAttachEnv();
+  try {
+    const db = openMigrated(env.dbPath);
+    const repo = createSqliteRepository(db);
+    const zhong = repo.listCats().find((c) => c.name === '中玳瑁');
+    // 中玳瑁导入时是有封面的，先把它清掉，模拟「封面被跳过」的那几只
+    repo.updateCat(zhong.id, { image: null });
+    const before = repo.listCatImages(zhong.id).map((x) => x.image);
+    assert.equal(before.length, 2, '前提：相册里已有 2 张');
+    db.close();
+
+    // 补图目录：一张新封面、一张新相册图、一张与已有相册**同内容**的图
+    const newCover = Buffer.concat([JPEG, Buffer.from('cover')]);
+    const newPhoto = Buffer.concat([JPEG, Buffer.from('photo-new')]);
+    fs.writeFileSync(path.join(env.attachDir, '封面-中玳瑁.jpg'), newCover);
+    fs.writeFileSync(path.join(env.attachDir, '在校照片-中玳瑁-3.jpg'), newPhoto);
+    // 与相册里已有的第一张同内容（导出时同一张图被写了两份）
+    const existingFirst = fs.readFileSync(path.join(env.imageDir, before[0]));
+    fs.writeFileSync(path.join(env.attachDir, '在校照片-中玳瑁-9.jpg'), existingFirst);
+
+    const r = attachImages({
+      dir: env.attachDir, dbPath: env.dbPath, imageDir: env.imageDir, log: () => {},
+    });
+
+    assert.equal(r.covers, 1);
+    assert.equal(r.photos, 1, '同内容那张要被哈希判重跳过，只该补进 1 张');
+
+    const db2 = openMigrated(env.dbPath);
+    const repo2 = createSqliteRepository(db2);
+    try {
+      const cat = repo2.listCats().find((c) => c.name === '中玳瑁');
+      assert.ok(cat.image, '封面补上了');
+      const gallery = repo2.listCatImages(cat.id).map((x) => x.image);
+      assert.equal(gallery.length, 3, '2 张原有 + 1 张新补');
+      assert.deepEqual(gallery.slice(0, 2), before, '原有的顺序不能被打乱（是展示顺序）');
+    } finally { db2.close(); }
+  } finally {
+    fs.rmSync(env.root, { recursive: true, force: true });
+  }
+});
+
+test('补图：可以重复跑，第二次什么都不加', () => {
+  const env = makeAttachEnv();
+  try {
+    fs.writeFileSync(path.join(env.attachDir, '封面-中玳瑁.jpg'), Buffer.concat([JPEG, Buffer.from('c2')]));
+    fs.writeFileSync(path.join(env.attachDir, '在校照片-中玳瑁-5.jpg'), Buffer.concat([JPEG, Buffer.from('p5')]));
+
+    const args = { dir: env.attachDir, dbPath: env.dbPath, imageDir: env.imageDir, log: () => {} };
+    assert.equal(attachImages(args).covers, 1);
+    const second = attachImages(args);
+    assert.equal(second.covers, 0, '同一张封面不该重复落盘');
+    assert.equal(second.photos, 0, '同一张相册图不该重复追加');
+  } finally {
+    fs.rmSync(env.root, { recursive: true, force: true });
+  }
+});
+
+test('补图：库里没有的猫要报告出来，不能静默丢掉', () => {
+  const env = makeAttachEnv();
+  try {
+    fs.writeFileSync(path.join(env.attachDir, '封面-不存在的猫.jpg'), JPEG);
+    const r = attachImages({ dir: env.attachDir, dbPath: env.dbPath, imageDir: env.imageDir, log: () => {} });
+    assert.deepEqual(r.unknown, ['不存在的猫']);
+    assert.equal(r.covers, 0);
   } finally {
     fs.rmSync(env.root, { recursive: true, force: true });
   }

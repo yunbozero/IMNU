@@ -24,9 +24,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { createHash } from 'node:crypto';
 import { openMigrated, DEV_DB_PATH, PROD_DB_PATH } from '../server/db.mjs';
 import { createSqliteRepository } from '../server/repository.mjs';
 import { saveImage, MAX_IMAGE_BYTES, DEV_IMAGE_DIR, PROD_IMAGE_DIR } from '../server/images.mjs';
+import { CAT_IMAGES_MAX } from '../server/api.mjs';
 
 /* ============================================================
    纯逻辑部分（不碰文件、不碰库）—— tests/import-cats.test.mjs 直接测它
@@ -129,13 +131,14 @@ export function mergeSnapshots(records) {
    ============================================================ */
 
 function parseArgs(argv) {
-  const out = { data: '', db: '', images: '', yes: false };
+  const out = { data: '', db: '', images: '', attach: '', yes: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--yes') out.yes = true;
     else if (a === '--data') out.data = argv[++i];
     else if (a === '--db') out.db = argv[++i];
     else if (a === '--images') out.images = argv[++i];
+    else if (a === '--attach') out.attach = argv[++i];
   }
   return out;
 }
@@ -194,6 +197,91 @@ function importImage(file, imageDir, skipped) {
     return null;
   }
   return r.name;
+}
+
+/** 图片内容的 md5。用来判重 —— 服务端会把文件改名，只能按字节比。 */
+const hashOf = (buf) => createHash('md5').update(buf).digest('hex');
+
+/**
+ * 给**已经导过**的猫补图（主图 / 相册）。
+ *
+ * 为什么需要单独一条路：主导入是「同名跳过」，所以第一次因为超过 2MB 被跳过的图，
+ * 压小之后再跑主导入也补不进去 —— 猫已经在了。
+ *
+ * 幂等靠**内容哈希**：图片目录里已有的文件先算一遍 md5，新图内容相同就跳过。
+ * 这样这个命令可以放心跑第二遍，不会把同一张照片塞进相册两次
+ * （服务端存的是 img_<随机>.<ext>，文件名对不上，只能按字节判）。
+ */
+export function attachImages({ dir, dbPath, imageDir, log = console.log } = {}) {
+  const db = openMigrated(dbPath);
+  const repo = createSqliteRepository(db);
+
+  try {
+    const byName = new Map(repo.listCats().map((c) => [c.name, c]));
+    const known = new Set();
+    for (const f of fs.readdirSync(imageDir)) {
+      try { known.add(hashOf(fs.readFileSync(path.join(imageDir, f)))); } catch { /* 读不到就算了 */ }
+    }
+
+    const wanted = indexImages(dir);
+    const skippedOversize = [];
+    const unknown = [];
+    let covers = 0;
+    let photos = 0;
+
+    for (const [name, media] of wanted) {
+      const cat = byName.get(name);
+      if (!cat) { unknown.push(name); continue; }
+
+      // 封面：有就换。旧封面如果是兜底用的相册第一张，那张还留在相册里，不会成为孤儿。
+      // 内容相同的（比如上一次补图已经换过）直接跳过，不重复落盘。
+      if (media.cover) {
+        const coverFile = path.join(dir, media.cover);
+        let coverBuf = null;
+        try { coverBuf = fs.readFileSync(coverFile); } catch { /* 读不到就当没有 */ }
+        if (coverBuf && !known.has(hashOf(coverBuf))) {
+          const saved = importImage(coverFile, imageDir, skippedOversize);
+          if (saved) {
+            known.add(hashOf(coverBuf));
+            repo.updateCat(cat.id, { image: saved });
+            covers += 1;
+          }
+        }
+      }
+
+      // 相册：只追加内容没见过的，且总数不超过上限
+      const Have = repo.listCatImages(cat.id).map((x) => x.image);
+      const added = [];
+      for (const ph of media.photos) {
+        if (Have.length + added.length >= CAT_IMAGES_MAX) break;
+        const file = path.join(dir, ph.file);
+        let buf;
+        try { buf = fs.readFileSync(file); } catch { continue; }
+        const h = hashOf(buf);
+        if (known.has(h)) continue;               // 已经导过（或本来就在相册里）
+        const saved = importImage(file, imageDir, skippedOversize);
+        if (!saved) continue;
+        known.add(h);
+        added.push(saved);
+      }
+      if (added.length) {
+        repo.setCatImages(cat.id, [...Have, ...added]);
+        photos += added.length;
+      }
+    }
+
+    log(`\n补图完成：${covers} 张主图、${photos} 张相册`);
+    if (unknown.length) log(`⚠️ 有 ${unknown.length} 组图在库里找不到同名猫，已跳过：${unknown.join('、')}`);
+    if (skippedOversize.length) {
+      log(`⚠️ ${skippedOversize.length} 张仍有问题：`);
+      for (const s of skippedOversize) log('   · ' + s);
+    }
+    log(`库：${dbPath}`);
+
+    return { covers, photos, unknown, oversize: skippedOversize };
+  } finally {
+    db.close();
+  }
 }
 
 /**
@@ -303,19 +391,28 @@ export function runImport({ dataDir, dbPath, imageDir, yes = false, log = consol
 
 function main() {
   const args = parseArgs(process.argv.slice(2));
-  if (!args.data) {
-    console.error('用法：node scripts/import-cats.mjs --data <含 JSONL 的目录> [--db 库] [--images 目录] [--yes]');
-    process.exit(1);
-  }
 
   // 默认落 DEV 库：和 set-owner / seed-dev 一致，避免「只想试一下」却写进线上库。
   // 线上必须显式传 --db，和 docs 里的运维口径一致。
-  runImport({
-    dataDir: args.data,
-    dbPath: args.db || DEV_DB_PATH,
-    imageDir: args.images || (args.db === PROD_DB_PATH ? PROD_IMAGE_DIR : DEV_IMAGE_DIR),
-    yes: args.yes,
-  });
+  const dbPath = args.db || DEV_DB_PATH;
+  const imageDir = args.images || (args.db === PROD_DB_PATH ? PROD_IMAGE_DIR : DEV_IMAGE_DIR);
+
+  // 补图模式：只处理「库里已经有这只猫」的情况（压小过的图从这里补进去）
+  if (args.attach) {
+    attachImages({ dir: args.attach, dbPath, imageDir });
+    return;
+  }
+
+  if (!args.data) {
+    console.error(
+      '用法：\n'
+      + '  导入：node scripts/import-cats.mjs --data <含 JSONL 的目录> [--db 库] [--images 目录] [--yes]\n'
+      + '  补图：node scripts/import-cats.mjs --attach <图片目录> [--db 库] [--images 目录]',
+    );
+    process.exit(1);
+  }
+
+  runImport({ dataDir: args.data, dbPath, imageDir, yes: args.yes });
 }
 
 // ★ 用 pathToFileURL 而不是拼 `file://`：路径里有 # 或 % 时拼出来的 URL 不等价，
