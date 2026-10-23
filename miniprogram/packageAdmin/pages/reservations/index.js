@@ -25,6 +25,9 @@ Page({
     loading: true,
     error: '',
     keyword: '',
+    // 摊位筛选：义卖当天每个摊位守自己那摊，不该在几十行里翻别人的
+    stall: 'all',
+    stalls: [],
     canUndo: false,
     // 每账号上限（运行期设置）。只有一级管理员及以上能看能改。
     canEditSettings: false,
@@ -63,6 +66,7 @@ Page({
         code: x.code,
         codeText: groupCode(x.code),
         itemName: x.itemName || '（物品已删除）',
+        stallName: x.stallName || '',
         // 学号现在是可选的（学生端已不再收集），所以这里必须能只显示昵称
         whoText: x.userSid ? `${x.userName} · 学号 ${x.userSid}` : (x.userName || '—'),
         status: x.status,
@@ -79,8 +83,23 @@ Page({
       //   别在这里手写角色名 —— 改规则时手写的那份不会跟着动。
       const isSenior = session.isSeniorManager();
 
+      // 摊位筛选条：只有真的有多个摊位时才画（单摊位活动多一行纯噪音）。
+      // 「未分摊位」单独一档 —— 没挂摊位的物品照样有人在等，不能因为筛了就消失。
+      const names = [];
+      for (const x of all) {
+        const n = x.stallName || '';
+        if (!names.includes(n)) names.push(n);
+      }
+      const stalls = names.length > 1
+        ? [{ key: 'all', label: '全部摊位' }]
+          .concat(names.map((n) => ({ key: n || '__none__', label: n || '未分摊位' })))
+        : [];
+
       this.setData({
         all,
+        stalls,
+        // 摊位筛到某个值时刷新一次数据，那个摊位可能已经不在了
+        stall: stalls.some((s) => s.key === this.data.stall) ? this.data.stall : 'all',
         stats: {
           total: all.length,
           reserved: all.filter((x) => x.status === 'reserved').length,
@@ -169,18 +188,27 @@ Page({
   },
 
   applyFilter() {
-    const { active, keyword, all } = this.data;
+    const {
+      active, keyword, all, stall,
+    } = this.data;
     const kw = keyword.trim().toLowerCase();
+    // 'all' = 不筛；'__none__' = 只要没挂摊位的
+    const wantStall = stall === 'all' ? null : (stall === '__none__' ? '' : stall);
 
     this.setData({
       list: all.filter((x) => {
         if (active !== 'all' && x.status !== active) return false;
+        if (wantStall !== null && (x.stallName || '') !== wantStall) return false;
         if (!kw) return true;
         return String(x.code).toLowerCase().includes(kw)
           || x.itemName.toLowerCase().includes(kw)
           || x.whoText.toLowerCase().includes(kw);
       }),
     });
+  },
+
+  onStallTap(e) {
+    this.setData({ stall: e.currentTarget.dataset.key }, () => this.applyFilter());
   },
 
   onTabTap(e) {

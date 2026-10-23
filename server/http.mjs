@@ -54,6 +54,8 @@ export const ROUTES = {
   'GET /api/cats': { handler: 'listCats', auth: 'none' },
   // 首页公告。公开：一进首页就要看到，不能要求登录。
   'GET /api/announcement': { handler: 'getAnnouncement', auth: 'none' },
+  // 可改文案（喂养提示等）：公开读，一级管理员写
+  'GET /api/copy': { handler: 'getCopy', auth: 'none' },
   'POST /api/login': { handler: 'login', auth: 'none' },
   'POST /api/register': { handler: 'register', auth: 'register' },
   'GET /api/me': { handler: 'me', auth: 'user' },
@@ -96,6 +98,7 @@ export const ROUTES = {
   'POST /api/admin/settings': { handler: 'adminSetSettings', auth: 'user' },
   // 首页公告（门槛：一级管理员及以上，在 api.mjs 里判）
   'POST /api/admin/announcement': { handler: 'adminSetAnnouncement', auth: 'user' },
+  'POST /api/admin/copy': { handler: 'adminSetCopy', auth: 'user' },
 };
 
 /**

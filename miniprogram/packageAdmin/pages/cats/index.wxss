@@ -1,5 +1,20 @@
 /* 管理端 · 图鉴管理。样式只在这个分包里用。 */
 
+/* ---------- 可改文案（喂养提示） ---------- */
+.copycard { margin-top: 26rpx; }
+.copyhint { font-size: 23rpx; color: var(--text-3); line-height: 1.6; margin-bottom: 16rpx; }
+.copyinput {
+  background: #F7F2EE; border-radius: 16rpx; padding: 16rpx 20rpx;
+  font-size: 26rpx; color: var(--text);
+}
+.copyinput--title { margin-bottom: 16rpx; font-weight: 700; }
+.copyrow { display: flex; align-items: center; gap: 12rpx; margin-bottom: 12rpx; }
+.copyinput--label { width: 140rpx; flex: 0 0 140rpx; }
+.copyinput--text { flex: 1; }
+.copyrow__del { font-size: 26rpx; color: var(--text-3); padding: 0 8rpx; }
+.copyops { display: flex; gap: 18rpx; margin-top: 18rpx; }
+.copybtn { flex: 1; margin: 0; font-size: 27rpx; }
+
 .newbtn { margin-top: 26rpx; }
 
 .cat {

@@ -45,6 +45,17 @@
     >{{item.label}}</view>
   </view>
 
+  <!-- 摊位筛选：只有多个摊位时才出现。现场每个摊位守自己那摊，只看自己的名单。 -->
+  <scroll-view wx:if="{{stalls.length}}" class="stalls" scroll-x enable-flex>
+    <view
+      wx:for="{{stalls}}"
+      wx:key="key"
+      class="stalls__item {{stall === item.key ? 'stalls__item--on' : ''}}"
+      data-key="{{item.key}}"
+      bindtap="onStallTap"
+    >{{item.label}}</view>
+  </scroll-view>
+
   <view wx:if="{{error}}" class="notice notice--strong" bindtap="load">
     <text class="notice__b">打不开：</text>{{error}}（点一下重试）
   </view>

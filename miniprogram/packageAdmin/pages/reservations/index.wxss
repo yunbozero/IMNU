@@ -22,6 +22,16 @@
 }
 .segmented__item--on { background: var(--brand); color: #fff; }
 
+/* ---------- 摊位筛选（横滑的小胶囊） ---------- */
+/* 只有当活动有多个摊位时才出现；单摊位活动多这一行纯噪音。 */
+.stalls { white-space: nowrap; margin: -12rpx 0 24rpx; }
+.stalls__item {
+  display: inline-block; margin-right: 14rpx;
+  font-size: 24rpx; font-weight: 600; color: var(--text-2);
+  background: #fff; border-radius: 22rpx; padding: 12rpx 26rpx;
+}
+.stalls__item--on { background: var(--brand-soft); color: var(--brand-dark); }
+
 /* ---------- 每账号上限（运行期设置） ---------- */
 .cap {
   display: flex; align-items: center; gap: 14rpx;

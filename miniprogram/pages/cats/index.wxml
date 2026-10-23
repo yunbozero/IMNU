@@ -67,7 +67,7 @@
   </view>
 
   <view class="card">
-    <view class="card__title">校园喂养提示</view>
+    <view class="card__title">{{tipsTitle}}</view>
     <view wx:for="{{tips}}" wx:key="label" class="tip">
       <text class="tip__label {{item.tone === 'ok' ? 'tip__label--ok' : ''}}">{{item.label}}：</text>
       <text class="tip__text">{{item.text}}</text>

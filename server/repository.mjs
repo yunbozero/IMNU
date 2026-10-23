@@ -509,8 +509,15 @@ export function createSqliteRepository(db) {
         : db.prepare('SELECT * FROM reservations WHERE event_id = ? ORDER BY created_at')
             .all(eventId);
 
+      // 物品 + 摊位一起取：名单要能**按摊位筛**（义卖当天每个摊位守自己那摊）。
+      // 摊位名跟着行返回，客户端就不用自己去拼两张表。
       const items = new Map(
-        db.prepare('SELECT id, name FROM items WHERE event_id = ?').all(eventId).map((r) => [r.id, r])
+        db.prepare('SELECT id, name, stall_id FROM items WHERE event_id = ?')
+          .all(eventId).map((r) => [r.id, r]),
+      );
+      const stalls = new Map(
+        db.prepare('SELECT id, name FROM stalls WHERE event_id = ?')
+          .all(eventId).map((r) => [r.id, r]),
       );
       const users = new Map(
         db.prepare('SELECT id, name, sid FROM users').all().map((r) => [r.id, r])
@@ -519,9 +526,12 @@ export function createSqliteRepository(db) {
       return rows.map((r) => {
         const it = items.get(r.item_id);
         const u = users.get(r.user_id);
+        const stall = it && it.stall_id ? stalls.get(it.stall_id) : null;
         return {
           ...mapReservation(r),
           itemName: it ? it.name : null,
+          stallId: it ? (it.stall_id || null) : null,
+          stallName: stall ? stall.name : null,
           userName: u ? u.name : null,
           userSid: u ? u.sid : null,
         };

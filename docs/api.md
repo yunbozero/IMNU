@@ -531,8 +531,132 @@ CSV 带 **UTF-8 BOM** —— 不加的话 Excel 打开中文是乱码，而这�
 - ★ **调低不会取消已有的预定**：已经锁定的名额照旧，只是不能再定新的。
 - 改动写进 `audit_logs`（`settings.update` / `settings.reset`），记下改之前和之后的值。
 
-### 第一个超管从哪来
+## 图鉴 / 公告 / 成员 / 头像
 
+这几组是后来加的，单独放一节。约定和上面完全一样（`ok` 外壳、`code`、`message`）。
+
+### `GET /api/cats`
+
+公开。图鉴列表，按状态分组由客户端做。
+
+```json
+{"ok":true,"cats":[{"id":"c_…","name":"大橘","emoji":"🐈","image":"img_….jpg",
+  "status":"onCampus","campus":"盛乐校区","images":["img_….jpg"],"note":"…"}]}
+```
+
+- `image` / `images` 是**文件名**，不是 URL；客户端用 `imageUrl()` 拼。
+- 补充资料（昵称、毛色、是否绝育、外貌、猫际关系……）都可空，没导进来的猫就是 `null`。
+- `status` 取值：`onCampus` / `missing` / `passed` / `adopted`。
+
+### `GET /api/announcement`
+
+公开。首页公告，**拉不到就当没有**，不能让首页报错。
+
+```json
+{"ok":true,"announcement":{"mode":2,"title":"本周六开放预定","content":"图书馆前","updatedAt":1700000000000}}
+```
+
+- `mode`：`0` 不展示（等于没有）、`1` 强制（点「知道了」才关）、`2` 自动关（首页横幅 5 秒）。
+
+### `GET /api/members`
+
+**已登记用户**可读。本届负责人名单（只读，给「出问题找谁」用）。
+
+```json
+{"ok":true,"members":[{"name":"小张","avatar":null,"role":"admin","roleLabel":"一级管理员"}]}
+```
+
+- 只含 `owner/admin/deputy/volunteer`，**不含 student**；字段是白名单，
+  不返回 `openid` / `sid` / `settable`（那些是管理端才需要的）。
+
+### `POST /api/me/avatar`
+
+本人可调。**一步到位**：body 里直接给 base64，服务端存图 + 写头像。
+
+```json
+{"image":"<base64>"}   // 换头像
+{"image":null}         // 清掉，界面回落到昵称首字
+```
+
+- 只认 JPG / PNG / WebP / GIF 的魔术字节；超过 2MB 返回 413（`too_large`）。
+- 不做「先传图再设置」两步：中途失败会留一张没人引用的图，而学生没有别的入口去挂它。
+
+### `POST /api/admin/cat/create`
+
+志愿者及以上。新建一只猫。
+
+```json
+{"name":"大橘","emoji":"🐈","status":"onCampus","note":"…","images":["img_a.jpg","img_b.jpg"]}
+```
+
+- `name` 必填且**不能重名**（图鉴里同名会认不出是哪只）；`images` 最多 9 张。
+- 补充字段见 `CAT_EXTRA_FIELDS`（昵称、校区、品种、毛色、亲人程度、绝育、外貌……），全部可空。
+
+### `POST /api/admin/cat`
+
+志愿者及以上。改一只猫。body 带 `id` + 要改的字段；`images` 传了就**整组替换**。
+
+- 换 `images` 时不传等于不动；传 `[]` 是清空相册。
+- 被替换掉的图片文件不会自动删（可能还被别的猫引用着）。
+
+### `POST /api/admin/cat/delete`
+
+志愿者及以上。删一只猫，顺带删它的相册记录，返回 `removed`（被删掉的文件名）。
+
+- 图片文件由调用方决定删不删；服务端只保证数据行一致。
+
+### `GET /api/admin/users`
+
+副主任及以上。管理端的全员名单，**逐行算好「这个人能改成哪些角色」**。
+
+```json
+{"ok":true,"users":[{"id":"u_…","name":"小张","avatar":null,"role":"student",
+  "roleLabel":"学生","isSelf":false,"settable":["volunteer","deputy","admin"],
+  "settableLabels":["志愿者","副主任","一级管理员"],"canTransferOwner":false}],
+ "counts":{"owner":1,"admin":2,"deputy":3,"volunteer":8,"student":40},
+ "limits":{"owner":1,"admin":3,"deputy":5}}
+```
+
+- `settable` 是**服务端算的**（规则全在 `server/roles.mjs`）。界面只负责画，
+  自己再判断一遍必然出现「显示了按钮但点了被拒」。
+- `counts` / `limits` 给界面显示「一级 2/3」并用来看软上限（副主任 5）。
+
+### `POST /api/admin/announcement`
+
+一级管理员及以上。设公告。
+
+```json
+{"mode":2,"title":"本周六开放预定","content":"图书馆前，10:00 开始"}
+```
+
+- `mode` 只能是 `0/1/2`；`title` ≤40 字，`content` ≤200 字；`mode:0` 等于关掉。
+
+### `GET /api/copy`
+
+公开。可改文案（目前只有图鉴底部的「喂养提示」）。**拉不到就用客户端默认值**。
+
+```json
+{"ok":true,"copy":{"catTips":{"title":"校园喂养提示",
+  "items":[{"label":"不要","text":"随意给流浪猫喂人类零食和高盐食物。"}]}}}
+```
+
+- 存的是 `settings` 表里一条 JSON；没存过、或存的内容坏了，都回默认值（界面永远有东西显示）。
+- 白名单：只认 `COPY_DEFAULTS` 里的 key。加新文案要同时加默认值和长度限制（`COPY_LIMITS`）。
+
+### `POST /api/admin/copy`
+
+**一级管理员及以上**。改文案。
+
+```json
+{"catTips":{"title":"喂猫须知","items":[{"label":"不要","text":"别喂火腿肠。"}]}}
+```
+
+- 校验：标题 1–20 字、每行标签 1–6 字、说明 1–60 字、1–6 行。
+- ★ **校验合规词**：出现交易 / 公益类用语直接 400 拒绝 —— 这类词一旦上线就是审核事故，
+  不能靠「管理员不会手滑」来保证。
+- 改完学生端下次进页面就能看到，**不用发版**；审核期间别动（要和申报内容一致）。
+
+### 第一个超管从哪来
 转交要求已有超管，接口又拒绝直接设 owner，所以第一个超管只能由服务端设立：
 
 ```bash
@@ -549,12 +673,23 @@ npm run set-owner -- <openid>      # 设为超管
 - **改活动 / 摊位的信息**：能建、能开始/结束，但**名字、时间、摊位位置建完就改不了**
   （写错一个字只能重建，或者上服务器改库）。「够用就行」是本期的取舍。
 - **删不了物品**：只能下架。已经有人预定的东西本来也不该能删。
-- **任命角色没有界面**：接口 `POST /api/admin/role` 早就有，界面一直没做，
-  现在靠 `scripts/set-role.mjs`（见 `docs/deploy-alicloud.md` §5.5②.5）。
 - **分时段取货**：现在取货时间只有活动级别的，没有分时段
 - **摊位分权**：现在志愿者可以核销任意摊位的码
 
 后两个要等方案确认（见 `docs/ui-prototype-plan.md` 第 9 节的待确认项）。
+
+### 以前「还没做」、现在有了的
+
+留在这里是因为文档里到处引用过它们，删掉会让老链接指空：
+
+- **任命角色有界面了**：`我的 → 管理端 · 角色管理`（一级管理员及以上）。
+  能提人、撤人、转交超管，还显示各级别人数/上限。命令行 `scripts/set-role.mjs`
+  仍然保留，适合批量或手机不在手边时用。
+- **用户头像**：学生自己传（`POST /api/me/avatar`），角色管理页靠头像认人。
+- **本届负责人名单**：`GET /api/members`，给没有管理权限的人查「现场该找谁」。
+- **图鉴**：整块都有接口了（见上面「图鉴 / 公告 / 成员 / 头像」一节），
+  还带相册、补充资料和导入脚本。
+- **活动口令**：`POST /api/admin/event/pass`，学生预定前要输 6 位口令。
 
 > `scripts/init-event.mjs` 仍然保留，而且**更适合批量**：一次性写几十件物品
 > 比在手机上点几十次快得多。日常的「建活动、加摊位、加一两件物品」用界面。

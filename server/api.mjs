@@ -125,9 +125,91 @@ export const CAT_IMAGES_MAX = 9;
 export const ROLE_LIMITS = { owner: 1, admin: 3, deputy: 5 };
 export const SOFT_ROLE_LIMITS = ['deputy'];
 
+/* ---------------- 可改文案 ---------------- */
+
+/**
+ * 管理端能改的「说明文案」。
+ *
+ * 为什么要有：这类文字（喂养提示、活动规则）**每学期都可能想调**，而小程序没有热更新，
+ * 改一个错别字也要重新提审（1–3 天）。放服务端就不用了。
+ *
+ * ★ 白名单，不是「什么都能改」：漏一个 key 或写错一个字，界面会空一片。
+ *   要加新文案：在 COPY_DEFAULTS 加一条、在 COPY_LIMITS 加长度限制，就这两处。
+ * ★ 服务端**校验合规词**：管理员手一抖写进「义卖 / 公益」这类词，审核会当场驳回 ——
+ *   这条红线不能让一次手滑破掉。
+ */
+const SETTING_COPY = 'copy';
+
+export const COPY_DEFAULTS = {
+  catTips: {
+    title: '校园喂养提示',
+    items: [
+      { label: '不要', text: '随意给流浪猫喂人类零食和高盐食物。' },
+      { label: '禁忌', text: '巧克力、葡萄、洋葱、木糖醇等食物。' },
+      { label: '避免', text: '火腿肠、牛奶、重油重辣和刺激性食物。' },
+      { label: '推荐', text: '清水、猫粮、猫条和白水煮鸡胸肉。' },
+    ],
+  },
+};
+
+export const COPY_LIMITS = { title: 20, label: 6, text: 60, items: 6 };
+
+/** 文案里不许出现的词。和界面合规守卫同一套口径。 */
+export const COPY_FORBIDDEN = [
+  '义卖', '公益', '慈善', '募捐', '捐款', '捐赠', '救助',
+  '金额', '价格', '售价', '收费', '付款', '转账', '支付',
+];
+
+/** 校验一份文案。返回 { ok: true, value } 或 { ok: false, message }。 */
+function sanitizeCopy(input) {
+  const out = {};
+
+  for (const key of Object.keys(COPY_DEFAULTS)) {
+    const got = input?.[key];
+    if (got === undefined) {
+      out[key] = COPY_DEFAULTS[key];        // 没传就回默认，不做「只改一半」
+      continue;
+    }
+    if (!got || typeof got !== 'object') return { ok: false, message: '文案格式不对' };
+
+    const title = typeof got.title === 'string' ? got.title.trim() : '';
+    if (title.length < 1 || title.length > COPY_LIMITS.title) {
+      return { ok: false, message: `标题要 1–${COPY_LIMITS.title} 个字` };
+    }
+
+    const rawItems = Array.isArray(got.items) ? got.items : [];
+    if (rawItems.length < 1 || rawItems.length > COPY_LIMITS.items) {
+      return { ok: false, message: `条目要 1–${COPY_LIMITS.items} 行` };
+    }
+
+    const items = [];
+    for (const it of rawItems) {
+      const label = typeof it?.label === 'string' ? it.label.trim() : '';
+      const text = typeof it?.text === 'string' ? it.text.trim() : '';
+      if (!label || label.length > COPY_LIMITS.label) {
+        return { ok: false, message: `每行的标签要 1–${COPY_LIMITS.label} 个字` };
+      }
+      if (!text || text.length > COPY_LIMITS.text) {
+        return { ok: false, message: `每行的说明要 1–${COPY_LIMITS.text} 个字` };
+      }
+      items.push({ label, text });
+    }
+
+    // 合规词：标题 + 每一行都查
+    const all = [title, ...items.map((i) => `${i.label}${i.text}`)].join(' ');
+    const hit = COPY_FORBIDDEN.filter((w) => all.includes(w));
+    if (hit.length) {
+      return { ok: false, message: `文案里不能出现这些词：${hit.join('、')}` };
+    }
+
+    out[key] = { title, items };
+  }
+
+  return { ok: true, value: out };
+}
+
 /** 公告：存在 settings 表里的一条 JSON。标题一行，内容最多一段。 */
-const SETTING_ANNOUNCEMENT = 'announcement';
-export const ANNOUNCEMENT_TITLE_MAX = 40;
+const SETTING_ANNOUNCEMENT = 'announcement';export const ANNOUNCEMENT_TITLE_MAX = 40;
 export const ANNOUNCEMENT_CONTENT_MAX = 200;
 
 // 补充资料的上限（旧图鉴里实测的最长值 + 余量，见 CAT_EXTRA_FIELDS 的说明）
@@ -626,7 +708,41 @@ export function createApi({
     },
 
     /**
-     * 换自己的头像。任何已登录用户都能改自己的。
+     * 可改文案。公开接口 —— 图鉴列表一进来就要显示，不能要求登录。
+     * 存的是一份 JSON；没有存过、或存的坏了，就回默认值（界面永远有东西显示）。
+     */
+    getCopy() {
+      const raw = repo.getSetting(SETTING_COPY);
+      if (!raw) return ok({ copy: COPY_DEFAULTS });
+
+      let parsed;
+      try { parsed = JSON.parse(raw); } catch { return ok({ copy: COPY_DEFAULTS }); }
+
+      // 存的内容也过一次校验：手工改过库、或者旧版本格式变了，都不会把界面弄空
+      const v = sanitizeCopy(parsed);
+      return ok({ copy: v.ok ? v.value : COPY_DEFAULTS });
+    },
+
+    /**
+     * 改文案。**一级管理员及以上** —— 它改的是所有人看到的东西，
+     * 和「改公告」「改活动口令」一个量级。
+     */
+    adminSetCopy({ body, user }) {
+      if (!user) return fail('unauthorized', '请先登录', 401);
+      if (!isSeniorManager(user)) return fail('forbidden', '你没有权限改文案', 403);
+
+      const v = sanitizeCopy(body);
+      if (!v.ok) return fail('bad_request', v.message, 400);
+
+      repo.setSetting(SETTING_COPY, JSON.stringify(v.value));
+      repo.writeAudit({
+        actorId: user.id, action: 'copy.update', targetType: 'settings', targetId: null,
+        detail: { keys: Object.keys(COPY_DEFAULTS) },
+      });
+      return ok({ copy: v.value });
+    },
+
+    /** 换自己的头像。任何已登录用户都能改自己的。
      *
      * ★ 一步到位：body 里直接是 base64 图片字节，服务端存图 + 写头像一起做。
      *   不做「先传图、再设头像」两步 —— 那样中途失败会留一张没人引用的图，

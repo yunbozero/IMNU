@@ -1,5 +1,26 @@
 <view class="page">
 
+  <!-- 可改文案：改完学生端刷新就能看到，不用发版提审。 -->
+  <view wx:if="{{canEditCopy}}" class="card copycard">
+    <view class="card__title">图鉴文案 · 喂养提示</view>
+    <view class="copyhint">学生端「猫猫图鉴」底部那张卡片。改完保存即生效，不用发版。</view>
+
+    <input class="copyinput copyinput--title" value="{{copyTitle}}" maxlength="20" placeholder="标题" bindinput="onCopyTitle" />
+
+    <view wx:for="{{copyItems}}" wx:key="index" class="copyrow">
+      <input class="copyinput copyinput--label" value="{{item.label}}" maxlength="6" placeholder="标签" data-idx="{{index}}" data-field="label" bindinput="onCopyItem" />
+      <input class="copyinput copyinput--text" value="{{item.text}}" maxlength="60" placeholder="说明" data-idx="{{index}}" data-field="text" bindinput="onCopyItem" />
+      <text class="copyrow__del" data-idx="{{index}}" bindtap="removeCopyItem">✕</text>
+    </view>
+
+    <view wx:if="{{copyError}}" class="notice notice--strong">{{copyError}}</view>
+
+    <view class="copyops">
+      <button class="btn btn--ghost copybtn" bindtap="addCopyItem">＋ 加一行</button>
+      <button class="btn copybtn" loading="{{savingCopy}}" disabled="{{savingCopy}}" bindtap="saveCopy">保存文案</button>
+    </view>
+  </view>
+
   <view wx:if="{{error}}" class="notice notice--strong" bindtap="load">
     <text class="notice__b">打不开：</text>{{error}}（点一下重试）
   </view>

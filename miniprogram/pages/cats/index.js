@@ -7,15 +7,18 @@
  *
  * 详情页在分包 packageCats 里。
  */
-import { CAT_LIST_GROUPS, FEEDING_TIPS } from '../../data/cats.js';
+import { CAT_LIST_GROUPS } from '../../data/cats.js';
 import * as cats from '../../services/cats.js';
+import * as copy from '../../services/copy.js';
 
 Page({
   data: {
     groups: CAT_LIST_GROUPS,
     active: 'onCampus',
     list: [],
-    tips: FEEDING_TIPS,
+    // 喂养提示：先用本地默认值同步渲染，随后被服务端下发的版本覆盖（管理员可改，不用发版）
+    tips: copy.DEFAULTS.catTips.items,
+    tipsTitle: copy.DEFAULTS.catTips.title,
     // 搜索：有词时**跨分组**搜，不受当前 tab 限制
     keyword: '',
     searching: false,
@@ -29,6 +32,15 @@ Page({
     this.all = cats.cached();
     this.switchTo('onCampus');
     this.refresh();
+    this.loadCopy();
+  },
+
+  /** 文案：缓存/默认值先顶上，再拉一次服务端的（改文案不用发版） */
+  async loadCopy() {
+    const c = copy.current();
+    this.setData({ tips: copy.catTips(c).items, tipsTitle: copy.catTips(c).title });
+    const fresh = await copy.refresh();
+    this.setData({ tips: copy.catTips(fresh).items, tipsTitle: copy.catTips(fresh).title });
   },
 
   onShow() {

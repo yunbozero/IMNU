@@ -10,6 +10,7 @@
 import * as api from '../../../services/api.js';
 import * as session from '../../../services/session.js';
 import * as cats from '../../../services/cats.js';
+import * as copy from '../../../services/copy.js';
 import { pickAndUploadImage, reportImageResult } from '../../utils/image-upload.js';
 
 Page({
@@ -19,6 +20,12 @@ Page({
     busyId: '',
     list: [],
     imageFailed: {},
+    // 可改文案（喂养提示）：一级管理员及以上。改完学生端刷新就能看到，不用发版。
+    canEditCopy: false,
+    copyTitle: '',
+    copyItems: [],
+    savingCopy: false,
+    copyError: '',
   },
 
   onShow() {
@@ -43,6 +50,17 @@ Page({
 
       const r = await api.get('/api/cats', { token: session.getToken() });
       this.setData({ list: (r.cats || []).map(cats.decorate) });
+
+      // 文案：一级管理员及以上才显示编辑卡片（服务端也是这个门槛）
+      if (session.isSeniorManager()) {
+        const c = await copy.refresh();
+        const tips = copy.catTips(c);
+        this.setData({
+          canEditCopy: true,
+          copyTitle: tips.title,
+          copyItems: tips.items.map((it) => ({ label: it.label, text: it.text })),
+        });
+      }
     } catch (e) {
       if (e && e.code === 'need_register') return session.handleError(e);
       this.setData({ error: (e && e.message) || '加载失败' });
@@ -156,5 +174,64 @@ Page({
       this.setData({ busyId: '' });
     }
     return undefined;
+  },
+
+  /* ---------------- 可改文案（喂养提示） ---------------- */
+
+  onCopyTitle(e) {
+    this.setData({ copyTitle: e.detail.value, copyError: '' });
+  },
+
+  onCopyItem(e) {
+    const { idx, field } = e.currentTarget.dataset;
+    const items = this.data.copyItems.slice();
+    if (!items[idx]) return undefined;
+    items[idx] = { ...items[idx], [field]: e.detail.value };
+    this.setData({ copyItems: items, copyError: '' });
+    return undefined;
+  },
+
+  /** 加一行 / 删一行（最多 6 行，服务端也卡这个数） */
+  addCopyItem() {
+    if (this.data.copyItems.length >= 6) return;
+    this.setData({ copyItems: [...this.data.copyItems, { label: '', text: '' }] });
+  },
+
+  removeCopyItem(e) {
+    const idx = Number(e.currentTarget.dataset.idx);
+    this.setData({ copyItems: this.data.copyItems.filter((_, i) => i !== idx) });
+  },
+
+  /**
+   * 保存文案。**服务端会校验合规词**（买卖类、公益类用语都会被拒），
+   * 所以这里不重复写一份禁词表 —— 只把错误原样显示出来。
+   */
+  async saveCopy() {
+    if (this.data.savingCopy) return;
+
+    this.setData({ savingCopy: true, copyError: '' });
+    try {
+      const r = await api.post('/api/admin/copy', {
+        token: session.getToken(),
+        body: {
+          catTips: {
+            title: String(this.data.copyTitle || '').trim(),
+            items: this.data.copyItems.map((it) => ({
+              label: String(it.label || '').trim(),
+              text: String(it.text || '').trim(),
+            })),
+          },
+        },
+      });
+      const tips = copy.catTips((r && r.copy) || {});
+      this.setData({ copyTitle: tips.title, copyItems: tips.items.map((i) => ({ label: i.label, text: i.text })) });
+      // 本校缓存的副本也要换掉，否则学生端这一页还会显示旧的
+      await copy.refresh();
+      wx.showToast({ title: '已保存', icon: 'success' });
+    } catch (e) {
+      this.setData({ copyError: (e && e.message) || '保存失败' });
+    } finally {
+      this.setData({ savingCopy: false });
+    }
   },
 });
