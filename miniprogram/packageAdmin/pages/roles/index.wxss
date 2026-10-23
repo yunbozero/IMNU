@@ -6,6 +6,15 @@
   padding: 6rpx 8rpx 0; letter-spacing: 0.5rpx;
 }
 
+/* 搜索框：和「图鉴」页同一个样子，用户不用重新认 */
+.search {
+  display: flex; align-items: center; gap: 12rpx;
+  background: #fff; border-radius: 24rpx; padding: 18rpx 22rpx; margin-top: 20rpx;
+}
+.search__icon { font-size: 28rpx; }
+.search__input { flex: 1; font-size: 28rpx; color: var(--text); }
+.search__clear { font-size: 25rpx; color: var(--brand); padding: 0 6rpx; }
+
 /* 角色块：标题 + 一行两个卡片 */
 .block { margin-top: 30rpx; }
 .block__head {

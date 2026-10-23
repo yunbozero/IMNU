@@ -200,6 +200,20 @@ test('界面：「我的」页能换头像，角色管理页显示头像 + 分�
   assert.match(rolesJs, /还能再任命其他一级管理员/, '提 admin 时要写清后果');
 });
 
+test('角色管理：能按昵称搜人（学生那一块人多，翻起来累）', () => {
+  const wxml = read(path.join(MP, 'packageAdmin/pages/roles/index.wxml'));
+  assert.match(wxml, /bindinput="onSearch"/, '要有搜索框');
+  assert.match(wxml, /bindtap="clearSearch"/, '要能清除');
+
+  const js = read(path.join(MP, 'packageAdmin/pages/roles/index.js'));
+  assert.match(js, /applyFilter/, '过滤逻辑要单独一个函数');
+  assert.match(js, /this\.allSections\s*=/, '原始数据要留着 —— 每敲一个字都重拉接口太浪费');
+  assert.match(js, /this\.allSections\s*\.map/, '在本地过滤，不发请求');
+
+  // ★ 搜索是**跨角色**的：找人不该先知道他是哪一档
+  assert.match(js, /users\.filter\(\(u\) => String\(u\.name\)/);
+});
+
 /* ============================================================
    本届负责人（只读名单）
    ============================================================ */

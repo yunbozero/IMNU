@@ -50,6 +50,9 @@ Page({
     // 顶部一行汇总，例如「一级 2/3 · 副主任 3/5」
     summary: '',
     iAmOwner: false,
+    // 搜索：学生那一块可能几十上百人，翻起来累
+    keyword: '',
+    searching: false,
   },
 
   onShow() {
@@ -101,12 +104,43 @@ Page({
         summary: parts.join(' · '),
         iAmOwner: !!(this.me && this.me.role === 'owner'),
       });
+
+      // 原始数据留着给搜索用 —— 每次改关键词都重新拉一遍接口太浪费
+      this.allSections = sections;
+      if (this.data.searching) this.applyFilter();
     } catch (e) {
       if (e && e.code === 'need_register') return session.handleError(e);
       this.setData({ error: (e && e.message) || '加载失败' });
     } finally {
       this.setData({ loading: false });
     }
+  },
+
+  /* ---------------- 搜索 ---------------- */
+
+  onSearch(e) {
+    this.setData({ keyword: e.detail.value, searching: !!e.detail.value.trim() });
+    this.applyFilter();
+  },
+
+  clearSearch() {
+    this.setData({ keyword: '', searching: false });
+    if (this.allSections) this.setData({ sections: this.allSections });
+  },
+
+  /**
+   * 按昵称过滤。**跨角色搜** —— 找人不该先知道他是哪一档。
+   * 搜完仍然按角色分块显示，只是每块里只剩匹配的人；空块不画。
+   */
+  applyFilter() {
+    const kw = String(this.data.keyword || '').trim().toLowerCase();
+    if (!kw || !this.allSections) return;
+
+    this.setData({
+      sections: this.allSections
+        .map((s) => ({ ...s, users: s.users.filter((u) => String(u.name).toLowerCase().includes(kw)) }))
+        .filter((s) => s.users.length > 0),
+    });
   },
 
   /* ---------------- 详情 ---------------- */

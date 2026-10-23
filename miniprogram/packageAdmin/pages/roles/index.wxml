@@ -7,6 +7,24 @@
   <block wx:if="{{!error}}">
     <view class="summary" wx:if="{{summary}}">{{summary}}</view>
 
+    <!-- 搜索：学生那一块人多，翻起来累。跨角色搜，找人不该先知道他是哪一档 -->
+    <view class="search">
+      <text class="search__icon">🔍</text>
+      <input
+        class="search__input"
+        value="{{keyword}}"
+        placeholder="按昵称搜人"
+        confirm-type="search"
+        bindinput="onSearch"
+      />
+      <text wx:if="{{keyword}}" class="search__clear" bindtap="clearSearch">清除</text>
+    </view>
+
+    <view wx:if="{{searching && sections.length === 0}}" class="empty">
+      <view class="empty__icon">🔍</view>
+      <view class="empty__text">没找到叫「{{keyword}}」的已登记账号</view>
+    </view>
+
     <!-- 我的账号：单独一块，跟在超管后面。改权限时最常看的就是这两块。 -->
     <view class="block" wx:if="{{meCard}}">
       <view class="block__head">
