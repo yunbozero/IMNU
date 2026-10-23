@@ -167,6 +167,28 @@ test('校验：文件不存在 / 不是数据库 / 缺表，都要判定为不�
   }
 });
 
+test('备份：丢了图鉴（cats / cats_images）必须判不合格', () => {
+  // ★ 这条是补漏：REQUIRED_TABLES 原来只有义卖那几张表，于是
+  //   「图鉴整张表丢了的备份」照样判 ok —— 恢复之后 42 只猫和照片索引全没了，
+  //   而校验一声不吭。这类漏判比备份失败更危险：你以为你有备份。
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'backup-cats-'));
+  try {
+    const file = path.join(dir, 'no-cats.db');
+    const db = openMigrated(file);
+    db.exec('DROP TABLE cats_images');
+    db.exec('DROP TABLE cats');
+    db.close();
+
+    const info = inspectBackup(file);
+    assert.equal(info.ok, false, '没有图鉴的备份不能算合格');
+    assert.ok(info.missing.includes('cats'));
+    assert.ok(info.missing.includes('cats_images'));
+    assert.ok(REQUIRED_TABLES.includes('settings'), 'settings 也要算进去（每账号上限存那儿）');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 /* ============================================================
    轮转
    ============================================================ */

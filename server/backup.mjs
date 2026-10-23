@@ -24,9 +24,17 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { PROD_IMAGE_DIR } from './images.mjs';
 
-/** 备份文件必须有的表。少一张就说明这份备份不可用。 */
+/**
+ * 备份文件必须有的表。少一张就说明这份备份不可用。
+ *
+ * ★ 图鉴的三张表（cats / cats_images）和 settings 也必须在这里：
+ *   漏掉的话，一份**丢了整个图鉴**的备份照样判「合格」——
+ *   恢复之后 42 只猫和它们的照片索引全没了，而校验环节一声不吭。
+ *   这类漏判比备份失败更危险：你以为有备份。
+ */
 export const REQUIRED_TABLES = [
   'users', 'events', 'stalls', 'items', 'reservations', 'audit_logs',
+  'cats', 'cats_images', 'settings',
 ];
 
 export function timestampName(d = new Date()) {

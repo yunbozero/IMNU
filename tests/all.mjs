@@ -19,6 +19,7 @@ import './backup.test.mjs';
 import './announcement.test.mjs';
 import './cat-gallery.test.mjs';
 import './cats.test.mjs';
+import './csv-time.test.mjs';
 import './deploy.test.mjs';
 import './db-migration.test.mjs';
 import './dev-runtime.test.mjs';

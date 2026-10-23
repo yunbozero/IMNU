@@ -1761,15 +1761,12 @@ export const CSV_HEADER = ['取货码', '物品', '数量', '取货人', '学号
 
 const STATUS_CN = { reserved: '待取货', redeemed: '已取货', cancelled: '已取消' };
 
-function fmtTime(ts) {
-  if (!ts) return '';
-  const d = new Date(Number(ts));
-  const p = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
-}
-
 /**
  * 导出 CSV。
+ *
+ * 时间一律用 `formatEventTime`（**北京时间**），不要自己写 `getHours()` ——
+ * 那是**服务器本地时区**：部署机是 UTC 时，导出的纸质名单上「预定/核销时间」
+ * 会整整齐齐差 8 小时，而且本地怎么测都是对的。这条以前写错过一次。
  *
  * 前面加 BOM 是故意的：不加的话 Excel 打开中文会变乱码，
  * 而这份文件的主要用途就是打印 —— 乱码的名单在现场没法用。
@@ -1785,8 +1782,8 @@ export function toCsv(rows) {
       r.userName,
       r.userSid,
       STATUS_CN[r.status] || r.status,
-      fmtTime(r.createdAt),
-      fmtTime(r.redeemedAt),
+      formatEventTime(r.createdAt),
+      formatEventTime(r.redeemedAt),
     ].map(csvCell).join(','));
   }
   return '\uFEFF' + lines.join('\r\n') + '\r\n';
