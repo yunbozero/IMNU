@@ -226,6 +226,7 @@ export function attachImages({ dir, dbPath, imageDir, log = console.log } = {}) 
     const wanted = indexImages(dir);
     const skippedOversize = [];
     const unknown = [];
+    const duplicates = [];
     let covers = 0;
     let photos = 0;
 
@@ -246,6 +247,9 @@ export function attachImages({ dir, dbPath, imageDir, log = console.log } = {}) 
             repo.updateCat(cat.id, { image: saved });
             covers += 1;
           }
+        } else if (coverBuf) {
+          // 封面和某张已存在的图同内容（很常见：封面就是相册里的第一张）
+          duplicates.push(`${media.cover}（与已有图片相同）`);
         }
       }
 
@@ -258,7 +262,11 @@ export function attachImages({ dir, dbPath, imageDir, log = console.log } = {}) 
         let buf;
         try { buf = fs.readFileSync(file); } catch { continue; }
         const h = hashOf(buf);
-        if (known.has(h)) continue;               // 已经导过（或本来就在相册里）
+        if (known.has(h)) {
+          // 同内容的图跳过 —— 但要说出来，否则「怎么少了两张」没人查得动
+          duplicates.push(`${ph.file}（与已有图片相同）`);
+          continue;
+        }
         const saved = importImage(file, imageDir, skippedOversize);
         if (!saved) continue;
         known.add(h);
@@ -271,6 +279,11 @@ export function attachImages({ dir, dbPath, imageDir, log = console.log } = {}) 
     }
 
     log(`\n补图完成：${covers} 张主图、${photos} 张相册`);
+    if (duplicates.length) {
+      log(`ℹ️ ${duplicates.length} 张与已有图片内容完全相同，已跳过（不是失败）：`);
+      for (const d of duplicates) log('   · ' + d);
+      log('   常见原因：封面本来就用的是某张相册照片；或者老数据里同一张图被挂到了两只猫上。');
+    }
     if (unknown.length) log(`⚠️ 有 ${unknown.length} 组图在库里找不到同名猫，已跳过：${unknown.join('、')}`);
     if (skippedOversize.length) {
       log(`⚠️ ${skippedOversize.length} 张仍有问题：`);
@@ -278,7 +291,7 @@ export function attachImages({ dir, dbPath, imageDir, log = console.log } = {}) 
     }
     log(`库：${dbPath}`);
 
-    return { covers, photos, unknown, oversize: skippedOversize };
+    return { covers, photos, unknown, duplicates, oversize: skippedOversize };
   } finally {
     db.close();
   }

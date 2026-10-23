@@ -241,6 +241,9 @@ test('补图：封面和相册都能补进去，内容重复的自动跳过', ()
 
     assert.equal(r.covers, 1);
     assert.equal(r.photos, 1, '同内容那张要被哈希判重跳过，只该补进 1 张');
+    // ★ 跳过要说出来：「怎么少了一张」不解释的话没人查得动
+    assert.equal(r.duplicates.length, 1, '被跳过的重复图要列出来');
+    assert.match(r.duplicates[0], /在校照片-中玳瑁-9\.jpg/);
 
     const db2 = openMigrated(env.dbPath);
     const repo2 = createSqliteRepository(db2);
