@@ -331,3 +331,26 @@ test('名单：页面注册了、入口在「我的」页、走的是 /api/membe
   assert.match(js, /\/api\/members/, '要读只读名单接口');
   assert.doesNotMatch(js, /settable|canTransferOwner|changeRole/, '这一页不能有任何改权限的动作');
 });
+
+/* ============================================================
+   改昵称
+   ============================================================ */
+
+test('昵称：能改一次；改成同名不占次数；当天改第二次被拦', () => {
+  const ctx = fixture();
+  try {
+    const stu = ctx.mkStudent('a');
+
+    const first = ctx.api.setMyName({ body: { name: '新名字' }, user: stu });
+    assert.equal(first.body.ok, true, JSON.stringify(first.body));
+    assert.equal(ctx.reload(stu.id).name, '新名字');
+
+    // 同名再设一次：幂等，不占用今天的次数（防止误触把一天锁死）
+    const same = ctx.api.setMyName({ body: { name: '新名字' }, user: ctx.reload(stu.id) });
+    assert.equal(same.body.ok, true);
+
+    const second = ctx.api.setMyName({ body: { name: '又改一个' }, user: ctx.reload(stu.id) });
+    assert.equal(second.status, 429, '每天只能改一次');
+    assert.equal(ctx.reload(stu.id).name, '新名字', '被拦时名字不变');
+  } finally { ctx.close(); }
+});

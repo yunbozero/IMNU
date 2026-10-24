@@ -52,11 +52,11 @@
 
     <view class="keys">
       <view class="keys__item" wx:for="{{[1,2,3,4,5,6,7,8,9]}}" wx:key="*this">
-        <button class="keys__btn" data-k="{{item}}" bindtap="onKey"><text class="keys__num">{{item}}</text></button>
+        <view class="keys__key" data-k="{{item}}" bindtap="onKey" hover-class="keys__key--hover">{{item}}</view>
       </view>
-      <view class="keys__item"><button class="keys__btn keys__btn--fn" data-k="clear" bindtap="onKey"><text class="keys__num keys__num--fn">清空</text></button></view>
-      <view class="keys__item"><button class="keys__btn" data-k="0" bindtap="onKey"><text class="keys__num">0</text></button></view>
-      <view class="keys__item"><button class="keys__btn keys__btn--fn" data-k="del" bindtap="onKey"><text class="keys__num keys__num--fn">⌫</text></button></view>
+      <view class="keys__item"><view class="keys__key keys__key--fn" data-k="clear" bindtap="onKey" hover-class="keys__key--hover">清空</view></view>
+      <view class="keys__item"><view class="keys__key" data-k="0" bindtap="onKey" hover-class="keys__key--hover">0</view></view>
+      <view class="keys__item"><view class="keys__key keys__key--fn" data-k="del" bindtap="onKey" hover-class="keys__key--hover">⌫</view></view>
     </view>
   </view>
 </view>

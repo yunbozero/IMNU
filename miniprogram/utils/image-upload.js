@@ -70,6 +70,27 @@ function readBase64(filePath) {
   });
 }
 
+/**
+ * 裁剪（可选）。用**微信原生**的 `wx.cropImage`，不引第三方库。
+ *
+ * 需要基础库 2.26.0+；低版本没有这个方法就原样返回 —— 功能降级，不报错。
+ * `cropScale` 只支持固定比例（1:1 / 3:4 / 4:3 / 9:16 / 16:9），头像用 1:1。
+ *
+ * ★ 为什么头像要能裁：手机原图 3–5MB、构图还是「整张脸带半个身子」。
+ *   让用户「自己裁好再传」等于把麻烦推回去；裁完体积也天然降下来了。
+ */
+function cropIfPossible(src, cropScale) {
+  return new Promise((resolve) => {
+    if (!cropScale || typeof wx.cropImage !== 'function') return resolve(src);
+    wx.cropImage({
+      src,
+      cropScale,
+      success: (res) => resolve((res && res.tempFilePath) || src),
+      fail: () => resolve(src),      // 取消裁剪 = 用原图，不当成失败
+    });
+  });
+}
+
 /** 单张：压缩 → 读 base64 → 传。多选时按顺序一张一张传，成功一张是一张。 */
 async function uploadOne(filePath, token, endpoint = '/api/admin/image') {
   try {
@@ -103,14 +124,17 @@ async function uploadOne(filePath, token, endpoint = '/api/admin/image') {
  * 成功时：`image` 是服务端生成的文件名，`previewPath` 是本地临时路径
  * （拿它做预览比用远端地址快，而且不依赖网络）。
  */
-export async function pickAndUploadImage({ token, endpoint = '/api/admin/image' } = {}) {
+export async function pickAndUploadImage({ token, endpoint = '/api/admin/image', crop } = {}) {
   const picked = await chooseImage(1);
   if (!picked.length) return { ok: false, cancelled: true };
+
+  // 头像传 crop: '1:1'，会先弹微信原生的裁剪界面（低版本自动跳过）
+  const src = await cropIfPossible(picked[0], crop);
 
   // 上传要一两秒，中途没反馈会让人以为点空了
   wx.showLoading({ title: '上传中…', mask: true });
   try {
-    const one = await uploadOne(picked[0], token, endpoint);
+    const one = await uploadOne(src, token, endpoint);
     if (!one.ok) return one;
     return { ok: true, image: one.image, url: one.url, previewPath: one.previewPath };
   } finally {

@@ -112,6 +112,8 @@ Page({
     const up = await pickAndUploadImage({
       token: session.getToken(),
       endpoint: '/api/me/avatar',
+      // 头像统一裁成 1:1：原生裁剪界面（wx.cropImage，基础库 2.26+，低版本自动跳过）
+      crop: '1:1',
     });
     if (!up.ok) {
       reportImageResult(up);

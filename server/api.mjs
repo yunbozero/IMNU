@@ -133,6 +133,15 @@ export const SOFT_ROLE_LIMITS = ['deputy'];
  */
 export const AVATAR_LIMIT = { max: 5, windowMs: 24 * 60 * 60 * 1000 };
 
+/**
+ * 改昵称的频率：**每人每天 1 次**。
+ *
+ * 为什么不是「一个月一次」：昵称打错一个字要等一个月，那是折磨用户。
+ * 但也不能随便改 —— 昵称是现场核对取货人的凭据，一天改八次会让名单对不上。
+ * 每天 1 次：改错当场就能补救，反复改又做不到。
+ */
+export const RENAME_LIMIT = { windowMs: 24 * 60 * 60 * 1000 };
+
 /* ---------------- 可改文案 ---------------- */
 
 /**
@@ -465,6 +474,16 @@ export function createApi({
     }
     if (rec.count >= AVATAR_LIMIT.max) return false;
     rec.count += 1;
+    return true;
+  };
+
+  /* 改昵称：每人每天 1 次（内存里记，重启清零可以接受） */
+  const renameAt = new Map();
+  const allowRename = (userId) => {
+    const now = Date.now();
+    const last = renameAt.get(userId);
+    if (last && now - last < RENAME_LIMIT.windowMs) return false;
+    renameAt.set(userId, now);
     return true;
   };
 
@@ -823,6 +842,13 @@ export function createApi({
 
       const name = asNickname(body?.name);
       if (!name) return fail('bad_request', '昵称要 1–16 个字', 400);
+
+      // 改成同一个名字不算修改，也不占今天的次数（免得误触就锁一天）
+      if (name === user.name) return ok({ user });
+
+      if (!allowRename(user.id)) {
+        return fail('rate_limited', '今天已经改过昵称了，明天再试', 429);
+      }
 
       const r = repo.updateUserName(user.id, name);
       if (!r.ok) return fail('not_found', '找不到这个账号', 404);

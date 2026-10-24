@@ -213,3 +213,21 @@ page {
 .keys__num { line-height: 1; }
 .keys__num--fn { font-size: 30rpx; color: var(--text-2); }
 .keys__btn--fn { font-size: 30rpx; color: var(--text-2); background: transparent; }
+
+/* ---------- 取货码键盘（用 view 而不是 button） ----------
+   ★ button 在 iOS / Android 两端的默认 padding、text-align、行高都不一样，
+   用 line-height + text-align 居中在 iOS 上准、在 Android 上偏，
+   现场看起来就是「数字没对齐」。换成普通 view 之后这些默认样式都不存在了。 */
+.keys__key {
+  height: 112rpx;
+  line-height: 112rpx;
+  text-align: center;
+  border-radius: 26rpx;
+  background: #F6EFEA;
+  font-size: 42rpx;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+}
+.keys__key--fn { font-size: 30rpx; color: var(--text-2); background: transparent; }
+.keys__key--hover { background: #EFE3DA; }

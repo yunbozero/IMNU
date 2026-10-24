@@ -53,13 +53,24 @@ test('「我的」页：登记过的人不该再看到填名字的框', () => {
   assert.doesNotMatch(wxml, /退出登录/, '别再说「退出登录」—— 会让人以为账号没了');
 });
 
-test('取货码键盘：数字用 text 包住，且清掉 button 默认内边距', () => {
+test('头像：上传前弹原生裁剪（wx.cropImage，低版本自动跳过）', () => {
+  const up = read(path.join(MP, 'utils/image-upload.js'));
+  assert.match(up, /wx\.cropImage\(/, '要用微信原生裁剪，不引第三方库');
+  assert.match(up, /cropScale/, '头像用 1:1 比例');
+  assert.match(up, /typeof wx\.cropImage !== 'function'/, '低版本要降级，不能直接崩');
+
+  const js = read(path.join(MP, 'pages/profile/index.js'));
+  assert.match(js, /crop:\s*'1:1'/, '头像走 1:1 裁剪');
+});
+
+test('取货码键盘：用 view 而不是 button（两端默认样式不一样）', () => {
   const wxml = read(path.join(MP, 'packageBazaar/pages/scan/index.wxml'));
-  assert.match(wxml, /class="keys__num"/, '数字要包一层 text（button 的行高会把字带偏）');
+  assert.match(wxml, /class="keys__key"/, '数字键要用普通 view');
+  assert.doesNotMatch(wxml, /class="keys__btn"/, 'button 在 iOS / Android 上默认样式不同，数字会偏');
 
   const wxss = read(path.join(MP, 'app.wxss'));
-  const btn = /\.keys__btn \{[\s\S]*?\n\}/.exec(wxss);
-  assert.ok(btn, '找不到 .keys__btn');
-  assert.match(btn[0], /padding:\s*0/, '微信 button 默认左右内边距会把数字挤偏');
-  assert.match(wxss, /\.keys__num \{/, '要有 text 层的行高修正');
+  const key = /\.keys__key \{[\s\S]*?\n\}/.exec(wxss);
+  assert.ok(key, '找不到 .keys__key');
+  assert.match(key[0], /line-height:\s*112rpx/, '用 line-height 垂直居中（不依赖 flex）');
+  assert.match(key[0], /text-align:\s*center/, '水平居中');
 });

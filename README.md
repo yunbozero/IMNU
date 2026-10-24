@@ -60,7 +60,7 @@
 ## 跑起来
 
 ```bash
-npm test          # 全部测试（626 项）
+npm test          # 全部测试（628 项）
 npm run serve     # 打开 http://localhost:8080/ 看原型演示台
 npm start         # 起后端接口
 npm run dev       # 本地开发用这个：node --watch，改完 server/ 自动重启
@@ -150,7 +150,7 @@ npm start
 | `server/` | 后端：数据模型与仓储、HTTP 接口、图片、备份 |
 | `miniprogram/` | 微信小程序：主包 + 三个分包 |
 | `deploy/` | 阿里云部署：bootstrap、发布脚本、nginx、systemd |
-| `tests/` | 626 项测试：合规红线、结构、状态机、**并发与不变量** |
+| `tests/` | 628 项测试：合规红线、结构、状态机、**并发与不变量** |
 | `scripts/` | 建活动/摊位/物品、设立超管与提权、长图渲染 |
 | `prototype/` | 可点击的 HTML 原型（学生端 + 志愿者核销端） |
 | `docs/` | 见下表 |
