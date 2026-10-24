@@ -48,10 +48,12 @@ Page({
     if (!session.getUser() || !session.getToken()) return;
     try {
       await session.refreshUser();
-      this.refresh();
     } catch {
-      // 静默：用缓存里的角色继续显示
+      // 静默：网络抖动就继续用缓存里的角色。
+      // ★ 但 401 时 refreshUser 已经把登录态清掉了 —— 那时必须重画一次，
+      //   否则页面还挂着「已登录」的样子，而每个请求都被拒。
     }
+    this.refresh();
   },
 
   refresh() {
@@ -71,6 +73,17 @@ Page({
   /** 点头像 → 选图 → 上传（学生也能改自己的） */
   async changeAvatar() {
     if (!this.data.user) return undefined;
+
+    // ★ 先确认服务端认这个 token：本地有 token 不代表它还有效
+    //   （过期，或服务端换过签名密钥）。否则就是「看起来登录了，传什么都 401」。
+    try {
+      await session.ensureSession({ verify: true });
+    } catch (e) {
+      session.handleError(e);
+      this.refresh();
+      return undefined;
+    }
+
     const up = await pickAndUploadImage({
       token: session.getToken(),
       endpoint: '/api/me/avatar',
@@ -85,6 +98,34 @@ Page({
       await session.refreshUser();
     } catch { /* 拉不到就先显示本地图，下次进页面会补上 */ }
     this.refresh();
+    return undefined;
+  },
+
+  /** 改昵称：注册之后唯一能改的资料（以前填错只能找管理员改库） */
+  async rename() {
+    const old = (this.data.user && this.data.user.name) || '';
+    const res = await new Promise((resolve) => {
+      wx.showModal({
+        title: '改昵称',
+        editable: true,
+        placeholderText: '1–16 个字，现场核对取货人用',
+        content: old,
+        success: (r) => resolve(r && r.confirm ? String(r.content || '').trim() : null),
+        fail: () => resolve(null),
+      });
+    });
+    if (res === null) return undefined;              // 取消了
+    if (!res) return wx.showToast({ title: '昵称不能为空', icon: 'none' });
+
+    try {
+      await session.ensureSession({ verify: true });
+      const r = await api.post('/api/me/name', { token: session.getToken(), body: { name: res } });
+      session.setUser(r.user);
+      this.refresh();
+      wx.showToast({ title: '已改', icon: 'success' });
+    } catch (e) {
+      session.handleError(e);
+    }
     return undefined;
   },
 

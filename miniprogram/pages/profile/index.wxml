@@ -13,9 +13,10 @@
         />
         <text wx:else>{{avatarText}}</text>
       </view>
-      <view class="me__name">{{user.name}}</view>
+      <view class="me__name" bindtap="rename">{{user.name}}</view>
       <view class="me__role">{{roleText}}</view>
       <view class="me__hint" bindtap="changeAvatar">点头像换头像</view>
+      <view class="me__hint" bindtap="rename">点名字改昵称</view>
       <view wx:if="{{avatarUrl}}" class="me__hint me__hint--plain" bindtap="clearAvatar">移除头像</view>
     </view>
 

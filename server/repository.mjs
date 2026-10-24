@@ -45,6 +45,7 @@ export const REPOSITORY_METHODS = [
   'updateItem',
   'setUserRole',
   'updateUserAvatar',
+  'updateUserName',
   'bootstrapOwner',
   'transferOwnership',
   'countOwners',
@@ -709,6 +710,18 @@ export function createSqliteRepository(db) {
     updateUserAvatar(userId, avatar) {
       const r = db.prepare('UPDATE users SET avatar = ? WHERE id = ?')
         .run(avatar === undefined ? null : avatar, userId);
+      if (r.changes === 0) return { ok: false, reason: 'not_found' };
+      return { ok: true, user: repo.findUserById(userId) };
+    },
+
+    /**
+     * 改昵称。
+     *
+     * 注册时填的那个名字**以前改不了** —— 打错一个字只能找管理员上服务器动库。
+     * 昵称是现场核对取货人用的，本来就该允许自己改。
+     */
+    updateUserName(userId, name) {
+      const r = db.prepare('UPDATE users SET name = ? WHERE id = ?').run(name, userId);
       if (r.changes === 0) return { ok: false, reason: 'not_found' };
       return { ok: true, user: repo.findUserById(userId) };
     },

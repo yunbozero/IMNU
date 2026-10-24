@@ -813,6 +813,23 @@ export function createApi({
     },
 
     /**
+     * 改自己的昵称。注册之后唯一能改的资料。
+     *
+     * 以前没有这个接口：昵称填错了只能找管理员上服务器改库。
+     * 昵称是现场核对取货人用的，自己本来就该能改。
+     */
+    setMyName({ body, user }) {
+      if (!user) return fail('unauthorized', '请先登录', 401);
+
+      const name = asNickname(body?.name);
+      if (!name) return fail('bad_request', '昵称要 1–16 个字', 400);
+
+      const r = repo.updateUserName(user.id, name);
+      if (!r.ok) return fail('not_found', '找不到这个账号', 404);
+      return ok({ user: r.user });
+    },
+
+    /**
      * 管理员清掉某人的头像。
      *
      * 头像是用户上传的内容，而这一版没有自动检测 —— 这个接口就是**处置手段**：

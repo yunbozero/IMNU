@@ -180,17 +180,48 @@ export async function register(name) {
 
 /** 拉一次最新的用户信息（比如角色被改过） */
 export async function refreshUser() {
-  const r = await api.get('/api/me', { token: getToken() });
-  saveSession({ scope: 'user', user: r.user });
-  return r.user;
+  try {
+    const r = await api.get('/api/me', { token: getToken() });
+    saveSession({ scope: 'user', user: r.user });
+    return r.user;
+  } catch (e) {
+    // ★ 401 = 本地那个 token 已经不算数了（过期，或者服务端换了签名密钥 ——
+    //   迁移数据、重新部署之后就会这样）。这里**必须把本地登录态清掉**，
+    //   否则界面一直显示「已登录」，而每个请求都被拒，用户看到的是
+    //   「我明明登录了，可什么都点不动」。
+    if (e && (e.status === 401 || e.code === 'unauthorized')) clearSession();
+    throw e;
+  }
+}
+
+/** 本地更新缓存的用户信息（改昵称这类接口已经返回了新 user，不用再拉一次） */
+export function setUser(user) {
+  if (!user) return;
+  saveSession({ scope: 'user', user });
 }
 
 /**
  * 需要「已登记用户」的页面调它。
  * 没登记时抛一个 code === 'need_register' 的错误，页面跳去登记。
+ *
+ * `verify: true` 会**真的问一次服务端** token 还有效没有。普通页面不需要
+ * （每次进页面多一次往返），但在「做一件依赖登录的事」之前值得：
+ * 本地有 token 不等于服务端认它。
  */
-export async function ensureSession() {
-  if (getUser() && getToken()) return getUser();
+export async function ensureSession({ verify = false } = {}) {
+  const cachedUser = getUser();
+  const cachedToken = getToken();
+
+  if (cachedUser && cachedToken) {
+    if (!verify) return cachedUser;
+    try {
+      return (await refreshUser()) || cachedUser;
+    } catch (e) {
+      // 401 时 refreshUser 已经把本地态清掉了，落到下面重新登录；
+      // 其它错误（超时/断网）继续用缓存 —— 不能因为一次抖动就把人踢出去
+      if (!(e && e.status === 401)) return cachedUser;
+    }
+  }
 
   const r = await login();
   if (!r.registered) {

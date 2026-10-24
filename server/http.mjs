@@ -59,6 +59,8 @@ export const ROUTES = {
   'POST /api/login': { handler: 'login', auth: 'none' },
   'POST /api/register': { handler: 'register', auth: 'register' },
   'GET /api/me': { handler: 'me', auth: 'user' },
+  // 改自己的昵称（填错了不用再找管理员改库）
+  'POST /api/me/name': { handler: 'setMyName', auth: 'user' },
   // 本届负责人名单：已登记用户可读，只回名字/头像/角色（不含学生、不含权限结构）
   'GET /api/members': { handler: 'listMembers', auth: 'user' },
   // 换自己的头像（学生也能用 —— 角色管理页靠头像认人）

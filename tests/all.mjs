@@ -29,6 +29,7 @@ import './init-event.test.mjs';
 import './images.test.mjs';
 import './docs.test.mjs';
 import './import-cats.test.mjs';
+import './login-cache.test.mjs';
 import './list-stall.test.mjs';
 import './invariants.test.mjs';
 import './lan.test.mjs';

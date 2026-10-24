@@ -204,6 +204,12 @@ page {
   height: 112rpx; border-radius: 26rpx; background: #F6EFEA;
   display: flex; align-items: center; justify-content: center;
   font-size: 42rpx; font-weight: 600; border: 0;
+  /* ★ 微信 button 默认带左右内边距，会把数字挤偏（现场看着像「没对齐」）。
+     归零 + 内部用 text 承载字号，数字才真正落在格子中间。 */
+  padding: 0; margin: 0; line-height: 1;
 }
 .keys__btn::after { border: 0; }
+/* 数字用 text 包一层：button 上的 font-size 会被行高带偏，text 里更稳 */
+.keys__num { line-height: 1; }
+.keys__num--fn { font-size: 30rpx; color: var(--text-2); }
 .keys__btn--fn { font-size: 30rpx; color: var(--text-2); background: transparent; }
