@@ -758,6 +758,40 @@ test('部署：密钥没填要在发布时喊出来，而且不能把密钥本�
     '不能 cat 整个 env 文件 —— 里面就是 AppSecret');
 });
 
+test('部署：nginx 有限流，且登录口比一般接口更严', () => {
+  const conf = NGINX();
+
+  // 限流区必须定义在 server 块**外面**（http 级），写在里面 nginx -t 直接报错
+  const zones = /limit_req_zone\s+\$binary_remote_addr\s+zone=(\w+):\d+m\s+rate=(\d+)r\/s/g;
+  const found = {};
+  let m;
+  while ((m = zones.exec(conf)) !== null) found[m[1]] = Number(m[2]);
+
+  assert.ok(found.api_all, '没有 api_all 限流区 —— 脚本能把接口打满');
+  assert.ok(found.api_auth, '没有 api_auth 限流区 —— 登录口可以被反复调');
+  assert.ok(conf.indexOf('limit_req_zone') < conf.indexOf('server {'),
+    'limit_req_zone 要写在 server 块外面（它是 http 级指令）');
+
+  // ★ 数字要**宽**：校园网是 NAT，几百人共用一个出口 IP，
+  //   收得太紧会在活动开放那一秒误伤一大片 —— 那比被刷更糟。
+  assert.ok(found.api_all >= 20,
+    `api_all 只有 ${found.api_all} r/s，校园 NAT 下容易误伤；至少 20`);
+  assert.ok(found.api_auth < found.api_all, '登录口必须比一般接口更严');
+
+  // 具体接线：/api/ 用 api_all，登录注册用 api_auth
+  assert.match(conf, /location \/api\/ \{[\s\S]*?limit_req zone=api_all/, '/api/ 没接上限流');
+  for (const p of ['login', 'register']) {
+    const block = new RegExp(`location = /api/${p} \\{[\\s\\S]*?limit_req zone=api_auth`);
+    assert.match(conf, block, `/api/${p} 要用更严的 api_auth`);
+  }
+
+  // 被限流时返回 429（默认是 503，客户端会当成「服务挂了」）
+  assert.match(conf, /limit_req_status 429/, '限流应返回 429，而不是默认的 503');
+
+  // 说明里要留下「NAT 会误伤」这个判断，否则下一个人会把它收紧
+  assert.match(conf, /NAT/, '注释要写清为什么数字这么宽（校园网 NAT）');
+});
+
 test('部署：nginx 的 body 上限必须大于应用自己的上限', () => {
   // 反过来的话，超限请求会被 nginx 用一个 HTML 的 413 挡掉，
   // 小程序那边只能显示「网络错误」，看不出是图太大。

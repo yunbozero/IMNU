@@ -210,6 +210,14 @@ if [ -f "$NGINX_SITE" ]; then
     warn "  修法：把 deploy/nginx.conf 里那段 location /images/ 合并进 $NGINX_SITE，然后"
     warn "    sudo nginx -t && sudo systemctl reload nginx"
   fi
+
+  # 限流：仓库里加了 api_all / api_auth 两个限流区，同样不会自动生效
+  if ! grep -q 'limit_req_zone' "$NGINX_SITE"; then
+    warn "nginx 站点里没有限流（limit_req_zone）—— 别人写个脚本就能把接口打满"
+    warn "  修法：把 deploy/nginx.conf 顶部的 limit_req_zone 三行、"
+    warn "    以及 location /api/ 里的 limit_req 合并进 $NGINX_SITE，然后"
+    warn "    sudo nginx -t && sudo systemctl reload nginx"
+  fi
 else
   warn "找不到 $NGINX_SITE —— nginx 还在用默认站点？"
 fi

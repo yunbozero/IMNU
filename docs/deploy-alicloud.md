@@ -674,6 +674,30 @@ sudo -u bazaar DB_PATH=/srv/bazaar/data/bazaar.db \
 > ```bash
 > sudo nginx -t && sudo systemctl reload nginx
 > ```
+
+### 限流（同样要人工合并）
+
+仓库的 `deploy/nginx.conf` 顶部有三个 http 级指令：
+
+```nginx
+limit_req_zone $binary_remote_addr zone=api_all:10m  rate=30r/s;
+limit_req_zone $binary_remote_addr zone=api_auth:10m rate=2r/s;
+limit_req_status 429;
+```
+
+`location /api/` 里接 `limit_req zone=api_all burst=60 nodelay`；
+`/api/login` 和 `/api/register` 单独接更严的 `api_auth`（burst=10）。
+
+> **为什么数字这么宽**：校园网是 NAT，几百个同学可能共用一个出口 IP。
+> 按 IP 限速时这个 IP 代表「一整栋楼」，收得太紧会在活动开放那一秒误伤一大片 ——
+> 那比被脚本刷更糟。这里的目标是挡住明显的猛打，不是精确控速。
+>
+> `limit_req_status 429` 是故意的：默认的 503 会让客户端以为「服务挂了」，
+> 429 才是「你太快了」。
+
+同样地，它不会自动生效（原因见上）。`deploy.sh` 每次发布都会检查
+`/etc/nginx/sites-available/bazaar` 里有没有 `limit_req_zone`，没有就 warn。
+合并完记得 `sudo nginx -t && sudo systemctl reload nginx`。
 > `deploy.sh` 每次发布都会检查这一段在不在，缺了就警告，所以不会忘。
 
 `deploy.sh` 会自己把照片目录补上（`install -d`，幂等）。发布完确认一下权限：
