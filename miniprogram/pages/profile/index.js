@@ -34,6 +34,31 @@ Page({
   onShow() {
     this.refresh();
     this.syncRole();
+    this.ensureProfile();
+  },
+
+  /**
+   * 本地没有登录态时**先静默登录一次**，再决定显示什么。
+   *
+   * ★ 为什么必须有：退出登录（或清了缓存）之后本地没有 user，
+   *   而表单的显示规则是 `needRegister = !user` —— 于是**登记过的人**也会看到
+   *   「填写昵称」，看着像要重新登记；可实际上 openid 一登录就把原账号找回来，
+   *   真去填还会被告知「已经登记过了」。白白让人多操作一轮。
+   *
+   *   「未登录」和「未登记」是两件事：
+   *     · 未登录 = 本机没 token（会自动恢复，不该打扰人）
+   *     · 未登记 = 服务端没有这个 openid 的账号（才需要填昵称）
+   */
+  async ensureProfile() {
+    if (session.getUser() && session.getToken()) return;
+
+    try {
+      const r = await session.login();     // 静默：不弹任何东西
+      if (r && r.registered) this.refresh();
+    } catch {
+      // 登录失败就保持表单 —— 至少还能手动填一次，不至于整页空白
+    }
+    this.refresh();
   },
 
   /**
@@ -270,18 +295,18 @@ Page({
 
   onLogout() {
     wx.showModal({
-      title: '退出登录',
+      title: '清除本机缓存',
       // ★ 这句原来是「退出后需要重新登记才能预定名额」—— **是假的**。
-      //   退出只清本机的 token 和缓存；服务端的账号还在，openid 一登录就把它找回来，
-      //   下次进来会自动登录，昵称和已定的名额都原样在。
-      //   照着旧文案理解，用户会以为「退出 = 换一个昵称重新登记」，
-      //   结果点完发现还是老账号，白折腾一轮。
-      content: '退出只是清掉本机的登录状态，账号和已定的名额都还在，再次进入会自动登录。确定吗？',
+      //   这里只清本机的 token 和缓存；服务端的账号还在，openid 一登录就把它找回来。
+      content: '只清掉这台手机上的登录状态，账号和已定的名额都还在，再次进入会自动登录。确定吗？',
       success: (res) => {
         if (!res.confirm) return;
         session.clearSession();
         this.refresh();
-        wx.showToast({ title: '已退出', icon: 'none' });
+        wx.showToast({ title: '已清除', icon: 'none' });
+        // 紧接着静默登录一次：openid 没变，账号马上就回来了，
+        // 不会让登记过的人对着「填写昵称」发愣
+        this.ensureProfile();
       },
     });
   },

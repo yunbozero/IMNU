@@ -111,7 +111,7 @@
       <view class="rule"><text class="rule__k rule__k--ok">及时取消：</text>无法到场请提前取消，把名额让给其他同学。</view>
     </view>
 
-    <view class="logout" bindtap="onLogout">退出登录</view>
+    <view class="logout" bindtap="onLogout">清除本机缓存</view>
   </block>
 
   <!-- 还没登记 -->

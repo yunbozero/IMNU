@@ -38,6 +38,21 @@ test('登录态：换头像 / 改昵称之前先校验 token', () => {
   assert.match(js, /session\.setUser\(/, '改完要用服务端返回的 user 更新缓存');
 });
 
+test('「我的」页：登记过的人不该再看到填名字的框', () => {
+  const js = read(path.join(MP, 'pages/profile/index.js'));
+
+  // 本地没登录态时先静默登录一次，已登记就直接恢复
+  assert.match(js, /async ensureProfile\(\)/, '需要一个「先登录再决定显示什么」的入口');
+  assert.match(js, /await session\.login\(\)/, '要静默登录（不是弹窗让人重新登记）');
+  assert.match(js, /r\.registered/, '按「服务端说登记过没有」决定显示');
+
+  // 「未登录」和「未登记」必须分开处理
+  assert.match(js, /needRegister: !user/, '表单仍然由 user 是否为空决定（这本身没错）');
+  const wxml = read(path.join(MP, 'pages/profile/index.wxml'));
+  assert.match(wxml, /清除本机缓存/, '按钮改名：它清的是缓存，不是账号');
+  assert.doesNotMatch(wxml, /退出登录/, '别再说「退出登录」—— 会让人以为账号没了');
+});
+
 test('取货码键盘：数字用 text 包住，且清掉 button 默认内边距', () => {
   const wxml = read(path.join(MP, 'packageBazaar/pages/scan/index.wxml'));
   assert.match(wxml, /class="keys__num"/, '数字要包一层 text（button 的行高会把字带偏）');
