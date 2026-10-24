@@ -792,6 +792,23 @@ test('部署：nginx 有限流，且登录口比一般接口更严', () => {
   assert.match(conf, /NAT/, '注释要写清为什么数字这么宽（校园网 NAT）');
 });
 
+test('部署：所有收图片的接口都必须声明大请求体（否则 413「请求体过大」）', () => {
+  // ★ 真实踩过：/api/me/avatar 上线后忘了声明 maxBytes，于是沿用了默认的 64KB。
+  //   用户传一张 1280×1280 的头像就收到「请求体过大」—— 图完全正常，
+  //   是服务端自己把口子卡死了。这类漏配不会在别的测试里暴露，
+  //   因为接口本身逻辑是对的。
+  const IMAGE_HANDLERS = ['adminUploadImage', 'setMyAvatar'];
+
+  const routes = fs.readFileSync(path.join(ROOT, 'server', 'http.mjs'), 'utf8');
+  for (const handler of IMAGE_HANDLERS) {
+    const re = new RegExp(`handler:\\s*'${handler}'[^}]*?\\}`, 's');
+    const block = re.exec(routes);
+    assert.ok(block, `路由表里找不到 handler: '${handler}'`);
+    assert.match(block[0], /maxBytes:\s*MAX_IMAGE_BODY_BYTES/,
+      `${handler} 没收图片，必须显式声明 maxBytes —— 默认 64KB 装不下一张头像`);
+  }
+});
+
 test('部署：nginx 的 body 上限必须大于应用自己的上限', () => {
   // 反过来的话，超限请求会被 nginx 用一个 HTML 的 413 挡掉，
   // 小程序那边只能显示「网络错误」，看不出是图太大。

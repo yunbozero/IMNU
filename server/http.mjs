@@ -64,7 +64,11 @@ export const ROUTES = {
   // 本届负责人名单：已登记用户可读，只回名字/头像/角色（不含学生、不含权限结构）
   'GET /api/members': { handler: 'listMembers', auth: 'user' },
   // 换自己的头像（学生也能用 —— 角色管理页靠头像认人）
-  'POST /api/me/avatar': { handler: 'setMyAvatar', auth: 'user' },
+  // 换自己的头像：**必须**声明大请求体，否则走默认的 64KB ——
+  // 一张正常手机照片的 base64 就有几百 KB，会直接 413「请求体过大」。
+  'POST /api/me/avatar': {
+    handler: 'setMyAvatar', auth: 'user', maxBytes: MAX_IMAGE_BODY_BYTES,
+  },
   'GET /api/reservations': { handler: 'listMyReservations', auth: 'user' },
   'POST /api/reserve': { handler: 'reserve', auth: 'user', rateLimit: true },
   'POST /api/cancel': { handler: 'cancel', auth: 'user' },
