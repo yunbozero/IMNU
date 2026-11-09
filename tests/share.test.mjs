@@ -43,6 +43,22 @@ test('分享：详情页要带上 id，点开直达那一件/那只', () => {
   assert.match(share, /encodeURIComponent/, 'id 要 encode，别拼出坏路径');
 });
 
+test('分享：卡片图优先用物品/猫自己的照片', async () => {
+  // 不传 imageUrl 时微信会截当前页面当卡片图，经常截到公告条或空白
+  const { shareItem, shareCat } = await import('../miniprogram/utils/share.js');
+
+  const withImage = shareItem({ id: 'it_1', name: '手作书签', image: 'img_ab.jpg' });
+  assert.ok(withImage.imageUrl, '有照片就要带上卡片图');
+  assert.match(withImage.imageUrl, /img_ab\.jpg$/);
+
+  const noImage = shareItem({ id: 'it_2', name: '旧物' });
+  assert.equal(noImage.imageUrl, undefined, '没照片就别塞空串，交给微信截图');
+
+  // 页面已经算好 imageUrl 的（详情页就是这么干的）直接用
+  const precomputed = shareCat({ id: 'c_1', name: '大橘', imageUrl: 'https://x/y.jpg' });
+  assert.equal(precomputed.imageUrl, 'https://x/y.jpg');
+});
+
 test('分享：文案里不许出现交易/金额口径', () => {
   // 这些字会出现在转发卡片上 —— 和界面同一个合规口径
   const share = read(path.join(MP, 'utils/share.js'));
