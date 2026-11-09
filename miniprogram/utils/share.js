@@ -65,12 +65,16 @@ export function shareCat(cat) {
 /**
  * 朋友圈分享（onShareTimeline）。
  * 用法：页面里 `onShareTimeline() { return timeline(this.data.item); }`
- * 只接受 { title, query }，query 是**不带问号**的参数字符串。
+ * 只接受 { title, query, imageUrl }，query 是**不带问号**的参数字符串。
+ *
+ * ★ 朋友圈是**看图**的地方，配图比标题重要得多 —— 这里和聊天卡片共用同一套取图逻辑。
  */
 export function timeline(obj) {
   const id = obj && obj.id ? encodeURIComponent(obj.id) : '';
+  const image = cardImage(obj);
   return {
     title: obj && obj.name ? `${obj.name} · ${APP_NAME}` : APP_NAME,
     query: id ? `id=${id}` : '',
+    ...(image ? { imageUrl: image } : {}),
   };
 }

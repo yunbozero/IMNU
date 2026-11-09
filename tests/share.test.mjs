@@ -59,6 +59,18 @@ test('分享：卡片图优先用物品/猫自己的照片', async () => {
   assert.equal(precomputed.imageUrl, 'https://x/y.jpg');
 });
 
+test('分享：朋友圈卡片也要配图（朋友圈是看图的地方）', async () => {
+  const { timeline } = await import('../miniprogram/utils/share.js');
+
+  const withImage = timeline({ id: 'c_1', name: '大橘', image: 'img_ab.jpg' });
+  assert.ok(withImage.imageUrl, '朋友圈卡片要带图');
+  assert.equal(withImage.query, 'id=c_1', 'query 不带问号');
+
+  const noImage = timeline({ id: 'c_2', name: '独眼大侠' });
+  assert.equal(noImage.imageUrl, undefined, '没图就别塞空串');
+  assert.equal(noImage.title, '独眼大侠 · 盛师猫猫');
+});
+
 test('分享：文案里不许出现交易/金额口径', () => {
   // 这些字会出现在转发卡片上 —— 和界面同一个合规口径
   const share = read(path.join(MP, 'utils/share.js'));
