@@ -1,10 +1,21 @@
 import * as api from '../../services/api.js';
 import * as session from '../../services/session.js';
 import { clockText } from '../../utils/format.js';
+import { shareHome } from '../../utils/share.js';
 
 const app = getApp();
 
 Page({
+  // 分享给朋友 / 群（右上角菜单 + 页面里的转发按钮都走这里）
+  onShareAppMessage() {
+    return shareHome();
+  },
+
+  // 分享到朋友圈
+  onShareTimeline() {
+    return { title: shareHome().title, query: '' };
+  },
+
   data: {
     loading: true,
     error: '',

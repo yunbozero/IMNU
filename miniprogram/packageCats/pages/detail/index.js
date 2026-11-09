@@ -8,8 +8,18 @@
 import * as cats from '../../../services/cats.js';
 import { imageUrl } from '../../../utils/format.js';
 import { getNavMetrics } from '../../../utils/nav.js';
+import { shareCat, timeline } from '../../../utils/share.js';
 
 Page({
+  // 分享这只猫（带 id，对方点开直达）
+  onShareAppMessage() {
+    return shareCat(this.data.cat);
+  },
+
+  onShareTimeline() {
+    return timeline(this.data.cat);
+  },
+
   data: {
     cat: null, photo: '', photoFailed: false, missing: false,
     // 相册：和主图分开。主图是列表页那张，相册只在详情页按需展示

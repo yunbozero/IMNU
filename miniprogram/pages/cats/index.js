@@ -10,8 +10,17 @@
 import { CAT_LIST_GROUPS } from '../../data/cats.js';
 import * as cats from '../../services/cats.js';
 import * as copy from '../../services/copy.js';
+import { shareCats } from '../../utils/share.js';
 
 Page({
+  onShareAppMessage() {
+    return shareCats();
+  },
+
+  onShareTimeline() {
+    return { title: shareCats().title, query: '' };
+  },
+
   data: {
     groups: CAT_LIST_GROUPS,
     active: 'onCampus',

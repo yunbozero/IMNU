@@ -2,6 +2,7 @@ import * as api from '../../../services/api.js';
 import * as session from '../../../services/session.js';
 import { platform } from '../../../services/platform.js';
 import { quotaText, quotaLevel, quotaPercent, groupCode, imageUrl } from '../../../utils/format.js';
+import { shareItem, timeline } from '../../../utils/share.js';
 
 /**
  * 活动口令的本地缓存。**按活动 id 分开存** —— 换一场活动就是新口令，
@@ -51,9 +52,17 @@ Page({
     imageFailed: false,
   },
 
+  // 分享这一件物品（带 id，对方点开直达）
+  onShareAppMessage() {
+    return shareItem(this.data.item);
+  },
+
+  onShareTimeline() {
+    return timeline(this.data.item);
+  },
+
   onLoad(query) {
-    this.setData({ id: (query && query.id) || '' });
-    // ★ 幂等键在「打开弹层」时生成一次，同一次提交内反复重试都用它。
+    this.setData({ id: (query && query.id) || '' });    // ★ 幂等键在「打开弹层」时生成一次，同一次提交内反复重试都用它。
     //   这样网络超时后用户再点一次，也不会产生第二笔预定。
     this.requestId = null;
     this.load();

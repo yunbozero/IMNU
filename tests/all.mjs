@@ -49,5 +49,6 @@ import './roles-avatar.test.mjs';
 import './roles.test.mjs';
 import './secrets.test.mjs';
 import './set-role.test.mjs';
+import './share.test.mjs';
 import './shell.test.mjs';
 import './time.test.mjs';
